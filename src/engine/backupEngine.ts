@@ -816,13 +816,15 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
       db.runSync(
         `INSERT INTO fuel_entries (id, vehicle_id, date, odometer, fuel_amount, fuel_unit, price_per_unit,
          total_cost, fuel_station, is_full_tank, calculated_mileage, mileage_unit,
-         receipt_photo_uri, notes, created_at, updated_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         receipt_photo_uri, notes, fuel_system, battery_start_percent, battery_end_percent,
+         created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           f.id, f.vehicle_id, f.date, f.odometer, f.fuel_amount, f.fuel_unit,
           f.price_per_unit, f.total_cost, f.fuel_station ?? null, f.is_full_tank ?? 1,
           f.calculated_mileage ?? null, f.mileage_unit ?? null, f.receipt_photo_uri ?? null,
-          f.notes ?? null, f.created_at || nowISO(), f.updated_at || nowISO(), f.deleted_at ?? null,
+          f.notes ?? null, f.fuel_system ?? 'primary', f.battery_start_percent ?? null, f.battery_end_percent ?? null,
+          f.created_at || nowISO(), f.updated_at || nowISO(), f.deleted_at ?? null,
         ]
       );
     }

@@ -26,7 +26,7 @@ import type { FuelEntry } from '@/types/fuel';
 import type { ServiceRecord } from '@/types/service';
 import type { Expense } from '@/types/expense';
 import { VehicleContextHeader } from '@/components/VehicleContextHeader';
-import { MILEAGE_UNIT_LABELS } from '@/constants/fuelTypes';
+import { MILEAGE_UNIT_LABELS, isHybridFuel, FuelType, getFuelSystemLabel } from '@/constants/fuelTypes';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -204,9 +204,25 @@ export default function HistoryScreen() {
         </Text>
       </View>
       <View style={styles.entryDetails}>
-        <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
-          {item.fuel_amount} {item.fuel_unit} · {formatCurrency(item.price_per_unit)}/{item.fuel_unit === 'kWh' ? 'kWh' : item.fuel_unit === 'kg' ? 'kg' : 'L'}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
+          <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
+            {item.fuel_amount} {item.fuel_unit} · {formatCurrency(item.price_per_unit)}/{item.fuel_unit === 'kWh' ? 'kWh' : item.fuel_unit === 'kg' ? 'kg' : 'L'}
+          </Text>
+          {item.fuel_system === 'secondary' && selectedVehicle && (
+            <View style={[styles.badge, { backgroundColor: '#FEF3C7', paddingVertical: 1, paddingHorizontal: 6 }]}>
+              <Text style={[Typography.caption, { color: '#B45309', fontWeight: '700', fontSize: 10 }]}>
+                {getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'secondary')}
+              </Text>
+            </View>
+          )}
+          {item.fuel_system === 'primary' && selectedVehicle && isHybridFuel(selectedVehicle.fuel_type as FuelType) && (
+            <View style={[styles.badge, { backgroundColor: colors.primaryLight, paddingVertical: 1, paddingHorizontal: 6 }]}>
+              <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700', fontSize: 10 }]}>
+                {getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'primary')}
+              </Text>
+            </View>
+          )}
+        </View>
         <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
           {item.odometer.toLocaleString('en-IN')} km
         </Text>

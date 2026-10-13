@@ -9,6 +9,7 @@ import {
   getMonthlyTotalSpend,
   getCurrentMonthTotalSpend,
   getMonthlySpendHistory,
+  estimateFuelLevel,
 } from '../statsHelpers';
 
 // Minimal mock types matching the interfaces used by the helpers
@@ -113,5 +114,53 @@ describe('getMonthlySpendHistory', () => {
   it('defaults to 6 months', () => {
     const result = getMonthlySpendHistory([], [], []);
     expect(result).toHaveLength(6);
+  });
+});
+
+describe('estimateFuelLevel', () => {
+  it('estimates remaining fuel and range accurately for single fuel', () => {
+    const entries = [
+      { odometer: 10000, fuel_amount: 35, is_full_tank: 1 } as any,
+    ];
+    // Driven 100 km since 10000 (odo 10100) with avg 20 km/L in 35 L tank
+    // Consumed: 100 / 20 = 5 L -> remaining = 30 L (85.7% -> 4 bars Good)
+    const level = estimateFuelLevel(entries, 35, 10100, 20, 'L');
+    expect(level).not.toBeNull();
+    expect(level?.remainingLitres).toBe(30);
+    expect(level?.kmRemaining).toBe(600);
+    expect(level?.bars).toBe(4);
+    expect(level?.label).toBe('Good');
+  });
+
+  it('correctly filters entries by targetSystem for bi-fuel vehicles', () => {
+    const entries = [
+      // Newest Petrol fill
+      { odometer: 20250, fuel_amount: 15, is_full_tank: 1, fuel_system: 'secondary', fuel_unit: 'litres' } as any,
+      // Older CNG fill
+      { odometer: 20200, fuel_amount: 8, is_full_tank: 1, fuel_system: 'primary', fuel_unit: 'kg' } as any,
+    ];
+
+    // Current odo: 20300
+    // Primary (CNG): last full at 20200 -> 100 km driven. Avg: 25 km/kg. Consumed = 4 kg.
+    // Tank capacity = 10 kg -> remaining = 6 kg (60% -> 3 bars Half)
+    const cngLevel = estimateFuelLevel(entries, 10, 20300, 25, 'kg', 'primary');
+    expect(cngLevel).not.toBeNull();
+    expect(cngLevel?.remainingLitres).toBe(6);
+    expect(cngLevel?.kmRemaining).toBe(150);
+    expect(cngLevel?.unit).toBe('kg');
+
+    // Secondary (Petrol): last full at 20250 -> 50 km driven. Avg: 16 km/L. Consumed = 3.125 L.
+    // Tank capacity = 35 L -> remaining = 31.875 L (91% -> 5 bars Full)
+    const petrolLevel = estimateFuelLevel(entries, 35, 20300, 16, 'L', 'secondary');
+    expect(petrolLevel).not.toBeNull();
+    expect(petrolLevel?.remainingLitres).toBeCloseTo(31.88, 1);
+    expect(petrolLevel?.unit).toBe('L');
+    expect(petrolLevel?.bars).toBe(5);
+  });
+
+  it('returns null when no full tank exists or mileage is missing', () => {
+    expect(estimateFuelLevel([], 35, 10000, 15)).toBeNull();
+    expect(estimateFuelLevel([{ odometer: 1000, is_full_tank: 0, fuel_amount: 10 } as any], 35, 1050, 15)).toBeNull();
+    expect(estimateFuelLevel([{ odometer: 1000, is_full_tank: 1, fuel_amount: 30 } as any], 35, 1050, 0)).toBeNull();
   });
 });

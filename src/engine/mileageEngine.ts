@@ -44,7 +44,7 @@
  * by distance from entry 1 (10,500 - 10,000 = 500 km).
  */
 
-import { FuelType, FuelUnit, FUEL_UNIT_TO_MILEAGE_UNIT, MileageUnit } from '@/constants/fuelTypes';
+import { FuelType, FuelUnit, FUEL_UNIT_TO_MILEAGE_UNIT, MileageUnit, isHybridFuel } from '@/constants/fuelTypes';
 import { VehicleType } from '@/constants/fuelTypes';
 import type { FuelEntry } from '@/types/fuel';
 
@@ -75,6 +75,20 @@ export interface MileageStats {
   best: MileageResult | null;
   /** Lowest single mileage value ever recorded */
   worst: MileageResult | null;
+  /** For Bi-Fuel (Hybrid) vehicles: separate statistics for primary system (e.g. CNG) */
+  primarySystemStats?: {
+    runningAverage: MileageResult | null;
+    best: MileageResult | null;
+    worst: MileageResult | null;
+  } | null;
+  /** For Bi-Fuel (Hybrid) vehicles: separate statistics for secondary system (e.g. Petrol) */
+  secondarySystemStats?: {
+    runningAverage: MileageResult | null;
+    best: MileageResult | null;
+    worst: MileageResult | null;
+  } | null;
+  /** Blended total running cost per km across all fuel systems (₹/km) */
+  costPerKm?: number | null;
 }
 
 export interface MileageWarning {
@@ -146,11 +160,20 @@ export function calculateMileageForEntry(
     return null;
   }
 
-  // R2: Walk backwards to find the previous full-tank entry
+  const isHybrid = isHybridFuel(fuelType);
+  const currentSystem = current.fuel_system ?? (current.fuel_unit === FuelUnit.KG ? 'primary' : (isHybrid ? 'secondary' : 'primary'));
+
+  // R2: Walk backwards to find the previous full-tank entry of the SAME fuel system
   let previousFullTankIndex = -1;
   let accumulatedFuel = 0;
 
   for (let i = currentIndex - 1; i >= 0; i--) {
+    const entrySystem = entries[i].fuel_system ?? (entries[i].fuel_unit === FuelUnit.KG ? 'primary' : (isHybrid ? 'secondary' : 'primary'));
+    if (isHybrid && entrySystem !== currentSystem) {
+      // In dual-fuel vehicles, do not accumulate fuel from the other tank
+      continue;
+    }
+
     // R4: Accumulate fuel from partial fills
     accumulatedFuel += entries[i].fuel_amount;
 
@@ -202,16 +225,36 @@ export function calculateMileageForEntry(
  */
 export function calculatePartialEstimate(
   entries: FuelEntry[],
-  currentIndex: number
+  currentIndex: number,
+  fuelType?: FuelType
 ): MileageResult | null {
   if (currentIndex === 0) return null; // No previous entry to measure distance from
 
   const current = entries[currentIndex];
-  const previous = entries[currentIndex - 1];
 
   // Don't estimate for EV (every EV entry is already accurate charge-to-charge)
   // Don't estimate for full-tank entries (they get accurate calculation)
   if (current.is_full_tank === 1) return null;
+
+  const isHybrid = fuelType ? isHybridFuel(fuelType) : false;
+  const currentSystem = current.fuel_system ?? (current.fuel_unit === FuelUnit.KG ? 'primary' : (isHybrid ? 'secondary' : 'primary'));
+
+  let previousIndex = -1;
+  if (isHybrid) {
+    for (let i = currentIndex - 1; i >= 0; i--) {
+      const entrySystem = entries[i].fuel_system ?? (entries[i].fuel_unit === FuelUnit.KG ? 'primary' : 'secondary');
+      if (entrySystem === currentSystem) {
+        previousIndex = i;
+        break;
+      }
+    }
+  } else {
+    previousIndex = currentIndex - 1;
+  }
+
+  if (previousIndex === -1) return null;
+
+  const previous = entries[previousIndex];
 
   const distance = current.odometer - previous.odometer;
   if (distance <= 0) return null;
@@ -285,11 +328,24 @@ export function recalculateAllMileage(
  * @param entries - ALL non-deleted fuel entries for the vehicle (any order)
  * @returns MileageStats object with running average, monthly average, best/worst
  */
-export function computeMileageStats(entries: FuelEntry[]): MileageStats {
+export function computeMileageStats(entries: FuelEntry[], fuelType?: FuelType): MileageStats {
+  const isHybrid = fuelType ? isHybridFuel(fuelType) : false;
+
   // Filter to entries that have a calculated_mileage value
   const withMileage = entries.filter(
     (e) => e.calculated_mileage !== null && e.mileage_unit !== null
   );
+
+  // Compute blended cost-per-km across all fuel fills
+  let costPerKm: number | null = null;
+  if (entries.length >= 2) {
+    const sortedAll = [...entries].sort((a, b) => a.odometer - b.odometer);
+    const totalDistance = sortedAll[sortedAll.length - 1].odometer - sortedAll[0].odometer;
+    const totalCost = entries.reduce((sum, e) => sum + e.total_cost, 0);
+    if (totalDistance > 0 && totalCost > 0) {
+      costPerKm = totalCost / totalDistance;
+    }
+  }
 
   if (withMileage.length === 0) {
     return {
@@ -298,6 +354,9 @@ export function computeMileageStats(entries: FuelEntry[]): MileageStats {
       monthlyAverage: null,
       best: null,
       worst: null,
+      primarySystemStats: null,
+      secondarySystemStats: null,
+      costPerKm,
     };
   }
 
@@ -332,6 +391,34 @@ export function computeMileageStats(entries: FuelEntry[]): MileageStats {
   const best = Math.max(...allValues);
   const worst = Math.min(...allValues);
 
+  // Hybrid separate streams
+  let primarySystemStats = null;
+  let secondarySystemStats = null;
+
+  if (isHybrid) {
+    const primaryEntries = withMileage.filter((e) => (e.fuel_system ?? (e.fuel_unit === FuelUnit.KG ? 'primary' : 'secondary')) === 'primary');
+    if (primaryEntries.length > 0) {
+      const pVals = primaryEntries.map((e) => e.calculated_mileage!);
+      const pUnit = primaryEntries[0].mileage_unit as MileageUnit;
+      primarySystemStats = {
+        runningAverage: { value: pVals.reduce((a, b) => a + b, 0) / pVals.length, unit: pUnit },
+        best: { value: Math.max(...pVals), unit: pUnit },
+        worst: { value: Math.min(...pVals), unit: pUnit },
+      };
+    }
+
+    const secondaryEntries = withMileage.filter((e) => (e.fuel_system ?? (e.fuel_unit === FuelUnit.KG ? 'primary' : 'secondary')) === 'secondary');
+    if (secondaryEntries.length > 0) {
+      const sVals = secondaryEntries.map((e) => e.calculated_mileage!);
+      const sUnit = secondaryEntries[0].mileage_unit as MileageUnit;
+      secondarySystemStats = {
+        runningAverage: { value: sVals.reduce((a, b) => a + b, 0) / sVals.length, unit: sUnit },
+        best: { value: Math.max(...sVals), unit: sUnit },
+        worst: { value: Math.min(...sVals), unit: sUnit },
+      };
+    }
+  }
+
   return {
     lastFillMileage: {
       value: lastEntry.calculated_mileage!,
@@ -344,6 +431,9 @@ export function computeMileageStats(entries: FuelEntry[]): MileageStats {
     monthlyAverage: monthlyAvg !== null ? { value: monthlyAvg, unit } : null,
     best: { value: best, unit },
     worst: { value: worst, unit },
+    primarySystemStats,
+    secondarySystemStats,
+    costPerKm,
   };
 }
 

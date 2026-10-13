@@ -49,6 +49,9 @@ import {
   FuelUnit,
   FUEL_TYPE_TO_DEFAULT_UNIT,
   MILEAGE_UNIT_LABELS,
+  isHybridFuel,
+  getFuelSystemLabel,
+  getFuelUnitForSystem,
 } from '@/constants/fuelTypes';
 import { todayISO } from '@/utils/date';
 import { displayToISO, isoToDisplay, formatDateInput, validateDateDisplay } from '@/utils/dateInput';
@@ -59,6 +62,7 @@ import { recalculateAllMileage } from '@/engine/mileageEngine';
 import { FormHeader } from '@/components/FormHeader';
 import { NoVehicleState } from '@/components/NoVehicleState';
 import { VehicleContextHeader } from '@/components/VehicleContextHeader';
+import { CngTankIcon } from '@/components/CngTankIcon';
 import * as fuelRepo from '@/database/repositories/fuelRepo';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 
@@ -86,6 +90,9 @@ export default function AddFuelScreen() {
   const [notes, setNotes] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  const [fuelSystem, setFuelSystem] = useState<'primary' | 'secondary'>('primary');
+  const [batteryStartPercent, setBatteryStartPercent] = useState('');
+  const [batteryEndPercent, setBatteryEndPercent] = useState('');
 
   // Previously used stations (loaded once per form open)
   const knownStations = useMemo(() => fuelRepo.getFrequentFuelStations(), []);
@@ -115,6 +122,15 @@ export default function AddFuelScreen() {
         setIsFullTank(existing.is_full_tank === 1);
         setNotes(existing.notes || '');
         setPhotoUri(existing.receipt_photo_uri || null);
+        if (existing.fuel_system === 'secondary' || existing.fuel_system === 'primary') {
+          setFuelSystem(existing.fuel_system);
+        }
+        if (existing.battery_start_percent != null) {
+          setBatteryStartPercent(existing.battery_start_percent.toString());
+        }
+        if (existing.battery_end_percent != null) {
+          setBatteryEndPercent(existing.battery_end_percent.toString());
+        }
       }
     }
   }, [params.id]);
@@ -123,9 +139,23 @@ export default function AddFuelScreen() {
     return <NoVehicleState />;
   }
 
-  const fuelUnit = FUEL_TYPE_TO_DEFAULT_UNIT[selectedVehicle.fuel_type as FuelType];
-  const fuelUnitLabel = fuelUnit === FuelUnit.LITRES ? 'L' : fuelUnit === FuelUnit.KG ? 'kg' : 'kWh';
+  const isHybrid = isHybridFuel(selectedVehicle.fuel_type as FuelType);
   const isEV = selectedVehicle.fuel_type === FuelType.ELECTRIC;
+  const fuelUnit = isHybrid
+    ? getFuelUnitForSystem(selectedVehicle.fuel_type as FuelType, fuelSystem)
+    : (FUEL_TYPE_TO_DEFAULT_UNIT[selectedVehicle.fuel_type as FuelType] ?? FuelUnit.LITRES);
+  const fuelUnitLabel = fuelUnit === FuelUnit.LITRES ? 'L' : fuelUnit === FuelUnit.KG ? 'kg' : 'kWh';
+
+  const evEstimatedKwh = useMemo(() => {
+    if (!isEV) return null;
+    const startP = parseFloat(batteryStartPercent);
+    const endP = parseFloat(batteryEndPercent);
+    const capacity = selectedVehicle.tank_capacity;
+    if (!isNaN(startP) && !isNaN(endP) && endP > startP && capacity && capacity > 0) {
+      return ((endP - startP) / 100) * capacity;
+    }
+    return null;
+  }, [isEV, batteryStartPercent, batteryEndPercent, selectedVehicle.tank_capacity]);
 
   const handleDateChange = (text: string) => {
     const formatted = formatDateInput(text, dateDisplay);
@@ -216,10 +246,20 @@ export default function AddFuelScreen() {
 
       // Run validation engine
       const validation = validateFuelEntry(
-        { odometer: odoVal, fuel_amount: amountVal, fuel_unit: fuelUnit, price_per_unit: priceVal, date: isoDate },
+        {
+          odometer: odoVal,
+          fuel_amount: amountVal,
+          fuel_unit: fuelUnit,
+          price_per_unit: priceVal,
+          date: isoDate,
+          fuel_system: isHybrid ? fuelSystem : 'primary',
+          battery_start_percent: isEV && batteryStartPercent ? parseFloat(batteryStartPercent) : undefined,
+          battery_end_percent: isEV && batteryEndPercent ? parseFloat(batteryEndPercent) : undefined,
+        },
         previousOdometer,
         selectedVehicle.tank_capacity,
-        selectedVehicle.fuel_type as FuelType
+        selectedVehicle.fuel_type as FuelType,
+        selectedVehicle.secondary_tank_capacity
       );
 
       if (!validation.isValid) {
@@ -246,19 +286,23 @@ export default function AddFuelScreen() {
   };
 
   const doUpdate = (entryId: string, odoVal: number, amountVal: number, priceVal: number, entryDate: string) => {
-    // B-03 FIX: Update the entry
+    // Update the entry
     fuelRepo.updateFuelEntry(entryId, {
       date: entryDate,
       odometer: odoVal,
       fuel_amount: amountVal,
+      fuel_unit: fuelUnit,
       price_per_unit: priceVal,
       is_full_tank: isFullTank ? 1 : 0,
       fuel_station: fuelStation || null,
       receipt_photo_uri: photoUri || null,
       notes: notes || null,
+      fuel_system: isHybrid ? fuelSystem : 'primary',
+      battery_start_percent: isEV && batteryStartPercent ? parseFloat(batteryStartPercent) : null,
+      battery_end_percent: isEV && batteryEndPercent ? parseFloat(batteryEndPercent) : null,
     });
 
-    // B-03 FIX: Recalculate ALL mileage in the chain (edit may affect downstream)
+    // Recalculate ALL mileage in the chain (edit may affect downstream)
     const chronological = fuelRepo.getFuelEntriesByVehicleChronological(selectedVehicle.id);
     const recalculated = recalculateAllMileage(chronological, selectedVehicle.fuel_type as FuelType);
     for (const { entryId: id, mileage } of recalculated) {
@@ -269,7 +313,7 @@ export default function AddFuelScreen() {
       );
     }
 
-    // B-04 FIX: Update vehicle odometer to the highest reading
+    // Update vehicle odometer to the highest reading
     if (chronological.length > 0) {
       const maxOdometer = Math.max(...chronological.map((e) => e.odometer));
       vehicleRepo.updateVehicleOdometer(selectedVehicle.id, maxOdometer);
@@ -297,6 +341,9 @@ export default function AddFuelScreen() {
         fuel_station: fuelStation || undefined,
         receipt_photo_uri: photoUri || undefined,
         notes: notes || undefined,
+        fuel_system: isHybrid ? fuelSystem : 'primary',
+        battery_start_percent: isEV && batteryStartPercent ? parseFloat(batteryStartPercent) : undefined,
+        battery_end_percent: isEV && batteryEndPercent ? parseFloat(batteryEndPercent) : undefined,
       },
       selectedVehicle
     );
@@ -329,12 +376,158 @@ export default function AddFuelScreen() {
       behavior={Platform.OS === 'android' ? 'height' : 'padding'}
     >
       {/* ── Header ── */}
-      <FormHeader title={isEditMode ? 'Edit Fuel' : 'Add Fuel'} />
+      <FormHeader title={isEditMode ? 'Edit Fuel' : (isEV ? 'Add Charge Session ⚡' : 'Add Fuel')} />
 
       {/* ── Vehicle Context ── */}
       <VehicleContextHeader label="Recording for" />
 
       <ScrollView contentContainerStyle={styles.form} showsVerticalScrollIndicator={false}>
+        {/* ── Bi-Fuel Dual-Tank Selector ── */}
+        {isHybrid && (
+          <View style={[styles.dualTankContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.dualTankHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[Typography.body, { fontWeight: '700', color: colors.text }]}>
+                  Refueling Tank
+                </Text>
+                <View style={[styles.biFuelPill, { backgroundColor: colors.primaryLight }]}>
+                  <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700', fontSize: 10 }]}>
+                    Bi-Fuel
+                  </Text>
+                </View>
+              </View>
+              <Text style={[Typography.caption, { color: colors.textTertiary }]}>Select one</Text>
+            </View>
+            <Text style={[Typography.caption, { color: colors.textSecondary, marginBottom: Spacing.sm }]}>
+              Which tank did you refill? Fuel volume and mileage track independently.
+            </Text>
+
+            <View style={styles.dualTankRow}>
+              {/* Primary Tank (Gas / CNG / LPG) */}
+              <TouchableOpacity
+                style={[
+                  styles.tankOptionCard,
+                  {
+                    backgroundColor: fuelSystem === 'primary' ? colors.primaryLight + '35' : colors.background,
+                    borderColor: fuelSystem === 'primary' ? colors.primary : colors.border,
+                    borderWidth: fuelSystem === 'primary' ? 2 : 1,
+                  },
+                ]}
+                onPress={() => setFuelSystem('primary')}
+                activeOpacity={0.7}
+              >
+                <View style={styles.tankOptionTop}>
+                  <CngTankIcon size={24} color={fuelSystem === 'primary' ? colors.primary : '#64748B'} />
+                  {fuelSystem === 'primary' ? (
+                    <View style={[styles.activeIndicator, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.activeIndicatorText}>ACTIVE</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={[Typography.bodySmall, { fontWeight: '700', color: fuelSystem === 'primary' ? colors.primary : colors.text, marginTop: 4 }]}>
+                  {getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'primary')}
+                </Text>
+                <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2 }]}>
+                  Unit: kg (₹/kg)
+                </Text>
+                {selectedVehicle.tank_capacity ? (
+                  <Text style={[Typography.caption, { color: colors.textSecondary, fontWeight: '600', marginTop: 3 }]}>
+                    Cap: {selectedVehicle.tank_capacity} kg
+                  </Text>
+                ) : null}
+              </TouchableOpacity>
+
+              {/* Secondary Tank (Liquid / Petrol / Diesel) */}
+              <TouchableOpacity
+                style={[
+                  styles.tankOptionCard,
+                  {
+                    backgroundColor: fuelSystem === 'secondary' ? '#FEF3C750' : colors.background,
+                    borderColor: fuelSystem === 'secondary' ? '#B45309' : colors.border,
+                    borderWidth: fuelSystem === 'secondary' ? 2 : 1,
+                  },
+                ]}
+                onPress={() => setFuelSystem('secondary')}
+                activeOpacity={0.7}
+              >
+                <View style={styles.tankOptionTop}>
+                  <Text style={{ fontSize: 20 }}>⛽</Text>
+                  {fuelSystem === 'secondary' ? (
+                    <View style={[styles.activeIndicator, { backgroundColor: '#B45309' }]}>
+                      <Text style={styles.activeIndicatorText}>ACTIVE</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={[Typography.bodySmall, { fontWeight: '700', color: fuelSystem === 'secondary' ? '#B45309' : colors.text, marginTop: 4 }]}>
+                  {getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'secondary')}
+                </Text>
+                <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2 }]}>
+                  Unit: Litres (₹/L)
+                </Text>
+                {selectedVehicle.secondary_tank_capacity ? (
+                  <Text style={[Typography.caption, { color: colors.textSecondary, fontWeight: '600', marginTop: 3 }]}>
+                    Cap: {selectedVehicle.secondary_tank_capacity} L
+                  </Text>
+                ) : null}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* ── EV Battery Helper ── */}
+        {isEV && (
+          <View style={[styles.evCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.evCardHeader}>
+              <Text style={[Typography.body, { fontWeight: '700', color: colors.text }]}>
+                ⚡ Battery % to kWh Calculator
+              </Text>
+              <Text style={[Typography.caption, { color: colors.textTertiary }]}>Optional</Text>
+            </View>
+            <Text style={[Typography.caption, { color: colors.textSecondary, marginBottom: Spacing.sm }]}>
+              {selectedVehicle.tank_capacity
+                ? `Battery capacity: ${selectedVehicle.tank_capacity} kWh. Enter start & end % to calculate units.`
+                : 'Enter start & end battery percentage to auto-calculate kWh.'}
+            </Text>
+            <View style={styles.evInputsRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[Typography.caption, { color: colors.textTertiary }]}>Start %</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border, marginTop: 4 }]}
+                  placeholder="e.g., 20"
+                  placeholderTextColor={colors.textTertiary}
+                  keyboardType="numeric"
+                  maxLength={3}
+                  value={batteryStartPercent}
+                  onChangeText={setBatteryStartPercent}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[Typography.caption, { color: colors.textTertiary }]}>End %</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border, marginTop: 4 }]}
+                  placeholder="e.g., 90"
+                  placeholderTextColor={colors.textTertiary}
+                  keyboardType="numeric"
+                  maxLength={3}
+                  value={batteryEndPercent}
+                  onChangeText={setBatteryEndPercent}
+                />
+              </View>
+            </View>
+            {evEstimatedKwh != null && (
+              <TouchableOpacity
+                style={[styles.applyKwhButton, { backgroundColor: colors.primaryLight }]}
+                onPress={() => setFuelAmount(evEstimatedKwh.toFixed(1))}
+                activeOpacity={0.7}
+              >
+                <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700' }]}>
+                  👉 Apply {evEstimatedKwh.toFixed(1)} kWh ({Math.round(parseFloat(batteryEndPercent) - parseFloat(batteryStartPercent))}% charge)
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
         {/* ── Date ── */}
         <Text style={[styles.label, { color: colors.textSecondary }]}>Date (DD/MM/YYYY)</Text>
         <TextInput
@@ -364,11 +557,11 @@ export default function AddFuelScreen() {
           Fuel Quantity ({fuelUnitLabel}) *
         </Text>
         <Text style={[styles.subLabel, { color: colors.textTertiary }]}>
-          {isEV ? 'kWh charged this session' : `Litres/kg added this fill-up (not current tank level)`}
+          {isEV ? 'kWh charged this session' : `Quantity added this fill-up in ${fuelUnitLabel}`}
         </Text>
         <TextInput
           style={[styles.input, styles.inputLarge, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-          placeholder={`e.g., ${isEV ? '25' : '30'}`}
+          placeholder={`e.g., ${isEV ? '25' : fuelUnit === FuelUnit.KG ? '8.5' : '30'}`}
           placeholderTextColor={colors.textTertiary}
           value={fuelAmount}
           onChangeText={setFuelAmount}
@@ -381,7 +574,7 @@ export default function AddFuelScreen() {
         </Text>
         <TextInput
           style={[styles.input, styles.inputLarge, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-          placeholder={`e.g., ${isEV ? '8' : '105'}`}
+          placeholder={`e.g., ${isEV ? '8' : fuelUnit === FuelUnit.KG ? '85' : '105'}`}
           placeholderTextColor={colors.textTertiary}
           value={pricePerUnit}
           onChangeText={setPricePerUnit}
@@ -513,7 +706,7 @@ export default function AddFuelScreen() {
           activeOpacity={0.85}
         >
           <Text style={[Typography.button, { color: '#1A1C1E', fontSize: 18 }]}>
-            {isEditMode ? 'Update Fuel Entry ✏️' : 'Save Fuel Entry ⛽'}
+            {isEditMode ? 'Update Entry ✏️' : (isEV ? 'Save Charge ⚡' : 'Save Fuel Entry ⛽')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -590,6 +783,73 @@ const styles = StyleSheet.create({
     height: Sizing.primaryButton,
     borderRadius: Sizing.radiusMd,
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // ── Bi-Fuel Dual Tank Selector ──
+  dualTankContainer: {
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1.5,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  dualTankHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  biFuelPill: {
+    paddingVertical: 1,
+    paddingHorizontal: 6,
+    borderRadius: Sizing.radiusSm,
+  },
+  dualTankRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: 4,
+  },
+  tankOptionCard: {
+    flex: 1,
+    padding: Spacing.sm,
+    borderRadius: Sizing.radiusMd,
+  },
+  tankOptionTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  activeIndicator: {
+    paddingVertical: 1,
+    paddingHorizontal: 5,
+    borderRadius: 4,
+  },
+  activeIndicatorText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  // ── EV Card ──
+  evCard: {
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1.5,
+    padding: Spacing.md,
+    marginTop: Spacing.md,
+  },
+  evCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  evInputsRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  applyKwhButton: {
+    marginTop: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Sizing.radiusSm,
     alignItems: 'center',
   },
   // ── Photo ──

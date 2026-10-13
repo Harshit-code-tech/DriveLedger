@@ -37,8 +37,15 @@ import {
   getSecondaryTankLabel,
 } from '@/constants/fuelTypes';
 
-const SINGLE_FUEL_TYPES = [FuelType.PETROL, FuelType.DIESEL, FuelType.CNG, FuelType.LPG, FuelType.ELECTRIC];
-const HYBRID_FUEL_TYPES = [
+const SINGLE_FUEL_TYPES = [
+  FuelType.PETROL,
+  FuelType.DIESEL,
+  FuelType.CNG,
+  FuelType.LPG,
+  FuelType.ELECTRIC,
+  FuelType.HYBRID,
+];
+const BI_FUEL_TYPES = [
   FuelType.HYBRID_CNG_PETROL,
   FuelType.HYBRID_CNG_DIESEL,
   FuelType.HYBRID_LPG_PETROL,
@@ -206,9 +213,11 @@ export default function EditVehicleScreen() {
             </Pressable>
           ))}
         </View>
-        <Text style={[styles.subLabel, { color: colors.textTertiary }]}>Dual-Fuel (Hybrid)</Text>
+        <Text style={[styles.subLabel, { color: colors.textTertiary }]}>
+          Dual-Fuel / Bi-Fuel (Two Tanks: Gas + Liquid)
+        </Text>
         <View style={styles.chipRow}>
-          {HYBRID_FUEL_TYPES.map((ft) => (
+          {BI_FUEL_TYPES.map((ft) => (
             <Pressable
               key={ft}
               onPress={() => handleFuelTypeChange(ft)}

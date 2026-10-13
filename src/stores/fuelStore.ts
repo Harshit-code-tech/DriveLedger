@@ -70,10 +70,10 @@ const emptyStats: MileageStats = {
  * Computes partial-fill estimated mileage for all entries in a chronological list.
  * Returns a map of entryId → MileageResult (isEstimate: true).
  */
-function computePartialEstimates(chronological: FuelEntry[]): Record<string, MileageResult> {
+function computePartialEstimates(chronological: FuelEntry[], fuelType?: FuelType): Record<string, MileageResult> {
   const map: Record<string, MileageResult> = {};
   chronological.forEach((_, index) => {
-    const result = calculatePartialEstimate(chronological, index);
+    const result = calculatePartialEstimate(chronological, index, fuelType);
     if (result) {
       map[chronological[index].id] = result;
     }
@@ -90,8 +90,11 @@ export const useFuelStore = create<FuelState>((set) => ({
   loadEntries: (vehicleId: string) => {
     const entries = fuelRepo.getFuelEntriesByVehicle(vehicleId);
     const chronological = fuelRepo.getFuelEntriesByVehicleChronological(vehicleId);
-    const stats = computeMileageStats(entries);
-    const partialEstimates = computePartialEstimates(chronological);
+    const { useVehicleStore } = require('@/stores/vehicleStore');
+    const vehicle = useVehicleStore.getState().vehicles.find((v: Vehicle) => v.id === vehicleId);
+    const fuelType = vehicle ? (vehicle.fuel_type as FuelType) : undefined;
+    const stats = computeMileageStats(entries, fuelType);
+    const partialEstimates = computePartialEstimates(chronological, fuelType);
     set({ entries, stats, partialEstimates, isLoading: false });
   },
 
@@ -139,8 +142,8 @@ export const useFuelStore = create<FuelState>((set) => ({
     // 6. Refresh state
     const entries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
     const chronological2 = fuelRepo.getFuelEntriesByVehicleChronological(vehicle.id);
-    const stats = computeMileageStats(entries);
-    const partialEstimates = computePartialEstimates(chronological2);
+    const stats = computeMileageStats(entries, vehicle.fuel_type as FuelType);
+    const partialEstimates = computePartialEstimates(chronological2, vehicle.fuel_type as FuelType);
     set({ entries, stats, partialEstimates });
 
     return { entry, warning };
@@ -174,8 +177,8 @@ export const useFuelStore = create<FuelState>((set) => ({
     // 4. Refresh all state — including the vehicle list so odometer updates on Home
     const entries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
     const chronological2 = fuelRepo.getFuelEntriesByVehicleChronological(vehicle.id);
-    const stats = computeMileageStats(entries);
-    const partialEstimates = computePartialEstimates(chronological2);
+    const stats = computeMileageStats(entries, vehicle.fuel_type as FuelType);
+    const partialEstimates = computePartialEstimates(chronological2, vehicle.fuel_type as FuelType);
     set({ entries, stats, partialEstimates });
 
     // 5. Force vehicleStore to reload so selectedVehicle.current_odometer is fresh

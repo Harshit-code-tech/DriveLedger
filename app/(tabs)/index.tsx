@@ -31,13 +31,101 @@ import { useExpenseStore } from '@/stores/expenseStore';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { Typography, Spacing, Sizing } from '@/constants/theme';
-import { MILEAGE_UNIT_LABELS } from '@/constants/fuelTypes';
+import { MILEAGE_UNIT_LABELS, FuelType, isBiFuel, getFuelSystemLabel } from '@/constants/fuelTypes';
 import { formatCurrency, formatOdometer, formatMileage } from '@/utils/format';
 import { convertPressure, getPressureLabel } from '@/stores/preferencesStore';
 import { formatDisplayDateLong, daysUntil } from '@/utils/date';
-import { getCurrentMonthTotalSpend, estimateFuelLevel } from '@/utils/statsHelpers';
+import { getCurrentMonthTotalSpend, estimateFuelLevel, type FuelLevelResult } from '@/utils/statsHelpers';
 import { DOCUMENT_TYPE_LABELS } from '@/constants/documentTypes';
 import { VehicleContextHeader } from '@/components/VehicleContextHeader';
+import { CngTankIcon } from '@/components/CngTankIcon';
+
+interface FuelBarSectionProps {
+  title: string;
+  icon: React.ReactNode;
+  level: FuelLevelResult | null;
+  tip?: string | null;
+  tankDescription?: string;
+  colors: ReturnType<typeof useThemeColors>;
+}
+
+function FuelBarSection({
+  title,
+  icon,
+  level,
+  tip,
+  tankDescription,
+  colors,
+}: FuelBarSectionProps) {
+  if (level) {
+    return (
+      <View>
+        <View style={styles.fuelBarHeader}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            {icon}
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{title}</Text>
+          </View>
+          <Text style={[Typography.bodySmall, { color: level.color, fontWeight: '700' }]}>
+            {level.percent.toFixed(0)}%
+          </Text>
+        </View>
+
+        {/* 5-segment bar */}
+        <View style={styles.fuelBarsRow}>
+          {[1, 2, 3, 4, 5].map((bar) => (
+            <View
+              key={bar}
+              style={[
+                styles.fuelBarSegment,
+                { backgroundColor: bar <= level.bars ? level.color : colors.border },
+              ]}
+            />
+          ))}
+        </View>
+
+        {/* Labels row */}
+        <View style={styles.fuelBarLabels}>
+          <Text style={[Typography.caption, { color: colors.textTertiary }]}>Empty</Text>
+          <Text style={[Typography.caption, { color: level.color, fontWeight: '600' }]}>
+            {level.label}{level.bars <= 1 ? ' ⚠️' : level.bars === 5 ? ' ✅' : ''}
+          </Text>
+          <Text style={[Typography.caption, { color: colors.textTertiary }]}>Full</Text>
+        </View>
+
+        <Text style={[Typography.bodySmall, { color: colors.text, fontWeight: '600', marginTop: Spacing.sm }]}>
+          ≈ {level.remainingLitres.toFixed(1)} {level.unit} left · ~{level.kmRemaining.toLocaleString()} km range
+        </Text>
+
+        {tankDescription ? (
+          <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
+            {tankDescription}
+          </Text>
+        ) : null}
+      </View>
+    );
+  }
+
+  if (tip) {
+    return (
+      <View>
+        <View style={styles.fuelBarHeader}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            {icon}
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{title}</Text>
+          </View>
+        </View>
+        <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>{tip}</Text>
+        {tankDescription ? (
+          <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
+            {tankDescription}
+          </Text>
+        ) : null}
+      </View>
+    );
+  }
+
+  return null;
+}
 
 export default function HomeScreen() {
   const colors = useThemeColors();
@@ -113,23 +201,72 @@ export default function HomeScreen() {
 
   const { total: monthlyTotal } = getCurrentMonthTotalSpend(entries, serviceRecords, expenses);
 
-  // Fuel level estimate — uses running average mileage + current odometer.
-  // Returns null when tank_capacity, odometer, or avg mileage aren't available yet.
-  const fuelLevel = estimateFuelLevel(
+  const isBiFuelVehicle = isBiFuel(selectedVehicle.fuel_type as FuelType);
+  const primaryUnit = (selectedVehicle.fuel_type === FuelType.CNG || isBiFuelVehicle)
+    ? 'kg'
+    : selectedVehicle.fuel_type === FuelType.ELECTRIC
+      ? 'kWh'
+      : 'L';
+  const tankName = isBiFuelVehicle
+    ? `Primary ${getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'primary')} Cylinder`
+    : selectedVehicle.fuel_type === FuelType.ELECTRIC
+      ? 'Battery Pack'
+      : 'Fuel Tank';
+
+  const primarySystemLabel = isBiFuelVehicle
+    ? getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'primary')
+    : 'Primary Tank';
+  const secondarySystemLabel = isBiFuelVehicle
+    ? getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'secondary')
+    : 'Secondary Tank';
+
+  const primaryAvgMileage = isBiFuelVehicle
+    ? (stats.primarySystemStats?.runningAverage?.value ?? stats.runningAverage?.value ?? null)
+    : (stats.runningAverage?.value ?? null);
+
+  const secondaryAvgMileage = isBiFuelVehicle
+    ? (stats.secondarySystemStats?.runningAverage?.value ?? null)
+    : null;
+
+  // Primary fuel level estimate
+  const primaryFuelLevel = estimateFuelLevel(
     entries,
     selectedVehicle.tank_capacity,
     selectedVehicle.current_odometer,
-    stats.runningAverage?.value ?? null
+    primaryAvgMileage,
+    primaryUnit,
+    isBiFuelVehicle ? 'primary' : undefined
   );
 
-  /** Why the fuel level can't be shown yet (null when it can, or nothing to say). */
-  const fuelLevelTip: string | null =
-    fuelLevel !== null
+  // Secondary fuel level estimate (for Bi-Fuel vehicles)
+  const secondaryFuelLevel = isBiFuelVehicle && selectedVehicle.secondary_tank_capacity
+    ? estimateFuelLevel(
+        entries,
+        selectedVehicle.secondary_tank_capacity,
+        selectedVehicle.current_odometer,
+        secondaryAvgMileage,
+        'L',
+        'secondary'
+      )
+    : null;
+
+  /** Tips for why fuel levels can't be shown yet */
+  const primaryFuelLevelTip: string | null =
+    primaryFuelLevel !== null
       ? null
       : !selectedVehicle.tank_capacity
-        ? 'Add your tank capacity (Edit Vehicle) to see an estimated fuel level.'
-        : !stats.runningAverage
-          ? 'Log two full-tank fill-ups to unlock the estimated fuel level.'
+        ? `Add your ${isBiFuelVehicle ? 'primary cylinder' : 'tank'} capacity (Edit Vehicle) to see an estimated fuel level.`
+        : !primaryAvgMileage
+          ? `Log two full-tank fill-ups${isBiFuelVehicle ? ` for ${primarySystemLabel}` : ''} to unlock the estimated fuel level.`
+          : null;
+
+  const secondaryFuelLevelTip: string | null =
+    !isBiFuelVehicle || secondaryFuelLevel !== null
+      ? null
+      : !selectedVehicle.secondary_tank_capacity
+        ? `Add your fallback ${secondarySystemLabel} tank capacity (Edit Vehicle) to see estimated fuel level.`
+        : !secondaryAvgMileage
+          ? `Log two full-tank fill-ups for fallback ${secondarySystemLabel} to unlock estimated fuel level.`
           : null;
 
   // ── Inline rendering helpers ─────────────────────────────────────────
@@ -185,9 +322,23 @@ export default function HomeScreen() {
         <View style={[styles.mileageCard, { backgroundColor: colors.primary }]}>
           {stats.lastFillMileage ? (
             <>
-              <Text style={[styles.mileageLabel, { color: 'rgba(255,255,255,0.8)' }]}>
-                Last Fill Mileage
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                <Text style={[styles.mileageLabel, { color: 'rgba(255,255,255,0.85)' }]}>
+                  Last Fill Mileage
+                </Text>
+                {isBiFuelVehicle && lastEntry && (
+                  <View style={{ backgroundColor: 'rgba(255,255,255,0.22)', paddingVertical: 2, paddingHorizontal: 8, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    {lastEntry.fuel_system === 'secondary' ? (
+                      <Text style={{ fontSize: 11 }}>⛽</Text>
+                    ) : (
+                      <CngTankIcon size={12} color="#FFFFFF" showLabel={false} />
+                    )}
+                    <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+                      {getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, lastEntry.fuel_system ?? 'primary')}
+                    </Text>
+                  </View>
+                )}
+              </View>
               <Text style={[Typography.stat, { color: '#FFFFFF' }]}>
                 {formatMileage(
                   stats.lastFillMileage.value,
@@ -219,53 +370,54 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* ── Estimated Fuel Level Bar ── */}
-        {fuelLevel !== null && (
+        {/* ── Estimated Fuel Level Bar(s) ── */}
+        {(primaryFuelLevel || secondaryFuelLevel || primaryFuelLevelTip || secondaryFuelLevelTip) && (
           <View style={[styles.fuelBarCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            <View style={styles.fuelBarHeader}>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>⛽ Est. Fuel Level</Text>
-              <Text style={[Typography.bodySmall, { color: fuelLevel.color, fontWeight: '700' }]}>
-                {fuelLevel.percent.toFixed(0)}%
-              </Text>
-            </View>
+            {/* Primary Fuel System (Gas/CNG, or Petrol/Diesel/EV for single-fuel) */}
+            <FuelBarSection
+              title={
+                isBiFuelVehicle
+                  ? `Est. ${primarySystemLabel} Level`
+                  : selectedVehicle.fuel_type === FuelType.ELECTRIC
+                    ? 'Est. Battery Level'
+                    : 'Est. Fuel Level'
+              }
+              icon={
+                isBiFuelVehicle ? (
+                  <CngTankIcon size={15} color={colors.primary} />
+                ) : selectedVehicle.fuel_type === FuelType.ELECTRIC ? (
+                  <Text style={{ fontSize: 13 }}>⚡</Text>
+                ) : (
+                  <Text style={{ fontSize: 13 }}>⛽</Text>
+                )
+              }
+              level={primaryFuelLevel}
+              tip={primaryFuelLevelTip}
+              tankDescription={
+                selectedVehicle.tank_capacity
+                  ? `Est. based on avg mileage · ${tankName}: ${selectedVehicle.tank_capacity} ${primaryUnit}`
+                  : undefined
+              }
+              colors={colors}
+            />
 
-            {/* 5-segment bar — bars=0 shows all grey (truly empty) */}
-            <View style={styles.fuelBarsRow}>
-              {[1, 2, 3, 4, 5].map((bar) => (
-                <View
-                  key={bar}
-                  style={[
-                    styles.fuelBarSegment,
-                    { backgroundColor: bar <= fuelLevel.bars ? fuelLevel.color : colors.border },
-                  ]}
+            {/* Secondary Fuel System for Bi-Fuel / Hybrid */}
+            {isBiFuelVehicle && (
+              <View style={{ marginTop: Spacing.md, paddingTop: Spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
+                <FuelBarSection
+                  title={`Est. Fallback ${secondarySystemLabel} Level`}
+                  icon={<Text style={{ fontSize: 13 }}>⛽</Text>}
+                  level={secondaryFuelLevel}
+                  tip={secondaryFuelLevelTip}
+                  tankDescription={
+                    selectedVehicle.secondary_tank_capacity
+                      ? `Est. based on avg mileage · Fallback ${secondarySystemLabel} Tank: ${selectedVehicle.secondary_tank_capacity} L`
+                      : undefined
+                  }
+                  colors={colors}
                 />
-              ))}
-            </View>
-
-            {/* Labels row */}
-            <View style={styles.fuelBarLabels}>
-              <Text style={[Typography.caption, { color: colors.textTertiary }]}>Empty</Text>
-              <Text style={[Typography.caption, { color: fuelLevel.color, fontWeight: '600' }]}>
-                {fuelLevel.label}{fuelLevel.bars <= 1 ? ' ⚠️' : fuelLevel.bars === 5 ? ' ✅' : ''}
-              </Text>
-              <Text style={[Typography.caption, { color: colors.textTertiary }]}>Full</Text>
-            </View>
-
-            <Text style={[Typography.bodySmall, { color: colors.text, fontWeight: '600', marginTop: Spacing.sm }]}>
-              ≈ {fuelLevel.remainingLitres.toFixed(1)} L left · ~{fuelLevel.kmRemaining.toLocaleString()} km range
-            </Text>
-
-            <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
-              Est. based on avg mileage · Tank: {selectedVehicle.tank_capacity}L
-            </Text>
-          </View>
-        )}
-
-        {/* ── Fuel level fallback tip ── */}
-        {fuelLevelTip && (
-          <View style={[styles.fuelBarCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>⛽ Est. Fuel Level</Text>
-            <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>{fuelLevelTip}</Text>
+              </View>
+            )}
           </View>
         )}
 

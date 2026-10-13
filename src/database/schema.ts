@@ -47,7 +47,7 @@ const CREATE_VEHICLES_TABLE = `
     color                TEXT,
     registration_number  TEXT NOT NULL,
     fuel_type            TEXT NOT NULL CHECK (fuel_type IN (
-                           'petrol', 'diesel', 'cng', 'lpg', 'electric',
+                           'petrol', 'diesel', 'cng', 'lpg', 'electric', 'hybrid',
                            'hybrid_cng_petrol', 'hybrid_cng_diesel',
                            'hybrid_lpg_petrol', 'hybrid_lpg_diesel'
                          )),
@@ -82,6 +82,9 @@ const CREATE_FUEL_ENTRIES_TABLE = `
     mileage_unit         TEXT CHECK (mileage_unit IN ('km_per_litre', 'km_per_kg', 'km_per_kwh')),
     receipt_photo_uri    TEXT,
     notes                TEXT,
+    fuel_system          TEXT DEFAULT 'primary' CHECK (fuel_system IN ('primary', 'secondary')),
+    battery_start_percent REAL,
+    battery_end_percent   REAL,
     created_at           TEXT NOT NULL,
     updated_at           TEXT NOT NULL,
     deleted_at           TEXT
@@ -170,12 +173,120 @@ const CREATE_INDEXES = `
 // ─── Public API ──────────────────────────────────────────────────────
 
 /**
+ * Migrates the vehicles table if it was created under an older schema version
+ * where the fuel_type CHECK constraint did not include the new hybrid types.
+ *
+ * In SQLite, column CHECK constraints cannot be altered or dropped directly.
+ * Standard SQLite table recreation procedure is used:
+ * 1. PRAGMA foreign_keys = OFF
+ * 2. Create vehicles_new with updated CHECK constraint
+ * 3. Copy all existing rows from vehicles to vehicles_new
+ * 4. Drop vehicles
+ * 5. Rename vehicles_new to vehicles
+ * 6. PRAGMA foreign_keys = ON
+ */
+export function migrateVehiclesTableIfNeeded(db: SQLite.SQLiteDatabase): void {
+  try {
+    const tableInfo = db.getFirstSync<{ sql: string }>(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vehicles'"
+    );
+
+    if (!tableInfo?.sql) {
+      // Table doesn't exist yet, will be created cleanly by CREATE_VEHICLES_TABLE
+      return;
+    }
+
+    // If the schema already contains 'hybrid_cng_petrol', it is up to date
+    if (tableInfo.sql.includes('hybrid_cng_petrol')) {
+      return;
+    }
+
+    // Migration required!
+    db.execSync('PRAGMA foreign_keys = OFF;');
+    db.execSync('BEGIN TRANSACTION;');
+
+    db.execSync(`
+      CREATE TABLE vehicles_new (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        nickname             TEXT NOT NULL,
+        vehicle_type         TEXT NOT NULL CHECK (vehicle_type IN ('car', 'two_wheeler', 'three_wheeler', 'other')),
+        manufacturer         TEXT,
+        model                TEXT,
+        variant              TEXT,
+        year                 INTEGER,
+        color                TEXT,
+        registration_number  TEXT NOT NULL,
+        fuel_type            TEXT NOT NULL CHECK (fuel_type IN (
+                               'petrol', 'diesel', 'cng', 'lpg', 'electric', 'hybrid',
+                               'hybrid_cng_petrol', 'hybrid_cng_diesel',
+                               'hybrid_lpg_petrol', 'hybrid_lpg_diesel'
+                             )),
+        tank_capacity        REAL,
+        secondary_tank_capacity REAL,
+        current_odometer     REAL,
+        front_tyre_pressure  REAL,
+        rear_tyre_pressure   REAL,
+        service_interval_km  REAL,
+        purchase_date        TEXT,
+        notes                TEXT,
+        is_archived          INTEGER NOT NULL DEFAULT 0 CHECK (is_archived IN (0, 1)),
+        created_at           TEXT NOT NULL,
+        updated_at           TEXT NOT NULL,
+        deleted_at           TEXT
+      );
+    `);
+
+    // Determine if secondary_tank_capacity already exists in current vehicles table
+    const columns = db.getAllSync<{ name: string }>('PRAGMA table_info(vehicles);');
+    const colSet = new Set(columns.map((c) => c.name));
+    const secTankExpr = colSet.has('secondary_tank_capacity') ? 'secondary_tank_capacity' : 'NULL';
+
+    db.execSync(`
+      INSERT INTO vehicles_new (
+        id, nickname, vehicle_type, manufacturer, model, variant, year, color,
+        registration_number, fuel_type, tank_capacity, secondary_tank_capacity,
+        current_odometer, front_tyre_pressure, rear_tyre_pressure,
+        service_interval_km, purchase_date, notes, is_archived, created_at, updated_at, deleted_at
+      )
+      SELECT
+        id, nickname, vehicle_type, manufacturer, model, variant, year, color,
+        registration_number, fuel_type, tank_capacity, ${secTankExpr},
+        current_odometer, front_tyre_pressure, rear_tyre_pressure,
+        service_interval_km, purchase_date, notes, is_archived, created_at, updated_at, deleted_at
+      FROM vehicles;
+    `);
+
+    db.execSync('DROP TABLE vehicles;');
+    db.execSync('ALTER TABLE vehicles_new RENAME TO vehicles;');
+
+    db.execSync('COMMIT;');
+    db.execSync('PRAGMA foreign_keys = ON;');
+  } catch (err) {
+    try {
+      db.execSync('ROLLBACK;');
+    } catch {
+      // Ignore if no transaction was open
+    }
+    try {
+      db.execSync('PRAGMA foreign_keys = ON;');
+    } catch {
+      // Ignore
+    }
+    console.error('[Database] Failed to migrate vehicles table constraint:', err);
+    throw err;
+  }
+}
+
+/**
  * Creates all tables and indexes if they don't already exist.
  * Called once during database initialization in connection.ts.
  *
  * @param db - The SQLite database instance
  */
 export function createTables(db: SQLite.SQLiteDatabase): void {
+  // Migrate existing tables before table creation/alteration
+  migrateVehiclesTableIfNeeded(db);
+
   db.execSync(CREATE_VEHICLES_TABLE);
   db.execSync(CREATE_FUEL_ENTRIES_TABLE);
   db.execSync(CREATE_SERVICE_RECORDS_TABLE);
@@ -194,5 +305,28 @@ export function createTables(db: SQLite.SQLiteDatabase): void {
     );
   } catch {
     // Column already exists on fresh installs — safe to ignore
+  }
+
+  // v1.2 — Multi-fuel, Bi-fuel systems and EV battery percentage support
+  try {
+    db.execSync(
+      `ALTER TABLE fuel_entries ADD COLUMN fuel_system TEXT DEFAULT 'primary'`
+    );
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.execSync(
+      `ALTER TABLE fuel_entries ADD COLUMN battery_start_percent REAL`
+    );
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.execSync(
+      `ALTER TABLE fuel_entries ADD COLUMN battery_end_percent REAL`
+    );
+  } catch {
+    // Column already exists
   }
 }

@@ -22,7 +22,7 @@ import { useFuelStore } from '@/stores/fuelStore';
 import { useServiceStore } from '@/stores/serviceStore';
 import { useExpenseStore } from '@/stores/expenseStore';
 import { useVehicleStore } from '@/stores/vehicleStore';
-import { MILEAGE_UNIT_LABELS } from '@/constants/fuelTypes';
+import { MILEAGE_UNIT_LABELS, isHybridFuel, FuelType, getFuelSystemLabel } from '@/constants/fuelTypes';
 import { formatCurrency, formatMileage, formatOdometer } from '@/utils/format';
 import { getMonthlySpendHistory } from '@/utils/statsHelpers';
 import { buildShareSummary, computeCostPerKm } from '@/utils/shareSummary';
@@ -31,6 +31,7 @@ import * as fuelRepo from '@/database/repositories/fuelRepo';
 import * as serviceRepo from '@/database/repositories/serviceRepo';
 import * as expenseRepo from '@/database/repositories/expenseRepo';
 import { computeMileageStats } from '@/engine/mileageEngine';
+import { CngTankIcon } from '@/components/CngTankIcon';
 
 // ─── Pure RN Bar Chart Component ────────────────────────────────────
 
@@ -353,6 +354,47 @@ export default function StatsScreen() {
             )}
           </View>
         </View>
+
+        {/* ── Bi-Fuel Dual Stream Breakdown Card ── */}
+        {selectedVehicle && isHybridFuel(selectedVehicle.fuel_type as FuelType) && (
+          <View style={[styles.chartCard, { backgroundColor: colors.surface, ...Sizing.cardShadow, marginBottom: Spacing.lg }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.sm }}>
+              <Text style={[Typography.h3, { color: colors.text }]}>
+                Bi-Fuel Performance
+              </Text>
+              <CngTankIcon size={18} />
+              <Text style={{ fontSize: 18 }}>⛽</Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.sm }}>
+              <View style={[styles.summaryCard, { flex: 1, backgroundColor: colors.background, padding: Spacing.md }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <CngTankIcon size={14} />
+                  <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>
+                    {getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'primary')}
+                  </Text>
+                </View>
+                <Text style={[Typography.statMedium, { color: colors.primary, marginTop: 4 }]}>
+                  {stats.primarySystemStats?.runningAverage
+                    ? formatMileage(stats.primarySystemStats.runningAverage.value, MILEAGE_UNIT_LABELS[stats.primarySystemStats.runningAverage.unit])
+                    : '—'}
+                </Text>
+              </View>
+              <View style={[styles.summaryCard, { flex: 1, backgroundColor: colors.background, padding: Spacing.md }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <Text style={{ fontSize: 14 }}>⛽</Text>
+                  <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>
+                    {getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'secondary')}
+                  </Text>
+                </View>
+                <Text style={[Typography.statMedium, { color: '#B45309', marginTop: 4 }]}>
+                  {stats.secondarySystemStats?.runningAverage
+                    ? formatMileage(stats.secondarySystemStats.runningAverage.value, MILEAGE_UNIT_LABELS[stats.secondarySystemStats.runningAverage.unit])
+                    : '—'}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* ── Mileage Trend Chart ── */}
         {mileageChartData.length >= 2 && (

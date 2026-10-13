@@ -50,6 +50,9 @@ export function createFuelEntry(input: CreateFuelEntryInput): FuelEntry {
     mileage_unit: null,         // Set by mileageEngine after creation
     receipt_photo_uri: input.receipt_photo_uri ?? null,
     notes: input.notes ?? null,
+    fuel_system: input.fuel_system ?? 'primary',
+    battery_start_percent: input.battery_start_percent ?? null,
+    battery_end_percent: input.battery_end_percent ?? null,
     created_at: now,
     updated_at: now,
     deleted_at: null,
@@ -59,15 +62,17 @@ export function createFuelEntry(input: CreateFuelEntryInput): FuelEntry {
     `INSERT INTO fuel_entries (
       id, vehicle_id, date, odometer, fuel_amount, fuel_unit, price_per_unit,
       total_cost, fuel_station, is_full_tank, calculated_mileage, mileage_unit,
-      receipt_photo_uri, notes, created_at, updated_at, deleted_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      receipt_photo_uri, notes, fuel_system, battery_start_percent, battery_end_percent,
+      created_at, updated_at, deleted_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       entry.id, entry.vehicle_id, entry.date, entry.odometer,
       entry.fuel_amount, entry.fuel_unit, entry.price_per_unit,
       entry.total_cost, entry.fuel_station, entry.is_full_tank,
       entry.calculated_mileage, entry.mileage_unit,
-      entry.receipt_photo_uri, entry.notes, entry.created_at,
-      entry.updated_at, entry.deleted_at,
+      entry.receipt_photo_uri, entry.notes,
+      entry.fuel_system, entry.battery_start_percent, entry.battery_end_percent,
+      entry.created_at, entry.updated_at, entry.deleted_at,
     ]
   );
 
@@ -197,6 +202,7 @@ export function updateFuelEntry(id: string, input: UpdateFuelEntryInput): FuelEn
   const ALLOWED_COLUMNS = new Set([
     'date', 'odometer', 'fuel_amount', 'fuel_unit', 'price_per_unit',
     'fuel_station', 'is_full_tank', 'receipt_photo_uri', 'notes',
+    'fuel_system', 'battery_start_percent', 'battery_end_percent',
   ]);
 
   const { fields, values } = buildSafeUpdate(input as Record<string, unknown>, ALLOWED_COLUMNS);

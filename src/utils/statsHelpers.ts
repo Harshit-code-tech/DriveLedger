@@ -25,10 +25,12 @@ export interface FuelLevelResult {
   label: 'Empty' | 'Very Low' | 'Low' | 'Half' | 'Good' | 'Full';
   /** Hex color string for the bar and label. */
   color: string;
-  /** Estimated fuel remaining in litres (>= 0). */
+  /** Estimated fuel remaining in fuel units (litres, kg, or kWh) (>= 0). */
   remainingLitres: number;
   /** Estimated driving range left in km, based on running average mileage (>= 0). */
   kmRemaining: number;
+  /** Unit of measurement (L, kg, or kWh). */
+  unit: string;
 }
 
 /**
@@ -40,7 +42,7 @@ export interface FuelLevelResult {
  *   3. Sum any partial fills added AFTER the full tank (they increase remaining fuel).
  *   4. Use the current odometer to calculate km driven since the full fill.
  *   5. If running average mileage is known:
- *        estimated consumed = km_driven / avg_mileage_km_per_litre
+ *        estimated consumed = km_driven / avg_mileage
  *        remaining = tank_capacity + partials_added - consumed
  *   6. If no mileage available, we cannot estimate accurately → return null.
  *
@@ -49,27 +51,39 @@ export interface FuelLevelResult {
  * an "Est." label so users understand it's not a sensor reading.
  *
  * @param entries        Fuel entries for the vehicle, newest first (date DESC).
- * @param tankCapacity   Vehicle's full tank capacity in litres.
+ * @param tankCapacity   Vehicle's full primary tank capacity.
  * @param currentOdometer Vehicle's current odometer reading in km.
- * @param avgMileage     Running average mileage in km/L (null if not yet calculated).
+ * @param avgMileage     Running average mileage (null if not yet calculated).
+ * @param unitLabel      Unit string ('L', 'kg', 'kWh'). Defaults to 'L'.
  * @returns              FuelLevelResult or null if estimation is not possible.
  */
 export function estimateFuelLevel(
   entries: FuelEntry[],
   tankCapacity: number | null,
   currentOdometer: number | null,
-  avgMileage: number | null
+  avgMileage: number | null,
+  unitLabel: string = 'L',
+  targetSystem?: 'primary' | 'secondary'
 ): FuelLevelResult | null {
   // Cannot estimate without tank capacity or entries
   if (!tankCapacity || tankCapacity <= 0 || entries.length === 0) return null;
   // Cannot estimate consumption without odometer and mileage
   if (!currentOdometer || !avgMileage || avgMileage <= 0) return null;
 
+  // Filter entries to the target system if specified (for Bi-Fuel vehicles)
+  const systemEntries = targetSystem
+    ? entries.filter(
+        (e) => (e.fuel_system ?? (e.fuel_unit === 'kg' ? 'primary' : 'secondary')) === targetSystem
+      )
+    : entries;
+
+  if (systemEntries.length === 0) return null;
+
   // Walk newest → oldest to find the last full-tank fill
   let lastFullTankOdometer: number | null = null;
   let partialsAddedAfterFull = 0;
 
-  for (const entry of entries) {
+  for (const entry of systemEntries) {
     if (entry.is_full_tank === 1) {
       lastFullTankOdometer = entry.odometer;
       break; // stop at first (newest) full tank
@@ -108,7 +122,7 @@ export function estimateFuelLevel(
   const { label, color } = LEVEL_MAP[bars];
   const remainingLitres = Math.max(0, Math.min(tankCapacity, remaining));
   const kmRemaining = Math.round(remainingLitres * avgMileage);
-  return { percent, bars, label, color, remainingLitres, kmRemaining };
+  return { percent, bars, label, color, remainingLitres, kmRemaining, unit: unitLabel };
 }
 
 /**

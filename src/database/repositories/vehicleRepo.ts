@@ -19,6 +19,7 @@
 
 import { getDatabase } from '../connection';
 import { buildSafeUpdate } from '../safeUpdate';
+import { migrateVehiclesTableIfNeeded } from '../schema';
 import { generateUUID } from '@/utils/uuid';
 import { nowISO } from '@/utils/date';
 import type { Vehicle, CreateVehicleInput, UpdateVehicleInput } from '@/types/vehicle';
@@ -33,6 +34,7 @@ import type { Vehicle, CreateVehicleInput, UpdateVehicleInput } from '@/types/ve
  */
 export function createVehicle(input: CreateVehicleInput): Vehicle {
   const db = getDatabase();
+  migrateVehiclesTableIfNeeded(db);
   const now = nowISO();
   const id = generateUUID();
 
@@ -61,24 +63,34 @@ export function createVehicle(input: CreateVehicleInput): Vehicle {
     deleted_at: null,
   };
 
-  db.runSync(
-    `INSERT INTO vehicles (
-      id, nickname, vehicle_type, manufacturer, model, variant, year, color,
-      registration_number, fuel_type, tank_capacity, secondary_tank_capacity,
-      current_odometer, front_tyre_pressure, rear_tyre_pressure,
-      service_interval_km, purchase_date, notes, is_archived, created_at, updated_at, deleted_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      vehicle.id, vehicle.nickname, vehicle.vehicle_type, vehicle.manufacturer,
-      vehicle.model, vehicle.variant, vehicle.year, vehicle.color,
-      vehicle.registration_number, vehicle.fuel_type, vehicle.tank_capacity,
-      vehicle.secondary_tank_capacity, vehicle.current_odometer,
-      vehicle.front_tyre_pressure, vehicle.rear_tyre_pressure,
-      vehicle.service_interval_km, vehicle.purchase_date,
-      vehicle.notes, vehicle.is_archived, vehicle.created_at, vehicle.updated_at,
-      vehicle.deleted_at,
-    ]
-  );
+  const insertSql = `INSERT INTO vehicles (
+    id, nickname, vehicle_type, manufacturer, model, variant, year, color,
+    registration_number, fuel_type, tank_capacity, secondary_tank_capacity,
+    current_odometer, front_tyre_pressure, rear_tyre_pressure,
+    service_interval_km, purchase_date, notes, is_archived, created_at, updated_at, deleted_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+  const insertParams = [
+    vehicle.id, vehicle.nickname, vehicle.vehicle_type, vehicle.manufacturer,
+    vehicle.model, vehicle.variant, vehicle.year, vehicle.color,
+    vehicle.registration_number, vehicle.fuel_type, vehicle.tank_capacity,
+    vehicle.secondary_tank_capacity, vehicle.current_odometer,
+    vehicle.front_tyre_pressure, vehicle.rear_tyre_pressure,
+    vehicle.service_interval_km, vehicle.purchase_date,
+    vehicle.notes, vehicle.is_archived, vehicle.created_at, vehicle.updated_at,
+    vehicle.deleted_at,
+  ];
+
+  try {
+    db.runSync(insertSql, insertParams);
+  } catch (err: any) {
+    if (err?.message?.includes('CHECK constraint failed: fuel_type')) {
+      migrateVehiclesTableIfNeeded(db);
+      db.runSync(insertSql, insertParams);
+    } else {
+      throw err;
+    }
+  }
 
   return vehicle;
 }
@@ -139,6 +151,7 @@ export function updateVehicle(id: string, input: UpdateVehicleInput): Vehicle | 
   const ALLOWED_COLUMNS = new Set([
     'nickname', 'vehicle_type', 'manufacturer', 'model', 'variant',
     'year', 'color', 'registration_number', 'fuel_type', 'tank_capacity',
+    'secondary_tank_capacity',
     'current_odometer', 'front_tyre_pressure', 'rear_tyre_pressure',
     'service_interval_km', 'purchase_date', 'notes', 'is_archived',
   ]);
@@ -154,10 +167,18 @@ export function updateVehicle(id: string, input: UpdateVehicleInput): Vehicle | 
 
   if (fields.length === 1) return getVehicleById(id); // only updated_at, nothing meaningful
 
-  db.runSync(
-    `UPDATE vehicles SET ${fields.join(', ')} WHERE id = ?`,
-    values
-  );
+  const updateSql = `UPDATE vehicles SET ${fields.join(', ')} WHERE id = ?`;
+
+  try {
+    db.runSync(updateSql, values);
+  } catch (err: any) {
+    if (err?.message?.includes('CHECK constraint failed: fuel_type')) {
+      migrateVehiclesTableIfNeeded(db);
+      db.runSync(updateSql, values);
+    } else {
+      throw err;
+    }
+  }
 
   return getVehicleById(id);
 }

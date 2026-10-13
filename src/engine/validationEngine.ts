@@ -23,7 +23,7 @@
  *   etc.
  */
 
-import { FuelType, FuelUnit } from '@/constants/fuelTypes';
+import { FuelType, FuelUnit, isHybridFuel } from '@/constants/fuelTypes';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -52,18 +52,29 @@ export interface ValidationIssue {
  *
  * @param input - The fuel entry data to validate
  * @param previousOdometer - The most recent odometer reading for this vehicle (null if first entry)
- * @param tankCapacity - The vehicle's tank capacity (null if not set)
+ * @param tankCapacity - The vehicle's primary tank capacity (null if not set)
  * @param vehicleFuelType - The vehicle's fuel type
+ * @param secondaryTankCapacity - The vehicle's secondary tank capacity for hybrids (null if not set)
  * @returns ValidationResult with any errors and warnings
  */
-export function validateFuelEntry(input: {
-  odometer: number;
-  fuel_amount: number;
-  fuel_unit: FuelUnit;
-  price_per_unit: number;
-  date: string;
-}, previousOdometer: number | null, tankCapacity: number | null, vehicleFuelType: FuelType): ValidationResult {
+export function validateFuelEntry(
+  input: {
+    odometer: number;
+    fuel_amount: number;
+    fuel_unit: FuelUnit;
+    price_per_unit: number;
+    date: string;
+    fuel_system?: 'primary' | 'secondary';
+    battery_start_percent?: number | null;
+    battery_end_percent?: number | null;
+  },
+  previousOdometer: number | null,
+  tankCapacity: number | null,
+  vehicleFuelType: FuelType,
+  secondaryTankCapacity?: number | null
+): ValidationResult {
   const issues: ValidationIssue[] = [];
+  const isHybrid = isHybridFuel(vehicleFuelType);
 
   // ── Odometer validation ──
 
@@ -99,11 +110,16 @@ export function validateFuelEntry(input: {
     });
   }
 
-  if (tankCapacity !== null && input.fuel_amount > tankCapacity) {
+  const effectiveTankCapacity =
+    isHybrid && input.fuel_system === 'secondary'
+      ? (secondaryTankCapacity ?? null)
+      : tankCapacity;
+
+  if (effectiveTankCapacity !== null && input.fuel_amount > effectiveTankCapacity) {
     issues.push({
       field: 'fuel_amount',
       severity: 'warning',
-      message: `Fuel amount (${input.fuel_amount}) exceeds the vehicle's tank capacity (${tankCapacity}). Are you sure?`,
+      message: `Fuel amount (${input.fuel_amount}) exceeds the tank capacity (${effectiveTankCapacity}). Are you sure?`,
     });
   }
 
@@ -146,9 +162,51 @@ export function validateFuelEntry(input: {
     }
   }
 
-  // ── Fuel unit / fuel type cross-validation ──
-  // CNG/LPG should use kg, not litres
+  // ── EV specific validation ──
+  if (vehicleFuelType === FuelType.ELECTRIC) {
+    if (input.fuel_unit !== FuelUnit.KWH) {
+      issues.push({
+        field: 'fuel_unit',
+        severity: 'error',
+        message: 'Electric vehicles must log energy in kWh.',
+      });
+    }
 
+    if (input.battery_start_percent != null) {
+      if (input.battery_start_percent < 0 || input.battery_start_percent > 100) {
+        issues.push({
+          field: 'battery_start_percent',
+          severity: 'error',
+          message: 'Starting battery % must be between 0 and 100.',
+        });
+      }
+    }
+
+    if (input.battery_end_percent != null) {
+      if (input.battery_end_percent < 0 || input.battery_end_percent > 100) {
+        issues.push({
+          field: 'battery_end_percent',
+          severity: 'error',
+          message: 'Ending battery % must be between 0 and 100.',
+        });
+      }
+    }
+
+    if (
+      input.battery_start_percent != null &&
+      input.battery_end_percent != null &&
+      input.battery_end_percent <= input.battery_start_percent
+    ) {
+      issues.push({
+        field: 'battery_end_percent',
+        severity: 'error',
+        message: 'Ending battery % must be higher than starting battery %.',
+      });
+    }
+  }
+
+  // ── Fuel unit / fuel type cross-validation ──
+  // Pure CNG/LPG should use kg, not litres
   if (
     (vehicleFuelType === FuelType.CNG || vehicleFuelType === FuelType.LPG) &&
     input.fuel_unit === FuelUnit.LITRES
@@ -158,6 +216,23 @@ export function validateFuelEntry(input: {
       severity: 'error',
       message: `${vehicleFuelType.toUpperCase()} vehicles should use kg, not litres. Please correct the fuel unit.`,
     });
+  }
+
+  // Hybrid checks
+  if (isHybrid) {
+    if (input.fuel_system === 'primary' && input.fuel_unit !== FuelUnit.KG) {
+      issues.push({
+        field: 'fuel_unit',
+        severity: 'warning',
+        message: 'Primary tank (CNG/LPG) is normally filled in kg.',
+      });
+    } else if (input.fuel_system === 'secondary' && input.fuel_unit !== FuelUnit.LITRES) {
+      issues.push({
+        field: 'fuel_unit',
+        severity: 'warning',
+        message: 'Secondary tank (Petrol/Diesel) is normally filled in litres.',
+      });
+    }
   }
 
   // Determine overall validity (errors block, warnings don't)

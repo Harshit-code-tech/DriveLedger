@@ -42,8 +42,15 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Fuel types grouped for readability in chip layout
-const SINGLE_FUEL_TYPES = [FuelType.PETROL, FuelType.DIESEL, FuelType.CNG, FuelType.LPG, FuelType.ELECTRIC];
-const HYBRID_FUEL_TYPES = [
+const SINGLE_FUEL_TYPES = [
+  FuelType.PETROL,
+  FuelType.DIESEL,
+  FuelType.CNG,
+  FuelType.LPG,
+  FuelType.ELECTRIC,
+  FuelType.HYBRID,
+];
+const BI_FUEL_TYPES = [
   FuelType.HYBRID_CNG_PETROL,
   FuelType.HYBRID_CNG_DIESEL,
   FuelType.HYBRID_LPG_PETROL,
@@ -100,20 +107,24 @@ export default function AddVehicleScreen() {
     }
     setError('');
 
-    addVehicle({
-      nickname: nickname.trim(),
-      vehicle_type: vehicleType,
-      fuel_type: fuelType,
-      registration_number: registration.trim().toUpperCase(),
-      front_tyre_pressure: frontTyrePressure ? parseFloat(frontTyrePressure) : undefined,
-      rear_tyre_pressure: rearTyrePressure ? parseFloat(rearTyrePressure) : undefined,
-      tank_capacity: tankCapacity ? parseFloat(tankCapacity) : undefined,
-      secondary_tank_capacity: (isHybrid && secondaryTankCapacity)
-        ? parseFloat(secondaryTankCapacity)
-        : undefined,
-    });
+    try {
+      addVehicle({
+        nickname: nickname.trim(),
+        vehicle_type: vehicleType,
+        fuel_type: fuelType,
+        registration_number: registration.trim().toUpperCase(),
+        front_tyre_pressure: frontTyrePressure ? parseFloat(frontTyrePressure) : undefined,
+        rear_tyre_pressure: rearTyrePressure ? parseFloat(rearTyrePressure) : undefined,
+        tank_capacity: tankCapacity ? parseFloat(tankCapacity) : undefined,
+        secondary_tank_capacity: (isHybrid && secondaryTankCapacity)
+          ? parseFloat(secondaryTankCapacity)
+          : undefined,
+      });
 
-    router.back();
+      router.back();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to save vehicle. Please check inputs and try again.');
+    }
   };
 
   return (
@@ -196,10 +207,12 @@ export default function AddVehicleScreen() {
           ))}
         </View>
 
-        {/* ── Hybrid Fuel Types (shown as separate labelled section) ── */}
-        <Text style={[styles.subLabel, { color: colors.textTertiary }]}>Dual-Fuel (Hybrid)</Text>
+        {/* ── Bi-Fuel Types (shown as separate labelled section) ── */}
+        <Text style={[styles.subLabel, { color: colors.textTertiary }]}>
+          Dual-Fuel / Bi-Fuel (Two Tanks: Gas + Liquid)
+        </Text>
         <View style={styles.chipRow}>
-          {HYBRID_FUEL_TYPES.map((ft) => (
+          {BI_FUEL_TYPES.map((ft) => (
             <Pressable
               key={ft}
               onPress={() => handleFuelTypeChange(ft)}

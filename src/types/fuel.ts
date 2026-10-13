@@ -85,6 +85,23 @@ export interface FuelEntry {
   /** Free-text notes (optional) */
   notes: string | null;
 
+  /**
+   * For Bi-Fuel (hybrid) vehicles: which fuel system was filled.
+   * 'primary' = Gas (CNG/LPG), 'secondary' = Liquid (Petrol/Diesel).
+   * For single-fuel vehicles: defaults to 'primary'.
+   */
+  fuel_system?: 'primary' | 'secondary' | null;
+
+  /**
+   * For EV charge sessions: battery % when plugged in (0 - 100).
+   */
+  battery_start_percent?: number | null;
+
+  /**
+   * For EV charge sessions: battery % when unplugged (0 - 100).
+   */
+  battery_end_percent?: number | null;
+
   /** ISO 8601 timestamp — when this record was created */
   created_at: string;
 
@@ -114,6 +131,9 @@ export interface CreateFuelEntryInput {
   fuel_station?: string;
   receipt_photo_uri?: string;
   notes?: string;
+  fuel_system?: 'primary' | 'secondary';
+  battery_start_percent?: number;
+  battery_end_percent?: number;
 }
 
 // ─── Update Input ────────────────────────────────────────────────────
