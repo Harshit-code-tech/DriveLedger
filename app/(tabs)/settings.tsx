@@ -16,19 +16,18 @@ import {
   createBackup,
   exportToFile,
   pickAndVerifyBackup,
-  restoreFromValidated,
-  restoreFromJSON,
+  restoreFromValidated
 } from '@/engine/backupEngine';
-import { buildLedgerCsv } from '@/utils/csvExport';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { checkForAppUpdate, showDataSafetyGuide } from '@/services/updateChecker';
-import { useVehicleStore } from '@/stores/vehicleStore';
 import {
-  usePreferencesStore,
   CURRENCY_OPTIONS, DISTANCE_OPTIONS, FUEL_VOLUME_OPTIONS, PRESSURE_OPTIONS,
+  usePreferencesStore,
   type CurrencyCode, type DistanceUnit, type FuelVolumeUnit, type PressureUnit,
 } from '@/stores/preferencesStore';
+import { useVehicleStore } from '@/stores/vehicleStore';
 import type { Vehicle } from '@/types/vehicle';
+import { buildLedgerCsv } from '@/utils/csvExport';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
@@ -168,35 +167,35 @@ export default function SettingsScreen() {
   const router = useRouter();
 
   // Vehicle store
-  const vehicles      = useVehicleStore((s) => s.vehicles);
-  const loadVehicles  = useVehicleStore((s) => s.loadVehicles);
-  const archiveVehicle  = useVehicleStore((s) => s.archiveVehicle);
-  const restoreVehicle  = useVehicleStore((s) => s.restoreVehicle);
+  const vehicles = useVehicleStore((s) => s.vehicles);
+  const loadVehicles = useVehicleStore((s) => s.loadVehicles);
+  const archiveVehicle = useVehicleStore((s) => s.archiveVehicle);
+  const restoreVehicle = useVehicleStore((s) => s.restoreVehicle);
 
   // Preferences store
-  const currency          = usePreferencesStore((s) => s.currency);
-  const distanceUnit      = usePreferencesStore((s) => s.distanceUnit);
-  const fuelVolumeUnit    = usePreferencesStore((s) => s.fuelVolumeUnit);
-  const pressureUnit      = usePreferencesStore((s) => s.pressureUnit);
-  const defaultVehicleId  = usePreferencesStore((s) => s.defaultVehicleId);
-  const setCurrency         = usePreferencesStore((s) => s.setCurrency);
-  const setDistanceUnit     = usePreferencesStore((s) => s.setDistanceUnit);
-  const setFuelVolumeUnit   = usePreferencesStore((s) => s.setFuelVolumeUnit);
-  const setPressureUnit     = usePreferencesStore((s) => s.setPressureUnit);
+  const currency = usePreferencesStore((s) => s.currency);
+  const distanceUnit = usePreferencesStore((s) => s.distanceUnit);
+  const fuelVolumeUnit = usePreferencesStore((s) => s.fuelVolumeUnit);
+  const pressureUnit = usePreferencesStore((s) => s.pressureUnit);
+  const defaultVehicleId = usePreferencesStore((s) => s.defaultVehicleId);
+  const setCurrency = usePreferencesStore((s) => s.setCurrency);
+  const setDistanceUnit = usePreferencesStore((s) => s.setDistanceUnit);
+  const setFuelVolumeUnit = usePreferencesStore((s) => s.setFuelVolumeUnit);
+  const setPressureUnit = usePreferencesStore((s) => s.setPressureUnit);
   const setDefaultVehicleId = usePreferencesStore((s) => s.setDefaultVehicleId);
 
   // Local UI state
   const [archivedVehicles, setArchivedVehicles] = useState<Vehicle[]>([]);
-  const [showArchived, setShowArchived]         = useState(false);
-  const [isExporting, setIsExporting]           = useState(false);
-  const [isImporting, setIsImporting]           = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   // Option picker visibility
-  const [pickerCurrency,   setPickerCurrency]   = useState(false);
-  const [pickerDistance,   setPickerDistance]   = useState(false);
-  const [pickerFuel,       setPickerFuel]       = useState(false);
-  const [pickerPressure,   setPickerPressure]   = useState(false);
-  const [pickerVehicle,    setPickerVehicle]    = useState(false);
+  const [pickerCurrency, setPickerCurrency] = useState(false);
+  const [pickerDistance, setPickerDistance] = useState(false);
+  const [pickerFuel, setPickerFuel] = useState(false);
+  const [pickerPressure, setPickerPressure] = useState(false);
+  const [pickerVehicle, setPickerVehicle] = useState(false);
 
   // Load vehicles + archived list on every focus
   useFocusEffect(
@@ -208,10 +207,10 @@ export default function SettingsScreen() {
   );
 
   // ── Derived display labels ──
-  const currencyLabel    = CURRENCY_OPTIONS.find((o) => o.value === currency)?.symbol ?? currency;
-  const distanceLabel    = DISTANCE_OPTIONS.find((o) => o.value === distanceUnit)?.label ?? distanceUnit;
-  const fuelVolumeLabel  = FUEL_VOLUME_OPTIONS.find((o) => o.value === fuelVolumeUnit)?.label ?? fuelVolumeUnit;
-  const pressureLabel    = PRESSURE_OPTIONS.find((o) => o.value === pressureUnit)?.label ?? pressureUnit;
+  const currencyLabel = CURRENCY_OPTIONS.find((o) => o.value === currency)?.symbol ?? currency;
+  const distanceLabel = DISTANCE_OPTIONS.find((o) => o.value === distanceUnit)?.label ?? distanceUnit;
+  const fuelVolumeLabel = FUEL_VOLUME_OPTIONS.find((o) => o.value === fuelVolumeUnit)?.label ?? fuelVolumeUnit;
+  const pressureLabel = PRESSURE_OPTIONS.find((o) => o.value === pressureUnit)?.label ?? pressureUnit;
   const defaultVehicleLabel = vehicles.find((v) => v.id === defaultVehicleId)?.nickname ?? 'First Added';
 
   // ── Vehicle picker options ──
@@ -333,6 +332,8 @@ export default function SettingsScreen() {
       ]
     );
   };
+
+
 
   return (
     <>

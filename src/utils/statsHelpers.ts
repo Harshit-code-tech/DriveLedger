@@ -198,3 +198,96 @@ export function getMonthlySpendHistory(
 
   return result;
 }
+
+// ─── Time Range Filtering ──────────────────────────────────────────
+
+export type StatsTimeRange = 'month' | '6m' | 'year' | 'all';
+
+/**
+ * Filters records by the selected time range.
+ *
+ * @param records   Array of items to filter.
+ * @param getDate   Accessor function returning the record's date string.
+ * @param timeRange 'month' (current calendar month), '6m' (last 6 months), 'year' (last 12 months), or 'all'.
+ * @param refDate   Optional reference date (defaults to new Date()).
+ */
+export function filterRecordsByTimeRange<T>(
+  records: T[],
+  getDate: (record: T) => string,
+  timeRange: StatsTimeRange,
+  refDate: Date = new Date()
+): T[] {
+  if (timeRange === 'all') return records;
+
+  let cutoff: Date;
+  if (timeRange === 'month') {
+    cutoff = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+  } else if (timeRange === '6m') {
+    cutoff = new Date(refDate.getFullYear(), refDate.getMonth() - 5, 1);
+  } else if (timeRange === 'year') {
+    cutoff = new Date(refDate.getFullYear() - 1, refDate.getMonth(), 1);
+  } else {
+    return records;
+  }
+
+  return records.filter((r) => {
+    const d = new Date(getDate(r));
+    return !isNaN(d.getTime()) && d >= cutoff;
+  });
+}
+
+// ─── Cost Breakdown Aggregation ────────────────────────────────────
+
+export interface CostCategorySlice {
+  key: string;
+  label: string;
+  icon: string;
+  amount: number;
+  color: string;
+}
+
+/**
+ * Aggregates fuel, service, and categorized expenses into 6 clean buckets
+ * suitable for the Donut Chart and legend display.
+ */
+export function aggregateCostBreakdown(
+  fuelEntries: FuelEntry[],
+  serviceRecords: ServiceRecord[],
+  expenses: Expense[]
+): { slices: CostCategorySlice[]; totalCost: number } {
+  const fuelCost = fuelEntries.reduce((s, e) => s + (e.total_cost || 0), 0);
+  const serviceCost = serviceRecords.reduce((s, r) => s + (r.cost || 0), 0);
+
+  let insuranceCost = 0;
+  let repairTyresCost = 0;
+  let tollsDailyCost = 0;
+  let otherCost = 0;
+
+  for (const exp of expenses) {
+    const cat = (exp.category || '').toLowerCase();
+    if (cat === 'insurance' || cat === 'fine' || cat.includes('challan') || cat.includes('tax')) {
+      insuranceCost += exp.amount || 0;
+    } else if (cat === 'repair' || cat === 'tyres' || cat === 'tire' || cat === 'tyre') {
+      repairTyresCost += exp.amount || 0;
+    } else if (cat === 'toll' || cat === 'parking' || cat === 'cleaning' || cat === 'accessories') {
+      tollsDailyCost += exp.amount || 0;
+    } else {
+      otherCost += exp.amount || 0;
+    }
+  }
+
+  const rawSlices: CostCategorySlice[] = [
+    { key: 'fuel', label: 'Fuel', icon: '⛽', amount: fuelCost, color: '#3B82F6' },
+    { key: 'service', label: 'Service & Maintenance', icon: '🔧', amount: serviceCost, color: '#10B981' },
+    { key: 'insurance', label: 'Insurance & Taxes', icon: '🛡️', amount: insuranceCost, color: '#8B5CF6' },
+    { key: 'repairs', label: 'Repairs & Tyres', icon: '🛠️', amount: repairTyresCost, color: '#F59E0B' },
+    { key: 'daily', label: 'Tolls & Daily Care', icon: '🛣️', amount: tollsDailyCost, color: '#EC4899' },
+    { key: 'other', label: 'Other Expenses', icon: '📝', amount: otherCost, color: '#64748B' },
+  ];
+
+  const slices = rawSlices.filter((s) => s.amount > 0);
+  const totalCost = fuelCost + serviceCost + insuranceCost + repairTyresCost + tollsDailyCost + otherCost;
+
+  return { slices, totalCost };
+}
+

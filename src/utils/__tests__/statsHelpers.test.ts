@@ -10,6 +10,8 @@ import {
   getCurrentMonthTotalSpend,
   getMonthlySpendHistory,
   estimateFuelLevel,
+  filterRecordsByTimeRange,
+  aggregateCostBreakdown,
 } from '../statsHelpers';
 
 // Minimal mock types matching the interfaces used by the helpers
@@ -164,3 +166,89 @@ describe('estimateFuelLevel', () => {
     expect(estimateFuelLevel([{ odometer: 1000, is_full_tank: 1, fuel_amount: 30 } as any], 35, 1050, 0)).toBeNull();
   });
 });
+
+describe('filterRecordsByTimeRange', () => {
+  const refDate = new Date(2026, 9, 15); // October 15, 2026
+
+  const records = [
+    { date: '2026-10-10', id: '1' }, // October 2026 (this month)
+    { date: '2026-08-01', id: '2' }, // August 2026 (~2 months ago)
+    { date: '2026-05-10', id: '3' }, // May 2026 (~5 months ago)
+    { date: '2026-01-15', id: '4' }, // January 2026 (~9 months ago)
+    { date: '2025-08-01', id: '5' }, // August 2025 (~14 months ago)
+  ];
+
+  it('returns all records when range is all', () => {
+    const result = filterRecordsByTimeRange(records, (r) => r.date, 'all', refDate);
+    expect(result).toHaveLength(5);
+  });
+
+  it('filters to current calendar month when range is month', () => {
+    const result = filterRecordsByTimeRange(records, (r) => r.date, 'month', refDate);
+    expect(result.map((r) => r.id)).toEqual(['1']);
+  });
+
+  it('filters to last 6 months when range is 6m', () => {
+    const result = filterRecordsByTimeRange(records, (r) => r.date, '6m', refDate);
+    // May, August, October are within 6 months of October 2026
+    expect(result.map((r) => r.id)).toEqual(['1', '2', '3']);
+  });
+
+  it('filters to last 12 months when range is year', () => {
+    const result = filterRecordsByTimeRange(records, (r) => r.date, 'year', refDate);
+    // October 2025 to October 2026: 1, 2, 3, 4
+    expect(result.map((r) => r.id)).toEqual(['1', '2', '3', '4']);
+  });
+});
+
+describe('aggregateCostBreakdown', () => {
+  it('aggregates fuel, service, and categorized expenses into 6 clean buckets', () => {
+    const fuelEntries = [
+      makeFuelEntry('2026-10-01', 3500),
+      makeFuelEntry('2026-10-10', 2500),
+    ];
+    const serviceRecords = [
+      makeServiceRecord('2026-10-05', 4200),
+    ];
+    const expenses = [
+      { date: '2026-10-02', category: 'Insurance', amount: 8000 } as any,
+      { date: '2026-10-03', category: 'Repair', amount: 1500 } as any,
+      { date: '2026-10-04', category: 'Tyres', amount: 6000 } as any,
+      { date: '2026-10-06', category: 'Toll', amount: 250 } as any,
+      { date: '2026-10-07', category: 'Parking', amount: 100 } as any,
+      { date: '2026-10-08', category: 'Other', amount: 500 } as any,
+    ];
+
+    const { slices, totalCost } = aggregateCostBreakdown(fuelEntries, serviceRecords, expenses);
+
+    expect(totalCost).toBe(6000 + 4200 + 8000 + 7500 + 350 + 500);
+
+    const fuelSlice = slices.find((s) => s.key === 'fuel');
+    expect(fuelSlice?.amount).toBe(6000);
+
+    const serviceSlice = slices.find((s) => s.key === 'service');
+    expect(serviceSlice?.amount).toBe(4200);
+
+    const insuranceSlice = slices.find((s) => s.key === 'insurance');
+    expect(insuranceSlice?.amount).toBe(8000);
+
+    const repairsSlice = slices.find((s) => s.key === 'repairs');
+    expect(repairsSlice?.amount).toBe(7500); // 1500 + 6000
+
+    const dailySlice = slices.find((s) => s.key === 'daily');
+    expect(dailySlice?.amount).toBe(350); // 250 + 100
+
+    const otherSlice = slices.find((s) => s.key === 'other');
+    expect(otherSlice?.amount).toBe(500);
+  });
+
+  it('filters out slices with zero amount', () => {
+    const fuelEntries = [makeFuelEntry('2026-10-01', 2000)];
+    const { slices, totalCost } = aggregateCostBreakdown(fuelEntries, [], []);
+
+    expect(totalCost).toBe(2000);
+    expect(slices).toHaveLength(1);
+    expect(slices[0].key).toBe('fuel');
+  });
+});
+

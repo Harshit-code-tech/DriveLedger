@@ -861,12 +861,22 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
     // the link in this pass can violate the foreign key when the newer row has
     // not been inserted yet.
     for (const d of backup.data.documents) {
+      let docType = d.type || (d as any).document_type;
+      if (docType) {
+        const lower = String(docType).toLowerCase();
+        if (lower === 'insurance') docType = 'Insurance';
+        else if (lower === 'puc') docType = 'PUC';
+        else if (lower === 'rc') docType = 'RC';
+        else if (lower === 'fastag') docType = 'FASTag';
+        else if (lower === 'warranty') docType = 'Warranty';
+      }
+
       db.runSync(
         `INSERT INTO documents (id, vehicle_id, type, document_number, insurer_name, issue_date,
          expiry_date, file_uri, superseded_by, notes, created_at, updated_at, deleted_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          d.id, d.vehicle_id, d.type, d.document_number ?? null, d.insurer_name ?? null,
+          d.id, d.vehicle_id, docType, d.document_number ?? null, d.insurer_name ?? null,
           d.issue_date ?? null, d.expiry_date ?? null, d.file_uri ?? null,
           null, d.notes ?? null,
           d.created_at || nowISO(), d.updated_at || nowISO(), d.deleted_at ?? null,

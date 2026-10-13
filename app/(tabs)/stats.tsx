@@ -1,18 +1,22 @@
 /**
  * Stats Screen
  *
- * Summary cards + visual bar charts.
- * Charts are built with pure React Native Views — no external charting library needed.
- *
- * Shows:
- * - Total ownership cost (fuel + service + expense)
- * - Summary cards (total fuel cost, fill-ups, avg/best/worst mileage)
- * - Mileage trend bar chart (last 10 fill-ups)
- * - Monthly fuel cost bar chart (last 6 months)
- * - Cost breakdown by category
+ * Comprehensive Visual Analytics & Reporting Dashboard:
+ * - Universal Time Range Filter: This Month | 6 Months | 1 Year | All Time
+ * - Total Ownership Cost hero card with category badges
+ * - 4 Summary KPI cards (Fuel Cost, Fill-ups, Avg Mileage, Best/Worst)
+ * - Bi-Fuel Dual-Stream Performance card (for CNG / Hybrid vehicles)
+ * - Visual Chart 1: Mileage Evolution & Trendline (bezier curved line chart with
+ *   rolling average dashed reference line, above/below average point coding,
+ *   and interactive tapped tooltip)
+ * - Visual Chart 2: Cost Breakdown Donut Chart (center total expenditure label,
+ *   clean categorized legend with percentage and ₹ totals)
+ * - Visual Chart 3: Monthly Spend Bar Chart (6M | 12M | Year historical progression)
+ * - Quick Numbers / Vehicle Amortization Trajectory (Cost per km, services, total fuel)
+ * - Fleet Comparison (when user has 2+ vehicles)
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 
@@ -24,7 +28,12 @@ import { useExpenseStore } from '@/stores/expenseStore';
 import { useVehicleStore } from '@/stores/vehicleStore';
 import { MILEAGE_UNIT_LABELS, isHybridFuel, FuelType, getFuelSystemLabel } from '@/constants/fuelTypes';
 import { formatCurrency, formatMileage, formatOdometer } from '@/utils/format';
-import { getMonthlySpendHistory } from '@/utils/statsHelpers';
+import {
+  getMonthlySpendHistory,
+  StatsTimeRange,
+  filterRecordsByTimeRange,
+  aggregateCostBreakdown,
+} from '@/utils/statsHelpers';
 import { buildShareSummary, computeCostPerKm } from '@/utils/shareSummary';
 import { VehicleContextHeader } from '@/components/VehicleContextHeader';
 import * as fuelRepo from '@/database/repositories/fuelRepo';
@@ -32,8 +41,10 @@ import * as serviceRepo from '@/database/repositories/serviceRepo';
 import * as expenseRepo from '@/database/repositories/expenseRepo';
 import { computeMileageStats } from '@/engine/mileageEngine';
 import { CngTankIcon } from '@/components/CngTankIcon';
+import { MileageTrendChart, MileagePoint } from '@/components/charts/MileageTrendChart';
+import { CostBreakdownDonutChart } from '@/components/charts/CostBreakdownDonutChart';
 
-// ─── Pure RN Bar Chart Component ────────────────────────────────────
+// ─── Pure RN Bar Chart Component (for Monthly Spend History) ─────────
 
 interface BarChartProps {
   data: { label: string; value: number; color?: string }[];
@@ -44,7 +55,7 @@ interface BarChartProps {
   height?: number;
 }
 
-function BarChart({ data, maxValue, barColor, labelColor, valueColor, height = 120 }: BarChartProps) {
+function BarChart({ data, maxValue, barColor, labelColor, valueColor, height = 110 }: BarChartProps) {
   const max = maxValue ?? Math.max(...data.map((d) => d.value), 1);
 
   return (
@@ -55,7 +66,11 @@ function BarChart({ data, maxValue, barColor, labelColor, valueColor, height = 1
           return (
             <View key={i} style={chartStyles.barColumn}>
               <Text style={[chartStyles.barValue, { color: valueColor }]}>
-                {item.value % 1 === 0 ? item.value : item.value.toFixed(1)}
+                {item.value >= 1000
+                  ? `${(item.value / 1000).toFixed(item.value >= 10000 ? 0 : 1)}k`
+                  : item.value % 1 === 0
+                  ? item.value
+                  : item.value.toFixed(0)}
               </Text>
               <View
                 style={[
@@ -101,7 +116,7 @@ const chartStyles = StyleSheet.create({
     minWidth: 12,
   },
   barValue: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600',
     marginBottom: 4,
   },
@@ -121,7 +136,7 @@ const chartStyles = StyleSheet.create({
   },
 });
 
-// ─── Stats Screen ───────────────────────────────────────────────────
+// ─── Stats Screen Component ─────────────────────────────────────────
 
 export default function StatsScreen() {
   const colors = useThemeColors();
@@ -139,8 +154,14 @@ export default function StatsScreen() {
 
   const vehicles = useVehicleStore((s) => s.vehicles);
 
-  // Chart range toggle: 6M | 12M | Year
-  const [chartRange, setChartRange] = useState<'6m' | '12m' | 'year'>('6m');
+  // Universal Time Range Filter: 'month' | '6m' | 'year' | 'all'
+  const [timeRange, setTimeRange] = useState<StatsTimeRange>('all');
+
+  // Bi-Fuel Mileage Trend Filter (for Hybrid / Dual-fuel vehicles)
+  const [biFuelTrendFilter, setBiFuelTrendFilter] = useState<'all' | 'primary' | 'secondary'>('all');
+
+  // Monthly Bar Chart range toggle: 6M | 12M | Year
+  const [monthlyChartRange, setMonthlyChartRange] = useState<'6m' | '12m' | 'year'>('6m');
 
   useFocusEffect(
     useCallback(() => {
@@ -152,11 +173,85 @@ export default function StatsScreen() {
     }, [selectedVehicle?.id])
   );
 
-  // ── Monthly cost chart (respects chartRange toggle) ──
-  // Must be declared BEFORE any early return to obey Rules of Hooks
+  // ── Filtered data sets based on active Time Range Filter ──
+  const filteredEntries = useMemo(() => {
+    return filterRecordsByTimeRange(entries, (e) => e.date, timeRange);
+  }, [entries, timeRange]);
+
+  const filteredServices = useMemo(() => {
+    return filterRecordsByTimeRange(serviceRecords, (r) => r.date, timeRange);
+  }, [serviceRecords, timeRange]);
+
+  const filteredExpenses = useMemo(() => {
+    return filterRecordsByTimeRange(expenses, (e) => e.date, timeRange);
+  }, [expenses, timeRange]);
+
+  // ── Aggregated Cost Breakdown for Donut Chart ──
+  const costBreakdown = useMemo(() => {
+    return aggregateCostBreakdown(filteredEntries, filteredServices, filteredExpenses);
+  }, [filteredEntries, filteredServices, filteredExpenses]);
+
+  // ── Mileage Trend Points for MileageTrendChart ──
+  const mileageTrendData = useMemo(() => {
+    if (!selectedVehicle) return { points: [] as MileagePoint[], average: null, unitLabel: 'km/L' };
+
+    const isHybrid = isHybridFuel(selectedVehicle.fuel_type as FuelType);
+    let candidateEntries = entries.filter((e) => e.calculated_mileage != null);
+
+    // Apply Bi-Fuel system filter if selected
+    if (isHybrid && biFuelTrendFilter !== 'all') {
+      candidateEntries = candidateEntries.filter(
+        (e) => (e.fuel_system ?? (e.fuel_unit === 'kg' ? 'primary' : 'secondary')) === biFuelTrendFilter
+      );
+    }
+
+    // Apply Time Range if it has at least 2 points; otherwise show recent points
+    if (timeRange !== 'all') {
+      const timeScoped = filterRecordsByTimeRange(candidateEntries, (e) => e.date, timeRange);
+      if (timeScoped.length >= 2) {
+        candidateEntries = timeScoped;
+      }
+    }
+
+    // Newest entries are first in store; take up to 15 newest and reverse for chronological order
+    const points: MileagePoint[] = candidateEntries
+      .slice(0, 15)
+      .reverse()
+      .map((e) => {
+        const d = new Date(e.date);
+        return {
+          date: e.date,
+          displayDate: `${d.getDate()}/${d.getMonth() + 1}`,
+          value: e.calculated_mileage!,
+          fuelStation: e.fuel_station,
+          fuelSystem: (e.fuel_system ?? (e.fuel_unit === 'kg' ? 'primary' : 'secondary')) as 'primary' | 'secondary',
+        };
+      });
+
+    // Determine appropriate average reference line
+    let average: number | null = null;
+    if (isHybrid && biFuelTrendFilter === 'primary' && stats.primarySystemStats?.runningAverage) {
+      average = stats.primarySystemStats.runningAverage.value;
+    } else if (isHybrid && biFuelTrendFilter === 'secondary' && stats.secondarySystemStats?.runningAverage) {
+      average = stats.secondarySystemStats.runningAverage.value;
+    } else if (stats.runningAverage) {
+      average = stats.runningAverage.value;
+    }
+
+    // Determine unit label
+    let unitLabel = stats.runningAverage ? MILEAGE_UNIT_LABELS[stats.runningAverage.unit] : 'km/L';
+    if (isHybrid) {
+      if (biFuelTrendFilter === 'primary') unitLabel = 'km/kg';
+      else if (biFuelTrendFilter === 'secondary') unitLabel = 'km/L';
+    }
+
+    return { points, average, unitLabel };
+  }, [entries, selectedVehicle, biFuelTrendFilter, timeRange, stats]);
+
+  // ── Monthly Spend History Chart Data ──
   const monthlyCostData = useMemo(() => {
     if (!selectedVehicle) return [];
-    if (chartRange === 'year') {
+    if (monthlyChartRange === 'year') {
       const now = new Date();
       return [0, 1, 2].reverse().map((yearsAgo) => {
         const year = now.getFullYear() - yearsAgo;
@@ -179,14 +274,11 @@ export default function StatsScreen() {
         return { label: `${year}`, value: Math.round(total) };
       });
     }
-    // 6M / 12M: monthly breakdown
-    const months = chartRange === '12m' ? 12 : 6;
+    const months = monthlyChartRange === '12m' ? 12 : 6;
     return getMonthlySpendHistory(entries, serviceRecords, expenses, months);
-  }, [chartRange, entries, serviceRecords, expenses, selectedVehicle]);
+  }, [monthlyChartRange, entries, serviceRecords, expenses, selectedVehicle]);
 
-  // ── Cross-vehicle comparison (reads DB directly, not per-vehicle store) ──
-  // Only built when there are 2+ active vehicles. Declared before the early
-  // return below to obey the Rules of Hooks.
+  // ── Cross-vehicle comparison (reads DB directly) ──
   const crossVehicleData = useMemo(() => {
     if (vehicles.length < 2) return null;
     return vehicles.map((v) => {
@@ -220,41 +312,45 @@ export default function StatsScreen() {
     );
   }
 
-  // ── Compute stats ──
-  const totalFuelCost = entries.reduce((sum, e) => sum + e.total_cost, 0);
-  const totalServiceCost = serviceRecords.reduce((sum, r) => sum + (r.cost || 0), 0);
-  const totalExpenseCost = expenses.reduce((sum, e) => sum + e.amount, 0);
+  // ── Compute scoped stats for active time range ──
+  const totalFuelCost = filteredEntries.reduce((sum, e) => sum + e.total_cost, 0);
+  const totalServiceCost = filteredServices.reduce((sum, r) => sum + (r.cost || 0), 0);
+  const totalExpenseCost = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
   const totalOwnershipCost = totalFuelCost + totalServiceCost + totalExpenseCost;
-  const totalLitres = entries.reduce((sum, e) => sum + e.fuel_amount, 0);
-  const totalEntries = entries.length;
+  const totalFuelQuantity = filteredEntries.reduce((sum, e) => sum + e.fuel_amount, 0);
+  const totalEntriesCount = filteredEntries.length;
 
-  // ── Mileage trend (last 10 entries with mileage, oldest first) ──
-  const mileageEntries = entries
-    .filter((e) => e.calculated_mileage != null)
-    .slice(0, 10)
-    .reverse();
+  // Time-scoped mileage calculation if filteredEntries has >= 2 fills
+  const timeScopedMileageStats = useMemo(() => {
+    if (timeRange === 'all') return stats;
+    if (filteredEntries.length >= 2) {
+      const chronological = [...filteredEntries].reverse();
+      return computeMileageStats(chronological);
+    }
+    return stats;
+  }, [timeRange, filteredEntries, stats]);
 
-  const mileageChartData = mileageEntries.map((e) => {
-    const date = new Date(e.date);
-    const label = `${date.getDate()}/${date.getMonth() + 1}`;
-    const value = e.calculated_mileage!;
-    const avg = stats.runningAverage?.value ?? 0;
-    // Color code: green if above average, orange if below
-    const color = value >= avg ? colors.success : colors.warning;
-    return { label, value, color };
-  });
-
-
-
-  // ── Distance-based stats ──
+  // Distance tracked & ₹/km
   const { kmTracked, costPerKm } = computeCostPerKm(
-    entries.map((e) => e.odometer),
+    filteredEntries.map((e) => e.odometer),
     totalOwnershipCost
   );
 
-  // ── Share summary ──
+  // Timeframe label for cards & donut chart center
+  const timeRangeLabel =
+    timeRange === 'month'
+      ? 'This Month'
+      : timeRange === '6m'
+      ? 'Last 6 Months'
+      : timeRange === 'year'
+      ? 'Last 12 Months'
+      : 'All Time';
+
+  // ── Share summary handler ──
   const handleShare = async () => {
-    const unitLabel = stats.runningAverage ? MILEAGE_UNIT_LABELS[stats.runningAverage.unit] : null;
+    const unitLabel = timeScopedMileageStats.runningAverage
+      ? MILEAGE_UNIT_LABELS[timeScopedMileageStats.runningAverage.unit]
+      : null;
     const message = buildShareSummary({
       vehicleName: selectedVehicle.nickname,
       registrationNumber: selectedVehicle.registration_number,
@@ -262,12 +358,12 @@ export default function StatsScreen() {
       fuelCost: totalFuelCost,
       serviceCost: totalServiceCost,
       expenseCost: totalExpenseCost,
-      fillUps: totalEntries,
-      avgMileageText: stats.runningAverage && unitLabel
-        ? formatMileage(stats.runningAverage.value, unitLabel)
+      fillUps: totalEntriesCount,
+      avgMileageText: timeScopedMileageStats.runningAverage && unitLabel
+        ? formatMileage(timeScopedMileageStats.runningAverage.value, unitLabel)
         : null,
-      bestMileageText: stats.best ? stats.best.value.toFixed(1) : null,
-      worstMileageText: stats.worst ? stats.worst.value.toFixed(1) : null,
+      bestMileageText: timeScopedMileageStats.best ? timeScopedMileageStats.best.value.toFixed(1) : null,
+      worstMileageText: timeScopedMileageStats.worst ? timeScopedMileageStats.worst.value.toFixed(1) : null,
       kmTracked,
       costPerKm,
       formatMoney: formatCurrency,
@@ -275,7 +371,7 @@ export default function StatsScreen() {
     try {
       await Share.share({ message });
     } catch {
-      // User dismissed or share unavailable — nothing to do
+      // User dismissed share dialog
     }
   };
 
@@ -284,9 +380,10 @@ export default function StatsScreen() {
       <View style={styles.content}>
         <VehicleContextHeader label="Stats for" />
 
+        {/* ── Title & Share Header ── */}
         <View style={styles.titleRow}>
           <Text style={[Typography.h2, { color: colors.text, flex: 1 }]}>
-            {selectedVehicle.nickname} Stats
+            {selectedVehicle.nickname} Analytics
           </Text>
           <TouchableOpacity
             onPress={handleShare}
@@ -301,61 +398,119 @@ export default function StatsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ── Total Ownership Cost (hero card) ── */}
+        {/* ── Universal Time Range Selector ── */}
+        <View style={[styles.timeFilterContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          {(
+            [
+              { id: 'month', label: 'This Month' },
+              { id: '6m', label: '6 Months' },
+              { id: 'year', label: '1 Year' },
+              { id: 'all', label: 'All Time' },
+            ] as const
+          ).map((tab) => {
+            const isActive = timeRange === tab.id;
+            return (
+              <TouchableOpacity
+                key={tab.id}
+                style={[
+                  styles.timeFilterBtn,
+                  isActive && { backgroundColor: colors.primary },
+                ]}
+                onPress={() => setTimeRange(tab.id)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    Typography.caption,
+                    {
+                      color: isActive ? '#FFFFFF' : colors.textSecondary,
+                      fontWeight: isActive ? '700' : '500',
+                      fontSize: 12,
+                    },
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* ── Total Ownership Cost (Hero Card) ── */}
         <View style={[styles.heroCard, { backgroundColor: colors.primary }]}>
-          <Text style={[styles.heroLabel, { color: 'rgba(255,255,255,0.8)' }]}>
-            Total Ownership Cost
-          </Text>
-          <Text style={[Typography.stat, { color: '#FFFFFF' }]}>
+          <View style={styles.heroHeaderRow}>
+            <Text style={[styles.heroLabel, { color: 'rgba(255,255,255,0.85)' }]}>
+              {timeRange === 'all' ? 'Total Ownership Cost' : `${timeRangeLabel} Spend`}
+            </Text>
+            {timeRange !== 'all' && (
+              <View style={styles.heroFilterBadge}>
+                <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700' }}>
+                  {timeRangeLabel}
+                </Text>
+              </View>
+            )}
+          </View>
+          <Text style={[Typography.stat, { color: '#FFFFFF', marginTop: 2 }]}>
             {formatCurrency(totalOwnershipCost)}
           </Text>
           <View style={styles.heroBreakdown}>
-            <Text style={[Typography.caption, { color: 'rgba(255,255,255,0.7)' }]}>
-              ⛽ {formatCurrency(totalFuelCost)}
-            </Text>
-            <Text style={[Typography.caption, { color: 'rgba(255,255,255,0.7)' }]}>
-              🔧 {formatCurrency(totalServiceCost)}
-            </Text>
-            <Text style={[Typography.caption, { color: 'rgba(255,255,255,0.7)' }]}>
-              💰 {formatCurrency(totalExpenseCost)}
-            </Text>
+            <View style={styles.heroBreakdownPill}>
+              <Text style={[Typography.caption, { color: 'rgba(255,255,255,0.9)', fontWeight: '600' }]}>
+                ⛽ {formatCurrency(totalFuelCost)}
+              </Text>
+            </View>
+            <View style={styles.heroBreakdownPill}>
+              <Text style={[Typography.caption, { color: 'rgba(255,255,255,0.9)', fontWeight: '600' }]}>
+                🔧 {formatCurrency(totalServiceCost)}
+              </Text>
+            </View>
+            <View style={styles.heroBreakdownPill}>
+              <Text style={[Typography.caption, { color: 'rgba(255,255,255,0.9)', fontWeight: '600' }]}>
+                💰 {formatCurrency(totalExpenseCost)}
+              </Text>
+            </View>
           </View>
         </View>
 
-        {/* ── Summary Cards ── */}
+        {/* ── Summary KPI Cards ── */}
         <View style={styles.grid}>
           <View style={[styles.summaryCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Total Fuel Cost</Text>
+            <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Fuel Cost</Text>
             <Text style={[Typography.statMedium, { color: colors.text }]}>
               {formatCurrency(totalFuelCost)}
             </Text>
           </View>
           <View style={[styles.summaryCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
             <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Fill-ups</Text>
-            <Text style={[Typography.statMedium, { color: colors.text }]}>{totalEntries}</Text>
+            <Text style={[Typography.statMedium, { color: colors.text }]}>
+              {totalEntriesCount}
+            </Text>
           </View>
           <View style={[styles.summaryCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
             <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Avg Mileage</Text>
             <Text style={[Typography.statMedium, { color: colors.text }]}>
-              {stats.runningAverage
-                ? formatMileage(stats.runningAverage.value, MILEAGE_UNIT_LABELS[stats.runningAverage.unit])
+              {timeScopedMileageStats.runningAverage
+                ? formatMileage(
+                    timeScopedMileageStats.runningAverage.value,
+                    MILEAGE_UNIT_LABELS[timeScopedMileageStats.runningAverage.unit]
+                  )
                 : '—'}
             </Text>
           </View>
           <View style={[styles.summaryCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
             <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Best / Worst</Text>
             <Text style={[Typography.statMedium, { color: colors.success }]}>
-              {stats.best ? stats.best.value.toFixed(1) : '—'}
+              {timeScopedMileageStats.best ? timeScopedMileageStats.best.value.toFixed(1) : '—'}
             </Text>
-            {stats.worst && (
-              <Text style={[Typography.caption, { color: colors.danger }]}>
-                / {stats.worst.value.toFixed(1)}
+            {timeScopedMileageStats.worst && (
+              <Text style={[Typography.caption, { color: colors.danger, marginTop: 1 }]}>
+                / {timeScopedMileageStats.worst.value.toFixed(1)}
               </Text>
             )}
           </View>
         </View>
 
-        {/* ── Bi-Fuel Dual Stream Breakdown Card ── */}
+        {/* ── Bi-Fuel Dual Stream Breakdown Card (if Hybrid) ── */}
         {selectedVehicle && isHybridFuel(selectedVehicle.fuel_type as FuelType) && (
           <View style={[styles.chartCard, { backgroundColor: colors.surface, ...Sizing.cardShadow, marginBottom: Spacing.lg }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.sm }}>
@@ -375,7 +530,10 @@ export default function StatsScreen() {
                 </View>
                 <Text style={[Typography.statMedium, { color: colors.primary, marginTop: 4 }]}>
                   {stats.primarySystemStats?.runningAverage
-                    ? formatMileage(stats.primarySystemStats.runningAverage.value, MILEAGE_UNIT_LABELS[stats.primarySystemStats.runningAverage.unit])
+                    ? formatMileage(
+                        stats.primarySystemStats.runningAverage.value,
+                        MILEAGE_UNIT_LABELS[stats.primarySystemStats.runningAverage.unit]
+                      )
                     : '—'}
                 </Text>
               </View>
@@ -388,7 +546,10 @@ export default function StatsScreen() {
                 </View>
                 <Text style={[Typography.statMedium, { color: '#B45309', marginTop: 4 }]}>
                   {stats.secondarySystemStats?.runningAverage
-                    ? formatMileage(stats.secondarySystemStats.runningAverage.value, MILEAGE_UNIT_LABELS[stats.secondarySystemStats.runningAverage.unit])
+                    ? formatMileage(
+                        stats.secondarySystemStats.runningAverage.value,
+                        MILEAGE_UNIT_LABELS[stats.secondarySystemStats.runningAverage.unit]
+                      )
                     : '—'}
                 </Text>
               </View>
@@ -396,107 +557,191 @@ export default function StatsScreen() {
           </View>
         )}
 
-        {/* ── Mileage Trend Chart ── */}
-        {mileageChartData.length >= 2 && (
-          <View style={[styles.chartCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            <Text style={[Typography.h3, { color: colors.text, marginBottom: Spacing.lg }]}>
-              Mileage Trend
-            </Text>
-            <Text style={[Typography.caption, { color: colors.textTertiary, marginBottom: Spacing.md }]}>
-              Last {mileageChartData.length} fill-ups · Green = above avg, Orange = below
-            </Text>
-            <BarChart
-              data={mileageChartData}
-              barColor={colors.primary}
-              labelColor={colors.textTertiary}
-              valueColor={colors.textSecondary}
-              height={100}
+        {/* ── Visual Chart 1: Mileage Trend & Evolution ── */}
+        <View style={[styles.chartCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
+          <View style={styles.chartHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[Typography.h3, { color: colors.text }]}>
+                Mileage Trendline
+              </Text>
+              <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2 }]}>
+                Efficiency curve with rolling average reference line
+              </Text>
+            </View>
+
+            {/* Bi-Fuel System Filter (if vehicle has two fuel systems) */}
+            {selectedVehicle && isHybridFuel(selectedVehicle.fuel_type as FuelType) && (
+              <View style={[styles.segmentControl, { borderColor: colors.border }]}>
+                {(['all', 'primary', 'secondary'] as const).map((sys) => (
+                  <TouchableOpacity
+                    key={sys}
+                    style={[
+                      styles.segmentBtn,
+                      biFuelTrendFilter === sys && { backgroundColor: colors.primary },
+                    ]}
+                    onPress={() => setBiFuelTrendFilter(sys)}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        Typography.caption,
+                        {
+                          color: biFuelTrendFilter === sys ? '#FFF' : colors.textSecondary,
+                          fontWeight: '700',
+                          fontSize: 10,
+                        },
+                      ]}
+                    >
+                      {sys === 'all' ? 'All' : sys === 'primary' ? 'CNG' : 'Petrol'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+
+          <View style={{ marginTop: Spacing.md }}>
+            <MileageTrendChart
+              data={mileageTrendData.points}
+              averageMileage={mileageTrendData.average}
+              unitLabel={mileageTrendData.unitLabel}
+              colors={colors}
+              height={160}
             />
           </View>
-        )}
+        </View>
 
-        {/* ── Monthly Cost Chart ── */}
+        {/* ── Visual Chart 2: Total Cost Breakdown Donut Chart ── */}
+        <View style={[styles.chartCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
+          <View style={{ marginBottom: Spacing.md }}>
+            <Text style={[Typography.h3, { color: colors.text }]}>
+              Cost Breakdown
+            </Text>
+            <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2 }]}>
+              {timeRangeLabel} spending across fuel, service & categories
+            </Text>
+          </View>
+
+          <CostBreakdownDonutChart
+            slices={costBreakdown.slices}
+            totalCost={costBreakdown.totalCost}
+            timeRangeLabel={timeRangeLabel}
+            colors={colors}
+          />
+        </View>
+
+        {/* ── Visual Chart 3: Monthly Spend History ── */}
         {monthlyCostData.some((d) => d.value > 0) && (
           <View style={[styles.chartCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
             <View style={styles.chartHeader}>
-              <Text style={[Typography.h3, { color: colors.text }]}>
-                Monthly Total Spend
-              </Text>
-              {/* Range toggle */}
+              <View style={{ flex: 1 }}>
+                <Text style={[Typography.h3, { color: colors.text }]}>
+                  Monthly Total Spend
+                </Text>
+                <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2 }]}>
+                  Fuel + Service + Expenses
+                </Text>
+              </View>
+
+              {/* Monthly Range toggle */}
               <View style={[styles.segmentControl, { borderColor: colors.border }]}>
                 {(['6m', '12m', 'year'] as const).map((range) => (
                   <TouchableOpacity
                     key={range}
                     style={[
                       styles.segmentBtn,
-                      chartRange === range && { backgroundColor: colors.primary },
+                      monthlyChartRange === range && { backgroundColor: colors.primary },
                     ]}
-                    onPress={() => setChartRange(range)}
+                    onPress={() => setMonthlyChartRange(range)}
                     activeOpacity={0.7}
                   >
-                    <Text style={[
-                      Typography.caption,
-                      { color: chartRange === range ? '#FFF' : colors.textSecondary, fontWeight: '700' },
-                    ]}>
+                    <Text
+                      style={[
+                        Typography.caption,
+                        {
+                          color: monthlyChartRange === range ? '#FFF' : colors.textSecondary,
+                          fontWeight: '700',
+                          fontSize: 11,
+                        },
+                      ]}
+                    >
                       {range === '6m' ? '6M' : range === '12m' ? '12M' : 'Year'}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
-            <Text style={[Typography.caption, { color: colors.textTertiary, marginBottom: Spacing.md, marginTop: Spacing.xs }]}>
-              Fuel + Service + Expenses
-            </Text>
-            <BarChart
-              data={monthlyCostData}
-              barColor={colors.accent}
-              labelColor={colors.textTertiary}
-              valueColor={colors.textSecondary}
-              height={chartRange === 'year' ? 80 : 100}
-            />
+
+            <View style={{ marginTop: Spacing.lg }}>
+              <BarChart
+                data={monthlyCostData}
+                barColor={colors.accent}
+                labelColor={colors.textTertiary}
+                valueColor={colors.textSecondary}
+                height={monthlyChartRange === 'year' ? 90 : 110}
+              />
+            </View>
           </View>
         )}
 
-        {/* ── Extra Stats ── */}
+        {/* ── Quick Numbers / Amortization Trajectory ── */}
         <View style={[styles.chartCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
           <Text style={[Typography.h3, { color: colors.text, marginBottom: Spacing.md }]}>
-            Quick Numbers
+            Quick Numbers ({timeRangeLabel})
           </Text>
+
           <View style={[styles.quickRow, { borderBottomColor: colors.border }]}>
-            <Text style={[Typography.body, { color: colors.textSecondary }]}>Total {entries[0]?.fuel_unit || 'fuel'} consumed</Text>
+            <Text style={[Typography.body, { color: colors.textSecondary }]}>
+              Total {entries[0]?.fuel_unit || 'fuel'} consumed
+            </Text>
             <Text style={[Typography.body, { color: colors.text, fontWeight: '700' }]}>
-              {totalLitres.toFixed(1)}
+              {totalFuelQuantity.toFixed(1)} {entries[0]?.fuel_unit || 'L'}
             </Text>
           </View>
+
           <View style={[styles.quickRow, { borderBottomColor: colors.border }]}>
-            <Text style={[Typography.body, { color: colors.textSecondary }]}>Avg cost per fill</Text>
+            <Text style={[Typography.body, { color: colors.textSecondary }]}>
+              Avg cost per fill
+            </Text>
             <Text style={[Typography.body, { color: colors.text, fontWeight: '700' }]}>
-              {totalEntries > 0 ? formatCurrency(totalFuelCost / totalEntries) : '—'}
+              {totalEntriesCount > 0 ? formatCurrency(totalFuelCost / totalEntriesCount) : '—'}
             </Text>
           </View>
+
           <View style={[styles.quickRow, { borderBottomColor: colors.border }]}>
-            <Text style={[Typography.body, { color: colors.textSecondary }]}>Services logged</Text>
+            <Text style={[Typography.body, { color: colors.textSecondary }]}>
+              Services logged
+            </Text>
             <Text style={[Typography.body, { color: colors.text, fontWeight: '700' }]}>
-              {serviceRecords.length}
+              {filteredServices.length}
             </Text>
           </View>
+
           <View style={[styles.quickRow, { borderBottomColor: colors.border }]}>
-            <Text style={[Typography.body, { color: colors.textSecondary }]}>Total service cost</Text>
+            <Text style={[Typography.body, { color: colors.textSecondary }]}>
+              Total service cost
+            </Text>
             <Text style={[Typography.body, { color: colors.text, fontWeight: '700' }]}>
               {formatCurrency(totalServiceCost)}
             </Text>
           </View>
-          {entries.length >= 2 && (
+
+          {filteredEntries.length >= 2 && (
             <View style={[styles.quickRow, { borderBottomColor: colors.border }]}>
-              <Text style={[Typography.body, { color: colors.textSecondary }]}>Total km tracked</Text>
+              <Text style={[Typography.body, { color: colors.textSecondary }]}>
+                Distance tracked
+              </Text>
               <Text style={[Typography.body, { color: colors.text, fontWeight: '700' }]}>
                 {kmTracked.toLocaleString('en-IN')} km
               </Text>
             </View>
           )}
+
           {costPerKm != null && (
             <View style={[styles.quickRow, { borderBottomColor: colors.border }]}>
-              <Text style={[Typography.body, { color: colors.textSecondary }]}>Cost per km</Text>
+              <Text style={[Typography.body, { color: colors.textSecondary }]}>
+                Cost per km
+              </Text>
               <Text style={[Typography.body, { color: colors.primary, fontWeight: '700' }]}>
                 {formatCurrency(costPerKm)}/km
               </Text>
@@ -561,7 +806,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.md,
     marginTop: Spacing.md,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
   shareButton: {
     paddingHorizontal: Spacing.md,
@@ -569,22 +814,53 @@ const styles = StyleSheet.create({
     borderRadius: Sizing.radiusFull,
     borderWidth: 1.5,
   },
+  timeFilterContainer: {
+    flexDirection: 'row',
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    padding: 3,
+    marginBottom: Spacing.lg,
+  },
+  timeFilterBtn: {
+    flex: 1,
+    paddingVertical: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Sizing.radiusSm,
+  },
   heroCard: {
     borderRadius: Sizing.radiusLg,
     padding: Spacing.xxl,
     marginBottom: Spacing.xl,
   },
+  heroHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   heroLabel: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: Spacing.xs,
+    letterSpacing: 0.8,
+  },
+  heroFilterBadge: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: Sizing.radiusFull,
   },
   heroBreakdown: {
     flexDirection: 'row',
-    gap: Spacing.lg,
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
     marginTop: Spacing.md,
+  },
+  heroBreakdownPill: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Sizing.radiusSm,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, marginBottom: Spacing.xl },
   summaryCard: {
@@ -593,8 +869,11 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
   },
   cardLabel: {
-    fontSize: 12, fontWeight: '500', textTransform: 'uppercase',
-    letterSpacing: 0.5, marginBottom: Spacing.sm,
+    fontSize: 12,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: Spacing.sm,
   },
   chartCard: {
     borderRadius: Sizing.radiusMd,
@@ -611,7 +890,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: Spacing.xs,
+    gap: Spacing.sm,
   },
   segmentControl: {
     flexDirection: 'row',
@@ -620,10 +899,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   segmentBtn: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 5,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
   },
   emptyState: {
-    flex: 1, justifyContent: 'center', alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
