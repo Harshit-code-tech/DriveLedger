@@ -51,6 +51,13 @@
               "subtitle": "Quick entry",
               "icon": "symbol:creditcard.fill",
               "params": { "href": "/add-expense" }
+            },
+            {
+              "id": "trip_checklist",
+              "title": "Trip Checklist",
+              "subtitle": "Highway readiness",
+              "icon": "symbol:checklist",
+              "params": { "href": "/checklist" }
             }
           ]
         }

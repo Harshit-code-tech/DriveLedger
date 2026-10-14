@@ -62,6 +62,13 @@ export default function TabLayout() {
           icon: Platform.OS === 'ios' ? 'symbol:wrench.and.screwdriver.fill' : 'shortcut_service',
           params: { href: '/add-service' },
         },
+        {
+          id: 'trip_checklist',
+          title: 'Trip Checklist',
+          subtitle: 'Highway readiness inspection',
+          icon: Platform.OS === 'ios' ? 'symbol:checklist' : 'shortcut_checklist',
+          params: { href: '/checklist' },
+        },
       ]).catch(() => {
         // Safe ignore on devices without quick actions support
       });

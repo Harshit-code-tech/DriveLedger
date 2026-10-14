@@ -14,7 +14,7 @@
  * Flow: Open App → Dashboard → Tap [+ Add Fuel] → Fill → Save → See mileage → Close
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -39,6 +39,8 @@ import { getCurrentMonthTotalSpend, estimateFuelLevel, type FuelLevelResult } fr
 import { DOCUMENT_TYPE_LABELS } from '@/constants/documentTypes';
 import { VehicleContextHeader } from '@/components/VehicleContextHeader';
 import { CngTankIcon } from '@/components/CngTankIcon';
+import { PreTripChecklistModal } from '@/components/PreTripChecklistModal';
+import { useChecklistStore, buildPreTripChecklist, getChecklistStats } from '@/stores/checklistStore';
 
 interface FuelBarSectionProps {
   title: string;
@@ -127,6 +129,8 @@ function FuelBarSection({
   return null;
 }
 
+const EMPTY_CHECKED_LIST: string[] = [];
+
 export default function HomeScreen() {
   const colors = useThemeColors();
   const router = useRouter();
@@ -145,8 +149,14 @@ export default function HomeScreen() {
   const expenses = useExpenseStore((s) => s.expenses);
   const loadExpenses = useExpenseStore((s) => s.loadExpenses);
 
+  const documents = useDocumentStore((s) => s.documents);
   const expiringDocs = useDocumentStore((s) => s.expiringDocs);
   const loadDocuments = useDocumentStore((s) => s.loadDocuments);
+
+  const [showChecklistModal, setShowChecklistModal] = useState(false);
+  const checkedItemsByVehicle = useChecklistStore((s) => s.checkedItemsByVehicle);
+  const checkedChecklistItems = (selectedVehicle && checkedItemsByVehicle[selectedVehicle.id]) || EMPTY_CHECKED_LIST;
+  const loadChecklist = useChecklistStore((s) => s.loadChecklist);
 
   // ── Data loading ─────────────────────────────────────────────────────
   // useFocusEffect fires on initial mount AND every time this tab gains
@@ -160,6 +170,7 @@ export default function HomeScreen() {
       loadRecords(selectedVehicle.id);
       loadExpenses(selectedVehicle.id);
       loadDocuments(selectedVehicle.id);
+      loadChecklist(selectedVehicle.id);
     }
   }, [selectedVehicle?.id]);
 
@@ -173,6 +184,14 @@ export default function HomeScreen() {
     loadAll();
     setTimeout(() => setRefreshing(false), 500);
   }, [loadAll]);
+
+  // ── Pre-Trip Checklist Hook Calculations (must run before any conditional returns) ──
+  const checklistItems = useMemo(() => {
+    if (!selectedVehicle) return [];
+    return buildPreTripChecklist(selectedVehicle, documents, checkedChecklistItems);
+  }, [selectedVehicle, documents, checkedChecklistItems]);
+
+  const checklistStats = useMemo(() => getChecklistStats(checklistItems), [checklistItems]);
 
   if (!selectedVehicle) {
     return (
@@ -536,6 +555,66 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* ── Highway Road Trip Readiness Checklist (Feature 4.3) ── */}
+        <TouchableOpacity
+          style={[
+            styles.checklistCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: checklistStats.isComplete ? colors.success : colors.borderLight,
+              ...Sizing.cardShadow,
+            },
+          ]}
+          onPress={() => setShowChecklistModal(true)}
+          activeOpacity={0.8}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+              <Text style={{ fontSize: 16 }}>🛣️</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                Highway Trip Readiness
+              </Text>
+            </View>
+            <View
+              style={{
+                backgroundColor: checklistStats.isComplete ? colors.successLight : colors.primaryLight,
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+                borderRadius: 12,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: '700',
+                  color: checklistStats.isComplete ? colors.success : colors.primary,
+                }}
+              >
+                {checklistStats.isComplete ? 'Ready ✅' : `${checklistStats.completed}/${checklistStats.total} Checks`}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={[Typography.bodySmall, { color: colors.text, fontWeight: '600', marginTop: 2 }]}>
+            {checklistStats.isComplete
+              ? 'Vehicle is 100% inspected and ready for highway driving.'
+              : 'Inspect tyre PSI, engine oil, stepney, PUC & FASTag.'}
+          </Text>
+
+          {/* Mini progress bar */}
+          <View style={[styles.miniProgressTrack, { backgroundColor: colors.borderLight, marginTop: Spacing.sm }]}>
+            <View
+              style={[
+                styles.miniProgressBar,
+                {
+                  width: `${checklistStats.percent}%`,
+                  backgroundColor: checklistStats.isComplete ? colors.success : colors.primary,
+                },
+              ]}
+            />
+          </View>
+        </TouchableOpacity>
+
         {/* ── Recent Entries ── */}
         {entries.length > 0 && (
           <View style={styles.section}>
@@ -601,6 +680,16 @@ export default function HomeScreen() {
         <Text style={styles.fabIcon}>⛽</Text>
         <Text style={[styles.fabText, { color: '#1A1C1E' }]}>Add Fuel</Text>
       </TouchableOpacity>
+
+      {/* ── Pre-Trip Highway Checklist Modal (Feature 4.3) ── */}
+      {showChecklistModal && (
+        <PreTripChecklistModal
+          visible={showChecklistModal}
+          onClose={() => setShowChecklistModal(false)}
+          vehicle={selectedVehicle}
+          documents={documents}
+        />
+      )}
     </View>
   );
 }
@@ -766,5 +855,21 @@ const styles = StyleSheet.create({
   },
   tyrePressureItem: {
     alignItems: 'center',
+  },
+  // ── Road Trip Checklist ──
+  checklistCard: {
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+  },
+  miniProgressTrack: {
+    height: 5,
+    borderRadius: 2.5,
+    overflow: 'hidden',
+  },
+  miniProgressBar: {
+    height: '100%',
+    borderRadius: 2.5,
   },
 });
