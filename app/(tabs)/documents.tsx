@@ -27,6 +27,7 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, FlatList, Image, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ReportExportModal } from '@/components/ReportExportModal';
 
 export default function DocumentsScreen() {
   const colors = useThemeColors();
@@ -39,6 +40,7 @@ export default function DocumentsScreen() {
 
   // Fullscreen image viewer state
   const [viewerUri, setViewerUri] = useState<string | null>(null);
+  const [showExportModal, setShowExportModal] = useState<boolean>(false);
 
   // Reload when screen comes into focus (after adding a document)
   useFocusEffect(
@@ -234,6 +236,28 @@ export default function DocumentsScreen() {
       {/* ── Vehicle Context ── */}
       <VehicleContextHeader label="Documents for" />
 
+      {/* ── Screen Action Bar ── */}
+      <View style={[styles.topActionBar, { borderBottomColor: colors.borderLight }]}>
+        <View style={styles.topActionTextGroup}>
+          <Text style={[Typography.h3, { color: colors.text }]}>Vehicle Documents</Text>
+          <Text style={[Typography.caption, { color: colors.textSecondary }]}>
+            {documents.length} {documents.length === 1 ? 'record' : 'records'} active
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.exportButton, { borderColor: colors.primary, backgroundColor: colors.primaryLight }]}
+          onPress={() => setShowExportModal(true)}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Export vehicle reports"
+        >
+          <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700' }]}>
+            📄 Export Reports
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <FlatList
         data={documents}
         keyExtractor={(item) => item.id}
@@ -294,6 +318,15 @@ export default function DocumentsScreen() {
           )}
         </View>
       </Modal>
+
+      {/* ── Vehicle Report Export Modal ── */}
+      {selectedVehicle && (
+        <ReportExportModal
+          visible={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          vehicle={selectedVehicle}
+        />
+      )}
     </View>
   );
 }
@@ -434,6 +467,25 @@ function DocumentCard({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  topActionBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  topActionTextGroup: {
+    flex: 1,
+  },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Sizing.radiusFull,
+    borderWidth: 1,
+  },
   list: { padding: Spacing.lg, gap: Spacing.sm, paddingBottom: 100 },
   docCard: {
     borderRadius: Sizing.radiusMd,

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, useWindowDimensions, TouchableOpacity } from 'react-native';
-import { LineChart } from 'react-native-gifted-charts';
+import { LineChart, CurveType } from 'react-native-gifted-charts';
 import { Typography, Spacing, Sizing } from '@/constants/theme';
 import { formatMileage } from '@/utils/format';
 
@@ -122,7 +122,7 @@ export function MileageTrendChart({
           initialSpacing={16}
           endSpacing={16}
           curved
-          curveType="cubic"
+          curveType={CurveType.CUBIC}
           color={colors.primary}
           thickness={2.5}
           areaChart

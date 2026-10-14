@@ -71,7 +71,7 @@ export function createFuelEntry(input: CreateFuelEntryInput): FuelEntry {
       entry.total_cost, entry.fuel_station, entry.is_full_tank,
       entry.calculated_mileage, entry.mileage_unit,
       entry.receipt_photo_uri, entry.notes,
-      entry.fuel_system, entry.battery_start_percent, entry.battery_end_percent,
+      entry.fuel_system ?? null, entry.battery_start_percent ?? null, entry.battery_end_percent ?? null,
       entry.created_at, entry.updated_at, entry.deleted_at,
     ]
   );

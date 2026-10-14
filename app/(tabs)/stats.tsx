@@ -43,6 +43,7 @@ import { computeMileageStats } from '@/engine/mileageEngine';
 import { CngTankIcon } from '@/components/CngTankIcon';
 import { MileageTrendChart, MileagePoint } from '@/components/charts/MileageTrendChart';
 import { CostBreakdownDonutChart } from '@/components/charts/CostBreakdownDonutChart';
+import { ReportExportModal } from '@/components/ReportExportModal';
 
 // ─── Pure RN Bar Chart Component (for Monthly Spend History) ─────────
 
@@ -162,6 +163,9 @@ export default function StatsScreen() {
 
   // Monthly Bar Chart range toggle: 6M | 12M | Year
   const [monthlyChartRange, setMonthlyChartRange] = useState<'6m' | '12m' | 'year'>('6m');
+
+  // Report Export Modal
+  const [showExportModal, setShowExportModal] = useState<boolean>(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -385,17 +389,31 @@ export default function StatsScreen() {
           <Text style={[Typography.h2, { color: colors.text, flex: 1 }]}>
             {selectedVehicle.nickname} Analytics
           </Text>
-          <TouchableOpacity
-            onPress={handleShare}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Share summary"
-            style={[styles.shareButton, { borderColor: colors.primary }]}
-          >
-            <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700' }]}>
-              📤 Share
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerButtonsRow}>
+            <TouchableOpacity
+              onPress={() => setShowExportModal(true)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Export vehicle reports"
+              style={[styles.exportButton, { borderColor: colors.primary, backgroundColor: colors.primaryLight }]}
+            >
+              <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700' }]}>
+                📄 Export
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleShare}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Share summary"
+              style={[styles.shareButton, { borderColor: colors.primary }]}
+            >
+              <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700' }]}>
+                📤 Share
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* ── Universal Time Range Selector ── */}
@@ -794,6 +812,15 @@ export default function StatsScreen() {
 
         <View style={{ height: Spacing.section }} />
       </View>
+
+      {/* ── Vehicle Report Export Modal ── */}
+      {selectedVehicle && (
+        <ReportExportModal
+          visible={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          vehicle={selectedVehicle}
+        />
+      )}
     </ScrollView>
   );
 }
@@ -807,6 +834,19 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     marginTop: Spacing.md,
     marginBottom: Spacing.lg,
+  },
+  headerButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+    borderRadius: Sizing.radiusFull,
+    borderWidth: 1.5,
   },
   shareButton: {
     paddingHorizontal: Spacing.md,

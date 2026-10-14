@@ -861,7 +861,7 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
     // the link in this pass can violate the foreign key when the newer row has
     // not been inserted yet.
     for (const d of backup.data.documents) {
-      let docType = d.type || (d as any).document_type;
+      let docType: any = d.type || (d as any).document_type;
       if (docType) {
         const lower = String(docType).toLowerCase();
         if (lower === 'insurance') docType = 'Insurance';
