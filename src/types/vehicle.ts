@@ -89,6 +89,12 @@ export interface Vehicle {
    */
   service_interval_km: number | null;
 
+  /**
+   * Recommended service interval in months (e.g. 12 months for 1 year, 6 months).
+   * Enables dual-dimension service reminders: "10,000 km OR 1 Year, whichever comes first".
+   */
+  service_interval_months: number | null;
+
   /** Date the vehicle was purchased. ISO 8601 string. (optional) */
   purchase_date: string | null;
 
@@ -140,6 +146,7 @@ export interface CreateVehicleInput {
   front_tyre_pressure?: number;
   rear_tyre_pressure?: number;
   service_interval_km?: number;
+  service_interval_months?: number;
   purchase_date?: string;
   notes?: string;
 }

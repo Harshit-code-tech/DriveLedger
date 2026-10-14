@@ -798,14 +798,14 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
            id, nickname, vehicle_type, manufacturer, model, variant, year, color,
            registration_number, fuel_type, tank_capacity, secondary_tank_capacity,
            current_odometer, front_tyre_pressure, rear_tyre_pressure,
-           service_interval_km, purchase_date, notes, is_archived, created_at, updated_at, deleted_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           service_interval_km, service_interval_months, purchase_date, notes, is_archived, created_at, updated_at, deleted_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           v.id, v.nickname, v.vehicle_type, v.manufacturer ?? null, v.model ?? null,
           v.variant ?? null, v.year ?? null, v.color ?? null, v.registration_number,
           fuelType, v.tank_capacity ?? null, v.secondary_tank_capacity ?? null,
           v.current_odometer ?? null, v.front_tyre_pressure ?? null, v.rear_tyre_pressure ?? null,
-          v.service_interval_km ?? null, v.purchase_date ?? null, v.notes ?? null,
+          v.service_interval_km ?? null, v.service_interval_months ?? 12, v.purchase_date ?? null, v.notes ?? null,
           v.is_archived ?? 0, v.created_at || nowISO(), v.updated_at || nowISO(), v.deleted_at ?? null,
         ]
       );

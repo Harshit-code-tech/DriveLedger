@@ -55,6 +55,7 @@ export function createVehicle(input: CreateVehicleInput): Vehicle {
     front_tyre_pressure: input.front_tyre_pressure ?? null,
     rear_tyre_pressure: input.rear_tyre_pressure ?? null,
     service_interval_km: input.service_interval_km ?? null,
+    service_interval_months: input.service_interval_months ?? 12,
     purchase_date: input.purchase_date ?? null,
     notes: input.notes ?? null,
     is_archived: 0,
@@ -67,8 +68,8 @@ export function createVehicle(input: CreateVehicleInput): Vehicle {
     id, nickname, vehicle_type, manufacturer, model, variant, year, color,
     registration_number, fuel_type, tank_capacity, secondary_tank_capacity,
     current_odometer, front_tyre_pressure, rear_tyre_pressure,
-    service_interval_km, purchase_date, notes, is_archived, created_at, updated_at, deleted_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    service_interval_km, service_interval_months, purchase_date, notes, is_archived, created_at, updated_at, deleted_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
   const insertParams = [
     vehicle.id, vehicle.nickname, vehicle.vehicle_type, vehicle.manufacturer,
@@ -76,7 +77,7 @@ export function createVehicle(input: CreateVehicleInput): Vehicle {
     vehicle.registration_number, vehicle.fuel_type, vehicle.tank_capacity,
     vehicle.secondary_tank_capacity, vehicle.current_odometer,
     vehicle.front_tyre_pressure, vehicle.rear_tyre_pressure,
-    vehicle.service_interval_km, vehicle.purchase_date,
+    vehicle.service_interval_km, vehicle.service_interval_months, vehicle.purchase_date,
     vehicle.notes, vehicle.is_archived, vehicle.created_at, vehicle.updated_at,
     vehicle.deleted_at,
   ];
@@ -153,7 +154,7 @@ export function updateVehicle(id: string, input: UpdateVehicleInput): Vehicle | 
     'year', 'color', 'registration_number', 'fuel_type', 'tank_capacity',
     'secondary_tank_capacity',
     'current_odometer', 'front_tyre_pressure', 'rear_tyre_pressure',
-    'service_interval_km', 'purchase_date', 'notes', 'is_archived',
+    'service_interval_km', 'service_interval_months', 'purchase_date', 'notes', 'is_archived',
   ]);
 
   const { fields, values } = buildSafeUpdate(input as Record<string, unknown>, ALLOWED_COLUMNS);

@@ -29,7 +29,7 @@ import { isRunningInExpoGo } from 'expo';
 import * as documentRepo from '@/database/repositories/documentRepo';
 import * as serviceRepo from '@/database/repositories/serviceRepo';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
-import { getKmUntilService } from '@/stores/serviceStore';
+import { getKmUntilService, getServiceDueStatus } from '@/stores/serviceStore';
 import { DOCUMENT_TYPE_LABELS } from '@/constants/documentTypes';
 import { daysUntil } from '@/utils/date';
 
@@ -156,6 +156,8 @@ async function scheduleDocumentNotifications(
   vehicleId: string
 ): Promise<void> {
   const docs = documentRepo.getCurrentDocumentsByVehicle(vehicleId);
+  const vehicle = vehicleRepo.getVehicleById(vehicleId);
+  const vName = vehicle?.nickname ?? 'Vehicle';
 
   for (const doc of docs) {
     if (!doc.expiry_date) continue;
@@ -164,18 +166,73 @@ async function scheduleDocumentNotifications(
     const label = DOCUMENT_TYPE_LABELS[doc.type as keyof typeof DOCUMENT_TYPE_LABELS] || doc.type;
     const data = { documentId: doc.id, type: 'expiry' };
 
+    // ── PUC Specific High-Priority Workflow (₹10,000 fine warning) ──
+    if (doc.type === 'PUC') {
+      if (days < 0) {
+        await notifyNow(
+          N, CHANNEL_DOCUMENT_EXPIRY,
+          '🚨 PUC Expired! Immediate ₹10,000 Fine Risk',
+          `PUC certificate for ${vName} expired ${pluralDays(Math.abs(days))} ago. Renew immediately at any petrol pump to avoid heavy fines under Sec 190(2).`,
+          data
+        );
+      } else if (days === 1) {
+        await notifyNow(
+          N, CHANNEL_DOCUMENT_EXPIRY,
+          '🚨 PUC Expires Tomorrow! (Avoid ₹10,000 Fine)',
+          `Your Pollution Under Control certificate for ${vName} expires tomorrow. Most testing centers take only 5 minutes.`,
+          data
+        );
+      } else if (days <= 7) {
+        await notifyNow(
+          N, CHANNEL_DOCUMENT_EXPIRY,
+          `⚠️ PUC Expiring in ${pluralDays(days)}`,
+          `PUC for ${vName} expires in ${pluralDays(days)}. Avoid heavy fines under the Motor Vehicles Act by renewing soon.`,
+          data
+        );
+      } else if (days <= 15) {
+        await notifyNow(
+          N, CHANNEL_DOCUMENT_EXPIRY,
+          '📋 PUC Renewal Window Open (15 Days Left)',
+          `PUC for ${vName} expires in ${days} days. Plan a quick test at your next fuel refill.`,
+          data
+        );
+      }
+      continue;
+    }
+
+    // ── FASTag Specific Workflow ──
+    if (doc.type === 'FASTag') {
+      if (days < 0) {
+        await notifyNow(
+          N, CHANNEL_DOCUMENT_EXPIRY,
+          '🚨 FASTag Expired / KYC Lapsed',
+          `FASTag for ${vName} has expired or needs KYC update. Toll booths charge double cash toll for inactive tags.`,
+          data
+        );
+      } else if (days <= 15) {
+        await notifyNow(
+          N, CHANNEL_DOCUMENT_EXPIRY,
+          '⚠️ FASTag KYC / Validity Notice',
+          `FASTag validity or KYC renewal for ${vName} is due in ${pluralDays(days)}. Check your issuing bank portal.`,
+          data
+        );
+      }
+      continue;
+    }
+
+    // ── Generic Documents (Insurance, RC, Warranty) ──
     if (days < 0) {
       await notifyNow(
         N, CHANNEL_DOCUMENT_EXPIRY,
-        '🚨 Document Expired!',
-        `Your ${label} expired ${pluralDays(Math.abs(days))} ago. Please renew it.`,
+        `🚨 ${label} Expired!`,
+        `Your ${label} for ${vName} expired ${pluralDays(Math.abs(days))} ago. Please renew it immediately.`,
         data
       );
     } else if (days <= 7) {
       await notifyNow(
         N, CHANNEL_DOCUMENT_EXPIRY,
-        '⚠️ Document Expiring Soon!',
-        `Your ${label} expires in ${pluralDays(days)}. Renew before it's too late!`,
+        `⚠️ ${label} Expiring in ${pluralDays(days)}!`,
+        `Your ${label} for ${vName} expires in ${pluralDays(days)}. Renew before it lapses!`,
         data
       );
 
@@ -183,8 +240,8 @@ async function scheduleDocumentNotifications(
       if (days > 0) {
         await N.scheduleNotificationAsync({
           content: {
-            title: '📋 Renewal Reminder',
-            body: `Your ${label} expires soon. Don't forget to renew!`,
+            title: `📋 ${label} Renewal Reminder`,
+            body: `Your ${label} expires in ${pluralDays(days)}. Don't forget to renew!`,
             data: { documentId: doc.id, type: 'expiry_reminder' },
           },
           trigger: {
@@ -198,19 +255,19 @@ async function scheduleDocumentNotifications(
     } else if (days <= 30) {
       await notifyNow(
         N, CHANNEL_DOCUMENT_EXPIRY,
-        '📋 Document Expiry Notice',
-        `Your ${label} expires in ${days} days. Plan to renew it soon.`,
+        `📋 ${label} Expiry Notice`,
+        `Your ${label} for ${vName} expires in ${days} days. Plan to renew it soon.`,
         data
       );
     }
   }
 }
 
-// ─── Service Due ────────────────────────────────────────────────────
+// ─── Service Due (Dual-Dimension: Mileage vs. Time) ─────────────────
 
 /**
- * Notifies when the latest service record's next_due_km / next_due_date
- * is overdue or approaching.
+ * Notifies when service is overdue or approaching based on whichever
+ * dimension (Kilometers or Time/Months) breaches threshold first!
  */
 async function scheduleServiceNotifications(
   N: NotificationsModule,
@@ -218,49 +275,27 @@ async function scheduleServiceNotifications(
 ): Promise<void> {
   const vehicle = vehicleRepo.getVehicleById(vehicleId);
   const latest = serviceRepo.getLatestServiceRecord(vehicleId);
-  if (!vehicle || !latest) return;
+  if (!vehicle) return;
 
-  const data = { vehicleId, serviceId: latest.id, type: 'service_due' };
-  const name = vehicle.nickname;
+  const dueStatus = getServiceDueStatus(vehicle, latest);
+  const data = { vehicleId, serviceId: latest?.id ?? null, type: 'service_due' };
 
-  // Distance-based
-  const kmLeft = getKmUntilService(vehicle, latest);
-  if (kmLeft !== null) {
-    if (kmLeft <= 0) {
-      await notifyNow(
-        N, CHANNEL_SERVICE_DUE,
-        '🔧 Service Overdue!',
-        `${name} is ${Math.round(Math.abs(kmLeft)).toLocaleString('en-IN')} km past its service due. Book a service.`,
-        data
-      );
-    } else if (kmLeft <= SERVICE_DUE_KM_THRESHOLD) {
-      await notifyNow(
-        N, CHANNEL_SERVICE_DUE,
-        '🔧 Service Due Soon',
-        `${name} is due for service in ${Math.round(kmLeft).toLocaleString('en-IN')} km.`,
-        data
-      );
-    }
-  }
-
-  // Date-based
-  if (latest.next_due_date) {
-    const days = daysUntil(latest.next_due_date);
-    if (days < 0) {
-      await notifyNow(
-        N, CHANNEL_SERVICE_DUE,
-        '🔧 Service Overdue!',
-        `${name}'s service was due ${pluralDays(Math.abs(days))} ago.`,
-        data
-      );
-    } else if (days <= SERVICE_DUE_DAYS_THRESHOLD) {
-      await notifyNow(
-        N, CHANNEL_SERVICE_DUE,
-        '🔧 Service Due Soon',
-        days === 0 ? `${name} is due for service today.` : `${name} is due for service in ${pluralDays(days)}.`,
-        data
-      );
-    }
+  if (dueStatus.urgency === 'overdue') {
+    await notifyNow(
+      N,
+      CHANNEL_SERVICE_DUE,
+      dueStatus.headline,
+      dueStatus.subtext,
+      data
+    );
+  } else if (dueStatus.urgency === 'due_soon') {
+    await notifyNow(
+      N,
+      CHANNEL_SERVICE_DUE,
+      dueStatus.headline,
+      dueStatus.subtext,
+      data
+    );
   }
 }
 

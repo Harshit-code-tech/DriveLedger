@@ -89,6 +89,9 @@ export default function EditVehicleScreen() {
   const [serviceIntervalKm, setServiceIntervalKm] = useState(
     vehicle?.service_interval_km ? String(vehicle.service_interval_km) : ''
   );
+  const [serviceIntervalMonths, setServiceIntervalMonths] = useState(
+    vehicle?.service_interval_months ? String(vehicle.service_interval_months) : '12'
+  );
   const [error, setError] = useState('');
 
   const isEV = isElectricFuel(fuelType);
@@ -130,6 +133,7 @@ export default function EditVehicleScreen() {
       tank_capacity: tankCapacity ? parseFloat(tankCapacity) : null,
       secondary_tank_capacity: isHybrid && secondaryTankCapacity ? parseFloat(secondaryTankCapacity) : null,
       service_interval_km: serviceIntervalKm ? parseFloat(serviceIntervalKm) : null,
+      service_interval_months: serviceIntervalMonths ? parseFloat(serviceIntervalMonths) : 12,
     });
 
     if (updated) {
@@ -367,7 +371,7 @@ export default function EditVehicleScreen() {
           </>
         )}
 
-        {/* ── Service Interval ── */}
+        {/* ── Dual-Dimension Service Intervals (Mileage vs. Time) ── */}
         <Text style={[styles.label, { color: colors.textSecondary }]}>Service Interval (km)</Text>
         <TextInput
           style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
@@ -377,8 +381,76 @@ export default function EditVehicleScreen() {
           onChangeText={setServiceIntervalKm}
           keyboardType="numeric"
         />
-        <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
-          Used to compute km-until-next-service on the dashboard.
+
+        <Text style={[styles.label, { color: colors.textSecondary, marginTop: Spacing.md }]}>
+          Service Interval (Months)
+        </Text>
+        <TextInput
+          style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
+          placeholder="e.g., 12 (1 year)"
+          placeholderTextColor={colors.textTertiary}
+          value={serviceIntervalMonths}
+          onChangeText={setServiceIntervalMonths}
+          keyboardType="numeric"
+        />
+
+        {/* Quick Month Presets */}
+        <View style={{ flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.xs }}>
+          <TouchableOpacity
+            onPress={() => setServiceIntervalMonths('6')}
+            style={{
+              flex: 1,
+              paddingVertical: 8,
+              paddingHorizontal: 6,
+              borderRadius: 6,
+              backgroundColor: serviceIntervalMonths === '6' ? colors.primaryLight : colors.surface,
+              borderWidth: 1,
+              borderColor: serviceIntervalMonths === '6' ? colors.primary : colors.border,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text
+              numberOfLines={1}
+              style={{
+                fontSize: 12,
+                fontWeight: '600',
+                color: serviceIntervalMonths === '6' ? colors.primary : colors.textSecondary,
+              }}
+            >
+              6 Months (City/Bikes)
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setServiceIntervalMonths('12')}
+            style={{
+              flex: 1,
+              paddingVertical: 8,
+              paddingHorizontal: 6,
+              borderRadius: 6,
+              backgroundColor: serviceIntervalMonths === '12' ? colors.primaryLight : colors.surface,
+              borderWidth: 1,
+              borderColor: serviceIntervalMonths === '12' ? colors.primary : colors.border,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text
+              numberOfLines={1}
+              style={{
+                fontSize: 12,
+                fontWeight: '600',
+                color: serviceIntervalMonths === '12' ? colors.primary : colors.textSecondary,
+              }}
+            >
+              12 Months (Standard)
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.sm }]}>
+          ⏱️ Dual-dimension reminder: DriveLedger alerts you when kilometers OR time interval is reached, whichever comes first (vital for Indian conditions to prevent engine oil sludge).
         </Text>
       </ScrollView>
 

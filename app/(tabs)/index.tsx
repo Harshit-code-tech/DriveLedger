@@ -26,7 +26,7 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useVehicleStore } from '@/stores/vehicleStore';
 import { useFuelStore } from '@/stores/fuelStore';
-import { useServiceStore, getKmUntilService } from '@/stores/serviceStore';
+import { useServiceStore, getKmUntilService, getServiceDueStatus, type ServiceDueStatus } from '@/stores/serviceStore';
 import { useExpenseStore } from '@/stores/expenseStore';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useThemeColors } from '@/hooks/useThemeColors';
@@ -278,18 +278,18 @@ export default function HomeScreen() {
     return `Expires in ${days} day${days !== 1 ? 's' : ''}`;
   };
 
-  /** Returns bg/border/text color triplet for the service alert card. */
-  const serviceAlertTheme = (km: number) => {
-    if (km <= 0)   return { bg: colors.dangerLight,  border: colors.danger,  text: colors.danger };
-    if (km <= 500) return { bg: colors.warningLight, border: colors.warning, text: colors.warning };
-    return           { bg: colors.successLight, border: colors.success, text: colors.success };
-  };
+  const serviceDueStatus = getServiceDueStatus(selectedVehicle, lastService);
 
-  /** Returns the service km alert body text. */
-  const serviceAlertText = (km: number): string =>
-    km <= 0
-      ? `🔧 Service overdue by ${Math.abs(Math.round(km)).toLocaleString('en-IN')} km`
-      : `🔧 Next service in ${Math.round(km).toLocaleString('en-IN')} km`;
+  /** Returns bg/border/text color triplet for the dual-dimension service alert card. */
+  const getServiceStatusTheme = (status: ServiceDueStatus) => {
+    if (status.urgency === 'overdue') {
+      return { bg: colors.dangerLight, border: colors.danger, text: colors.danger };
+    }
+    if (status.urgency === 'due_soon') {
+      return { bg: colors.warningLight, border: colors.warning, text: colors.warning };
+    }
+    return { bg: colors.successLight, border: colors.success, text: colors.success };
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -485,13 +485,25 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* ── Km Until Service ── */}
-        {kmUntilService !== null && (() => {
-          const theme = serviceAlertTheme(kmUntilService);
+        {/* ── Dual-Dimension Service Status (Mileage vs. Time) ── */}
+        {(serviceDueStatus.urgency !== 'ok' || serviceDueStatus.kmRemaining !== null || serviceDueStatus.daysRemaining !== null) && (() => {
+          const theme = getServiceStatusTheme(serviceDueStatus);
           return (
             <View style={[styles.serviceAlert, { backgroundColor: theme.bg, borderColor: theme.border }]}>
-              <Text style={[Typography.body, { color: theme.text, fontWeight: '700' }]}>
-                {serviceAlertText(kmUntilService)}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text style={[Typography.body, { color: theme.text, fontWeight: '700', flex: 1 }]}>
+                  {serviceDueStatus.headline}
+                </Text>
+                {serviceDueStatus.urgency !== 'ok' && (
+                  <View style={{ backgroundColor: theme.text, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 6 }}>
+                    <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700', textTransform: 'uppercase' }}>
+                      {serviceDueStatus.urgency === 'overdue' ? 'Action Required' : 'Upcoming'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[Typography.caption, { color: theme.text, opacity: 0.95, lineHeight: 17 }]}>
+                {serviceDueStatus.subtext}
               </Text>
             </View>
           );

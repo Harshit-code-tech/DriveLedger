@@ -71,6 +71,8 @@ export default function AddVehicleScreen() {
   const [rearTyrePressure, setRearTyrePressure] = useState('');
   const [tankCapacity, setTankCapacity] = useState('');
   const [secondaryTankCapacity, setSecondaryTankCapacity] = useState('');
+  const [serviceIntervalKm, setServiceIntervalKm] = useState('10000');
+  const [serviceIntervalMonths, setServiceIntervalMonths] = useState('12');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState('');
 
@@ -119,6 +121,8 @@ export default function AddVehicleScreen() {
         secondary_tank_capacity: (isHybrid && secondaryTankCapacity)
           ? parseFloat(secondaryTankCapacity)
           : undefined,
+        service_interval_km: serviceIntervalKm ? parseFloat(serviceIntervalKm) : 10000,
+        service_interval_months: serviceIntervalMonths ? parseFloat(serviceIntervalMonths) : 12,
       });
 
       router.back();
@@ -336,6 +340,90 @@ export default function AddVehicleScreen() {
                 />
               </View>
             </View>
+
+            {/* ── Dual-Dimension Service Intervals (Mileage vs. Time) ── */}
+            <Text style={[styles.subLabel, { color: colors.textSecondary, marginTop: Spacing.lg }]}>
+              Service Interval (km)
+            </Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
+              placeholder="e.g., 10000"
+              placeholderTextColor={colors.textTertiary}
+              value={serviceIntervalKm}
+              onChangeText={setServiceIntervalKm}
+              keyboardType="numeric"
+            />
+
+            <Text style={[styles.subLabel, { color: colors.textSecondary, marginTop: Spacing.md }]}>
+              Service Interval (Months)
+            </Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
+              placeholder="e.g., 12 (1 year)"
+              placeholderTextColor={colors.textTertiary}
+              value={serviceIntervalMonths}
+              onChangeText={setServiceIntervalMonths}
+              keyboardType="numeric"
+            />
+
+            {/* Quick Month Presets */}
+            <View style={{ flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.xs }}>
+              <TouchableOpacity
+                onPress={() => setServiceIntervalMonths('6')}
+                style={{
+                  flex: 1,
+                  paddingVertical: 8,
+                  paddingHorizontal: 6,
+                  borderRadius: 6,
+                  backgroundColor: serviceIntervalMonths === '6' ? colors.primaryLight : colors.surface,
+                  borderWidth: 1,
+                  borderColor: serviceIntervalMonths === '6' ? colors.primary : colors.border,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '600',
+                    color: serviceIntervalMonths === '6' ? colors.primary : colors.textSecondary,
+                  }}
+                >
+                  6 Months (City/Bikes)
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setServiceIntervalMonths('12')}
+                style={{
+                  flex: 1,
+                  paddingVertical: 8,
+                  paddingHorizontal: 6,
+                  borderRadius: 6,
+                  backgroundColor: serviceIntervalMonths === '12' ? colors.primaryLight : colors.surface,
+                  borderWidth: 1,
+                  borderColor: serviceIntervalMonths === '12' ? colors.primary : colors.border,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '600',
+                    color: serviceIntervalMonths === '12' ? colors.primary : colors.textSecondary,
+                  }}
+                >
+                  12 Months (Standard)
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
+              ⏱️ Alerts when kilometers OR time interval is reached, whichever comes first.
+            </Text>
           </View>
         )}
       </ScrollView>

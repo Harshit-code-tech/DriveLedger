@@ -13,11 +13,14 @@
  * Large touch targets (48dp+ per tab).
  */
 
+import React, { useEffect } from 'react';
+import { StyleSheet, Text, View, Platform } from 'react-native';
+import { Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as QuickActions from 'expo-quick-actions';
+import { useQuickActionRouting } from 'expo-quick-actions/router';
 import { Sizing } from '@/constants/theme';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { Tabs } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Simple emoji-based tab icons (we'll upgrade to proper icons later)
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
@@ -31,6 +34,39 @@ function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
 export default function TabLayout() {
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
+
+  // Handles one-tap routing when launched from an Android App Shortcut / iOS Quick Action
+  useQuickActionRouting();
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') {
+      QuickActions.setItems([
+        {
+          id: 'add_fuel',
+          title: 'Log Fuel',
+          subtitle: 'Quick refill entry at pump',
+          icon: Platform.OS === 'ios' ? 'symbol:fuelpump.fill' : 'shortcut_fuel',
+          params: { href: '/add-fuel' },
+        },
+        {
+          id: 'add_expense',
+          title: 'Log Expense',
+          subtitle: 'Tolls, parking & fastag',
+          icon: Platform.OS === 'ios' ? 'symbol:creditcard.fill' : 'shortcut_expense',
+          params: { href: '/add-expense' },
+        },
+        {
+          id: 'add_service',
+          title: 'Log Service',
+          subtitle: 'Maintenance & repairs',
+          icon: Platform.OS === 'ios' ? 'symbol:wrench.and.screwdriver.fill' : 'shortcut_service',
+          params: { href: '/add-service' },
+        },
+      ]).catch(() => {
+        // Safe ignore on devices without quick actions support
+      });
+    }
+  }, []);
 
   return (
     <Tabs

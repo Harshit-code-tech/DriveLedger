@@ -57,6 +57,7 @@ const CREATE_VEHICLES_TABLE = `
     front_tyre_pressure  REAL,
     rear_tyre_pressure   REAL,
     service_interval_km  REAL,
+    service_interval_months REAL DEFAULT 12,
     purchase_date        TEXT,
     notes                TEXT,
     is_archived          INTEGER NOT NULL DEFAULT 0 CHECK (is_archived IN (0, 1)),
@@ -227,6 +228,7 @@ export function migrateVehiclesTableIfNeeded(db: SQLite.SQLiteDatabase): void {
         front_tyre_pressure  REAL,
         rear_tyre_pressure   REAL,
         service_interval_km  REAL,
+        service_interval_months REAL DEFAULT 12,
         purchase_date        TEXT,
         notes                TEXT,
         is_archived          INTEGER NOT NULL DEFAULT 0 CHECK (is_archived IN (0, 1)),
@@ -236,23 +238,24 @@ export function migrateVehiclesTableIfNeeded(db: SQLite.SQLiteDatabase): void {
       );
     `);
 
-    // Determine if secondary_tank_capacity already exists in current vehicles table
+    // Determine if secondary_tank_capacity / service_interval_months already exists in current vehicles table
     const columns = db.getAllSync<{ name: string }>('PRAGMA table_info(vehicles);');
     const colSet = new Set(columns.map((c) => c.name));
     const secTankExpr = colSet.has('secondary_tank_capacity') ? 'secondary_tank_capacity' : 'NULL';
+    const srvMonthsExpr = colSet.has('service_interval_months') ? 'service_interval_months' : '12';
 
     db.execSync(`
       INSERT INTO vehicles_new (
         id, nickname, vehicle_type, manufacturer, model, variant, year, color,
         registration_number, fuel_type, tank_capacity, secondary_tank_capacity,
         current_odometer, front_tyre_pressure, rear_tyre_pressure,
-        service_interval_km, purchase_date, notes, is_archived, created_at, updated_at, deleted_at
+        service_interval_km, service_interval_months, purchase_date, notes, is_archived, created_at, updated_at, deleted_at
       )
       SELECT
         id, nickname, vehicle_type, manufacturer, model, variant, year, color,
         registration_number, fuel_type, tank_capacity, ${secTankExpr},
         current_odometer, front_tyre_pressure, rear_tyre_pressure,
-        service_interval_km, purchase_date, notes, is_archived, created_at, updated_at, deleted_at
+        service_interval_km, ${srvMonthsExpr}, purchase_date, notes, is_archived, created_at, updated_at, deleted_at
       FROM vehicles;
     `);
 
@@ -325,6 +328,15 @@ export function createTables(db: SQLite.SQLiteDatabase): void {
   try {
     db.execSync(
       `ALTER TABLE fuel_entries ADD COLUMN battery_end_percent REAL`
+    );
+  } catch {
+    // Column already exists
+  }
+
+  // v1.3 — Dual-dimension service interval in months (e.g. 12 months for 1 year)
+  try {
+    db.execSync(
+      `ALTER TABLE vehicles ADD COLUMN service_interval_months REAL DEFAULT 12`
     );
   } catch {
     // Column already exists

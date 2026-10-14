@@ -51,10 +51,30 @@ export default function DocumentsScreen() {
     }, [selectedVehicle?.id])
   );
 
-  const getExpiryBadge = (expiryDate: string | null) => {
+  const getExpiryBadge = (expiryDate: string | null, type?: string) => {
     if (!expiryDate) return { label: 'No Expiry', color: colors.textTertiary, bgColor: colors.shimmer };
     const days = daysUntil(expiryDate);
-    if (days < 0) return { label: 'Expired', color: colors.danger, bgColor: colors.dangerLight };
+    if (days < 0) {
+      return {
+        label: type === 'PUC' ? '🚨 Expired (₹10k Fine)' : 'Expired',
+        color: colors.danger,
+        bgColor: colors.dangerLight,
+      };
+    }
+    if (days <= 7) {
+      return {
+        label: type === 'PUC' ? `🚨 ${days}d left (Renew)` : `${days}d left`,
+        color: colors.danger,
+        bgColor: colors.dangerLight,
+      };
+    }
+    if (days <= 15 && type === 'PUC') {
+      return {
+        label: `⚠️ ${days}d left`,
+        color: colors.warning,
+        bgColor: colors.warningLight,
+      };
+    }
     if (days <= 30) return { label: `${days}d left`, color: colors.warning, bgColor: colors.warningLight };
     if (days <= 90) return { label: `${days}d left`, color: colors.accent, bgColor: colors.accentLight };
     return { label: 'Valid', color: colors.success, bgColor: colors.successLight };
@@ -264,7 +284,7 @@ export default function DocumentsScreen() {
         renderItem={({ item }) => (
           <DocumentCard
             item={item}
-            badge={getExpiryBadge(item.expiry_date)}
+            badge={getExpiryBadge(item.expiry_date, item.type)}
             onEdit={handleEdit}
             onView={handleView}
             onDelete={handleDelete}

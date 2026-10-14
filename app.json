@@ -33,7 +33,28 @@
       "expo-sqlite",
       "expo-image",
       "expo-web-browser",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-quick-actions",
+        {
+          "iosActions": [
+            {
+              "id": "add_fuel",
+              "title": "Log Fuel",
+              "subtitle": "Quick entry",
+              "icon": "symbol:fuelpump.fill",
+              "params": { "href": "/add-fuel" }
+            },
+            {
+              "id": "add_expense",
+              "title": "Log Expense",
+              "subtitle": "Quick entry",
+              "icon": "symbol:creditcard.fill",
+              "params": { "href": "/add-expense" }
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

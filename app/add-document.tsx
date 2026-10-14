@@ -200,6 +200,30 @@ export default function AddDocumentScreen() {
     }
   };
 
+  const applyPucPreset = (months: number) => {
+    let base = new Date();
+    if (issueDate.trim()) {
+      const issueVal = validateDateDisplay(issueDate, 'Issue date');
+      if (issueVal.isValid) {
+        const iso = displayToISO(issueDate);
+        if (iso) base = new Date(iso);
+      }
+    }
+    const target = new Date(base);
+    target.setMonth(target.getMonth() + months);
+    const isoStr = target.toISOString().split('T')[0];
+    setExpiryDate(isoToDisplay(isoStr));
+  };
+
+  const handleDocTypeChange = (dt: DocumentType) => {
+    setDocType(dt);
+    if (dt === DocumentType.PUC && !expiryDate) {
+      const currentYear = new Date().getFullYear();
+      const isNewCar = selectedVehicle?.year && selectedVehicle.year >= currentYear - 1;
+      applyPucPreset(isNewCar ? 12 : 6);
+    }
+  };
+
   const handleIssueDateChange = (text: string) => {
     const formatted = formatDateInput(text, issueDate);
     setIssueDate(formatted);
@@ -319,7 +343,7 @@ export default function AddDocumentScreen() {
           {DOCUMENT_TYPE_LIST.map((dt) => (
             <Pressable
               key={dt}
-              onPress={() => setDocType(dt)}
+              onPress={() => handleDocTypeChange(dt)}
               style={[
                 styles.chip,
                 {
@@ -341,23 +365,37 @@ export default function AddDocumentScreen() {
           ))}
         </View>
 
-        {/* ── Document Number ── */}
-        <Text style={[styles.label, { color: colors.textSecondary }]}>Document Number</Text>
+        {/* ── Document Number (Dynamic Label) ── */}
+        <Text style={[styles.label, { color: colors.textSecondary }]}>
+          {docType === DocumentType.FASTAG
+            ? 'FASTag ID / Barcode / Wallet ID'
+            : docType === DocumentType.PUC
+              ? 'PUC Certificate Number'
+              : 'Document Number'}
+        </Text>
         <TextInput
           style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-          placeholder="e.g., POL-123456789"
+          placeholder={
+            docType === DocumentType.FASTAG
+              ? 'e.g., 34161FA8902...'
+              : docType === DocumentType.PUC
+                ? 'e.g., MH12-PUC-2026-...'
+                : 'e.g., POL-123456789'
+          }
           placeholderTextColor={colors.textTertiary}
           value={documentNumber}
           onChangeText={setDocumentNumber}
         />
 
-        {/* ── Insurer Name (only for Insurance) ── */}
-        {docType === DocumentType.INSURANCE && (
+        {/* ── Insurer / Issuing Bank Name ── */}
+        {(docType === DocumentType.INSURANCE || docType === DocumentType.FASTAG) && (
           <>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>Insurer Name</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>
+              {docType === DocumentType.FASTAG ? 'Issuing Bank / Tag Provider' : 'Insurer Name'}
+            </Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-              placeholder="e.g., ICICI Lombard"
+              placeholder={docType === DocumentType.FASTAG ? 'e.g., ICICI Bank, Paytm, IDFC FIRST, SBI' : 'e.g., ICICI Lombard'}
               placeholderTextColor={colors.textTertiary}
               value={insurerName}
               onChangeText={setInsurerName}
@@ -377,7 +415,7 @@ export default function AddDocumentScreen() {
           maxLength={10}
         />
 
-        {/* ── Expiry Date ── */}
+        {/* ── Expiry Date & Presets ── */}
         <Text style={[styles.label, { color: colors.textSecondary }]}>Expiry Date</Text>
         <TextInput
           style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
@@ -388,6 +426,82 @@ export default function AddDocumentScreen() {
           keyboardType="number-pad"
           maxLength={10}
         />
+
+        {/* ── PUC Specific Quick Presets & Fine Warning ── */}
+        {docType === DocumentType.PUC && (
+          <View style={{ marginTop: Spacing.sm }}>
+            <View style={{ flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.xs }}>
+              <TouchableOpacity
+                onPress={() => applyPucPreset(6)}
+                style={{
+                  flex: 1,
+                  paddingVertical: 8,
+                  paddingHorizontal: 8,
+                  borderRadius: 6,
+                  backgroundColor: colors.surface,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  alignItems: 'center',
+                }}
+              >
+                <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
+                  +6 Months (Standard)
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => applyPucPreset(12)}
+                style={{
+                  flex: 1,
+                  paddingVertical: 8,
+                  paddingHorizontal: 8,
+                  borderRadius: 6,
+                  backgroundColor: colors.surface,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  alignItems: 'center',
+                }}
+              >
+                <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
+                  +1 Year (New BS6)
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View
+              style={{
+                backgroundColor: '#FEF2F2',
+                borderColor: '#FECACA',
+                borderWidth: 1,
+                borderRadius: 8,
+                padding: Spacing.md,
+                marginTop: Spacing.xs,
+              }}
+            >
+              <Text style={{ fontSize: 12, color: '#991B1B', lineHeight: 17 }}>
+                🚨 <Text style={{ fontWeight: '700' }}>Immediate ₹10,000 Fine Risk:</Text> Under Section 190(2) of the Motor Vehicles Act, driving with an expired PUC carries an immediate ₹10,000 court fine. Renewing on time takes just 5 minutes at any petrol pump.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── FASTag KYC Notice ── */}
+        {docType === DocumentType.FASTAG && (
+          <View
+            style={{
+              backgroundColor: colors.primaryLight,
+              borderColor: colors.primary,
+              borderWidth: 1,
+              borderRadius: 8,
+              padding: Spacing.md,
+              marginTop: Spacing.sm,
+            }}
+          >
+            <Text style={{ fontSize: 12, color: colors.primary, lineHeight: 17 }}>
+              💳 <Text style={{ fontWeight: '700' }}>FASTag Validity & KYC:</Text> Ensure your tag is linked to an active KYC wallet. Highway toll plazas charge double toll in cash for blacklisted or inactive tags.
+            </Text>
+          </View>
+        )}
 
         {/* ── Photo / PDF Attachment ── */}
         <Text style={[styles.label, { color: colors.textSecondary }]}>Document Photo or PDF</Text>

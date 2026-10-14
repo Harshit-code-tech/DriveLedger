@@ -7,6 +7,10 @@
  * 3. Business & Tax CSV Generation (UTF-8 BOM, RFC 4180 escaping, formula neutralization, sorting)
  */
 
+jest.mock('react-native', () => ({
+  Platform: { OS: 'android', select: (dict: any) => dict.android ?? dict.default },
+}));
+
 jest.mock('expo-print', () => ({
   printToFileAsync: jest.fn().mockResolvedValue({ uri: 'file:///cache/report.pdf' }),
 }));
