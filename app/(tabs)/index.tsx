@@ -14,33 +14,33 @@
  * Flow: Open App → Dashboard → Tap [+ Add Fuel] → Fill → Save → See mileage → Close
  */
 
-import { useCallback, useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-} from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { useVehicleStore } from '@/stores/vehicleStore';
-import { useFuelStore } from '@/stores/fuelStore';
-import { useServiceStore, getKmUntilService, getServiceDueStatus, type ServiceDueStatus } from '@/stores/serviceStore';
-import { useExpenseStore } from '@/stores/expenseStore';
-import { useDocumentStore } from '@/stores/documentStore';
-import { useThemeColors } from '@/hooks/useThemeColors';
-import { Typography, Spacing, Sizing } from '@/constants/theme';
-import { MILEAGE_UNIT_LABELS, FuelType, isBiFuel, getFuelSystemLabel } from '@/constants/fuelTypes';
-import { formatCurrency, formatOdometer, formatMileage } from '@/utils/format';
-import { convertPressure, getPressureLabel } from '@/stores/preferencesStore';
-import { formatDisplayDateLong, daysUntil } from '@/utils/date';
-import { getCurrentMonthTotalSpend, estimateFuelLevel, type FuelLevelResult } from '@/utils/statsHelpers';
-import { DOCUMENT_TYPE_LABELS } from '@/constants/documentTypes';
-import { VehicleContextHeader } from '@/components/VehicleContextHeader';
 import { CngTankIcon } from '@/components/CngTankIcon';
 import { PreTripChecklistModal } from '@/components/PreTripChecklistModal';
-import { useChecklistStore, buildPreTripChecklist, getChecklistStats } from '@/stores/checklistStore';
+import { VehicleContextHeader } from '@/components/VehicleContextHeader';
+import { DOCUMENT_TYPE_LABELS } from '@/constants/documentTypes';
+import { FuelType, getFuelSystemLabel, isBiFuel, MILEAGE_UNIT_LABELS } from '@/constants/fuelTypes';
+import { Sizing, Spacing, Typography } from '@/constants/theme';
+import { useThemeColors } from '@/hooks/useThemeColors';
+import { buildPreTripChecklist, getChecklistStats, useChecklistStore } from '@/stores/checklistStore';
+import { useDocumentStore } from '@/stores/documentStore';
+import { useExpenseStore } from '@/stores/expenseStore';
+import { useFuelStore } from '@/stores/fuelStore';
+import { convertPressure, getPressureLabel } from '@/stores/preferencesStore';
+import { getKmUntilService, getServiceDueStatus, useServiceStore, type ServiceDueStatus } from '@/stores/serviceStore';
+import { useVehicleStore } from '@/stores/vehicleStore';
+import { daysUntil, formatDisplayDateLong } from '@/utils/date';
+import { formatCurrency, formatMileage, formatOdometer } from '@/utils/format';
+import { estimateFuelLevel, getCurrentMonthTotalSpend, type FuelLevelResult } from '@/utils/statsHelpers';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 interface FuelBarSectionProps {
   title: string;
@@ -170,11 +170,22 @@ export default function HomeScreen() {
       loadRecords(selectedVehicle.id);
       loadExpenses(selectedVehicle.id);
       loadDocuments(selectedVehicle.id);
-      loadChecklist(selectedVehicle.id);
+      // Note: loadChecklist is intentionally NOT here — AsyncStorage reads
+      // are slow (~2-3s) and checklist data only needs to load when the
+      // vehicle changes, not on every tab focus event.
     }
   }, [selectedVehicle?.id]);
 
   useFocusEffect(loadAll);
+
+  // Load checklist state once per vehicle change (not on every tab focus).
+  // AsyncStorage is significantly slower than SQLite, so keeping this
+  // separate from useFocusEffect prevents tab-switch lag.
+  useEffect(() => {
+    if (selectedVehicle) {
+      loadChecklist(selectedVehicle.id);
+    }
+  }, [selectedVehicle?.id]);
 
   // ── Pull-to-refresh ──────────────────────────────────────────────────
   // Loads are synchronous (SQLite), so the spinner is just brief feedback.
@@ -214,8 +225,8 @@ export default function HomeScreen() {
     );
   }
 
-  const lastEntry      = entries.length > 0 ? entries[0] : null;
-  const lastService    = serviceRecords.length > 0 ? serviceRecords[0] : null;
+  const lastEntry = entries.length > 0 ? entries[0] : null;
+  const lastService = serviceRecords.length > 0 ? serviceRecords[0] : null;
   const kmUntilService = getKmUntilService(selectedVehicle, lastService);
 
   const { total: monthlyTotal } = getCurrentMonthTotalSpend(entries, serviceRecords, expenses);
@@ -260,13 +271,13 @@ export default function HomeScreen() {
   // Secondary fuel level estimate (for Bi-Fuel vehicles)
   const secondaryFuelLevel = isBiFuelVehicle && selectedVehicle.secondary_tank_capacity
     ? estimateFuelLevel(
-        entries,
-        selectedVehicle.secondary_tank_capacity,
-        selectedVehicle.current_odometer,
-        secondaryAvgMileage,
-        'L',
-        'secondary'
-      )
+      entries,
+      selectedVehicle.secondary_tank_capacity,
+      selectedVehicle.current_odometer,
+      secondaryAvgMileage,
+      'L',
+      'secondary'
+    )
     : null;
 
   /** Tips for why fuel levels can't be shown yet */

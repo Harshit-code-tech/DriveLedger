@@ -33,7 +33,8 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const loadVehicles = useVehicleStore((s) => s.loadVehicles);
-  const vehicles = useVehicleStore((s) => s.vehicles);
+  // Only subscribe to a serialized key of vehicle IDs, so loadVehicles() does NOT re-render RootLayout on tab focus
+  const vehicleIdsKey = useVehicleStore((s) => s.vehicles.map((v) => v.id).join(','));
   const loadPreferences = usePreferencesStore((s) => s.loadPreferences);
   const [appIsReady, setAppIsReady] = useState(false);
   const [showAnimatedSplash, setShowAnimatedSplash] = useState(true);
@@ -75,13 +76,13 @@ export default function RootLayout() {
     prepare();
   }, []);
 
-  // Schedule expiry + service reminders whenever vehicles list changes
+  // Schedule expiry + service reminders whenever vehicles list actually changes
   useEffect(() => {
-    if (vehicles.length > 0) {
-      const vehicleIds = vehicles.map((v) => v.id);
+    if (vehicleIdsKey) {
+      const vehicleIds = vehicleIdsKey.split(',').filter(Boolean);
       scheduleReminderNotifications(vehicleIds);
     }
-  }, [vehicles]);
+  }, [vehicleIdsKey]);
 
   return (
     <View style={{ flex: 1 }} onLayout={handleRootLayout}>
