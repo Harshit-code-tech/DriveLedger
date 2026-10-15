@@ -237,7 +237,7 @@ export default function AnimatedSplash({ ready, onFinish }: Props) {
       {/* Road / city background */}
       <Animated.View style={[StyleSheet.absoluteFill, bgStyle]}>
         <Image
-          source={require('@/assets/images/splash-background.png')}
+          source={require('../../assets/images/splash-background.png')}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
           transition={0}
@@ -259,7 +259,7 @@ export default function AnimatedSplash({ ready, onFinish }: Props) {
         <View style={styles.logoArea}>
           <Animated.View style={[styles.glowRing, glowStyle]}>
             <Image
-              source={require('@/assets/images/logo-glow.png')}
+              source={require('../../assets/images/logo-glow.png')}
               style={styles.glowImage}
               contentFit="contain"
             />
@@ -267,7 +267,7 @@ export default function AnimatedSplash({ ready, onFinish }: Props) {
 
           <Animated.View style={[styles.logoWrapper, logoStyle]}>
             <Image
-              source={require('@/assets/images/splash-icon.png')}
+              source={require('../../assets/images/splash-icon.png')}
               style={styles.logoImage}
               contentFit="contain"
             />

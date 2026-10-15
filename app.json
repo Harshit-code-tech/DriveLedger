@@ -38,6 +38,12 @@
       [
         "expo-quick-actions",
         {
+          "androidIcons": {
+            "shortcut_fuel": "./assets/images/shortcuts/shortcut-fuel.png",
+            "shortcut_expense": "./assets/images/shortcuts/shortcut-expense.png",
+            "shortcut_service": "./assets/images/shortcuts/shortcut-service.png",
+            "shortcut_checklist": "./assets/images/shortcuts/shortcut-checklist.png"
+          },
           "iosActions": [
             {
               "id": "add_fuel",
@@ -55,6 +61,15 @@
               "icon": "symbol:creditcard.fill",
               "params": {
                 "href": "/add-expense"
+              }
+            },
+            {
+              "id": "add_service",
+              "title": "Log Service",
+              "subtitle": "Maintenance & repairs",
+              "icon": "symbol:wrench.and.screwdriver.fill",
+              "params": {
+                "href": "/add-service"
               }
             },
             {
