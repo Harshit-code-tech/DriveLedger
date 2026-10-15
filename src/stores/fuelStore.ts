@@ -19,6 +19,7 @@ import type { FuelEntry, CreateFuelEntryInput } from '@/types/fuel';
 import type { Vehicle } from '@/types/vehicle';
 import * as fuelRepo from '@/database/repositories/fuelRepo';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
+import { syncWidgetState } from '@/widgets/widgetDataService';
 import {
   calculateMileageForEntry,
   calculatePartialEstimate,
@@ -145,6 +146,7 @@ export const useFuelStore = create<FuelState>((set) => ({
     const stats = computeMileageStats(entries, vehicle.fuel_type as FuelType);
     const partialEstimates = computePartialEstimates(chronological2, vehicle.fuel_type as FuelType);
     set({ entries, stats, partialEstimates });
+    syncWidgetState();
 
     return { entry, warning };
   },
@@ -184,5 +186,6 @@ export const useFuelStore = create<FuelState>((set) => ({
     // 5. Force vehicleStore to reload so selectedVehicle.current_odometer is fresh
     const { useVehicleStore } = require('@/stores/vehicleStore');
     useVehicleStore.getState().loadVehicles();
+    syncWidgetState();
   },
 }));

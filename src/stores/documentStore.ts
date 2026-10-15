@@ -14,6 +14,7 @@ import { create } from 'zustand';
 import type { VehicleDocument, CreateDocumentInput, UpdateDocumentInput } from '@/types/document';
 import * as documentRepo from '@/database/repositories/documentRepo';
 import { daysUntil } from '@/utils/date';
+import { syncWidgetState } from '@/widgets/widgetDataService';
 
 interface DocumentState {
   /** Current (non-superseded) documents for the selected vehicle */
@@ -56,6 +57,7 @@ export const useDocumentStore = create<DocumentState>((set) => ({
       (d) => d.expiry_date && daysUntil(d.expiry_date) <= 30
     );
     set({ documents, expiringDocs });
+    syncWidgetState();
     return doc;
   },
 
@@ -67,6 +69,7 @@ export const useDocumentStore = create<DocumentState>((set) => ({
         (d) => d.expiry_date && daysUntil(d.expiry_date) <= 30
       );
       set({ documents, expiringDocs });
+      syncWidgetState();
     }
     return updated;
   },
@@ -78,6 +81,7 @@ export const useDocumentStore = create<DocumentState>((set) => ({
       (d) => d.expiry_date && daysUntil(d.expiry_date) <= 30
     );
     set({ documents, expiringDocs });
+    syncWidgetState();
   },
 
   renewDocument: (oldDocumentId: string, newInput: CreateDocumentInput) => {

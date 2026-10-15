@@ -83,6 +83,25 @@
             }
           ]
         }
+      ],
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "VehicleGlanceWidget",
+              "label": "DriveLedger Quick Glance",
+              "description": "At-a-glance odometer, fuel efficiency, service alert & quick actions",
+              "minWidth": "320dp",
+              "minHeight": "140dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "previewImage": "./assets/images/widgets/widget-preview.png",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
       ]
     ],
     "experiments": {
