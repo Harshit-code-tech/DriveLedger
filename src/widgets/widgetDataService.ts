@@ -1,3 +1,5 @@
+"use no memo";
+import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
@@ -127,7 +129,7 @@ export async function syncWidgetState(): Promise<void> {
     const { requestWidgetUpdate } = require('react-native-android-widget');
     await requestWidgetUpdate({
       widgetName: WIDGET_NAME,
-      renderWidget: () => VehicleGlanceWidget(data),
+      renderWidget: () => <VehicleGlanceWidget {...data} />,
     });
   } catch (e) {
     // Non-blocking in Expo Go or if widget is not added to home screen

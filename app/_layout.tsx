@@ -16,6 +16,7 @@ import {
 } from '@/services/notificationService';
 import { usePreferencesStore } from '@/stores/preferencesStore';
 import { useVehicleStore } from '@/stores/vehicleStore';
+import { syncWidgetState } from '@/widgets/widgetDataService';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -63,6 +64,9 @@ export default function RootLayout() {
         // Load vehicles into state
         loadVehicles();
 
+        // Initial sync of Android Home Screen Widget
+        syncWidgetState().catch((err) => console.debug('Initial widget sync skipped:', err));
+
         // Set up notification channel (Android)
         await setupNotificationChannel();
       } catch (e) {
@@ -76,11 +80,12 @@ export default function RootLayout() {
     prepare();
   }, []);
 
-  // Schedule expiry + service reminders whenever vehicles list actually changes
+  // Schedule expiry + service reminders & sync widget whenever vehicles list actually changes
   useEffect(() => {
     if (vehicleIdsKey) {
       const vehicleIds = vehicleIdsKey.split(',').filter(Boolean);
       scheduleReminderNotifications(vehicleIds);
+      syncWidgetState().catch((err) => console.debug('Widget sync on vehicles change skipped:', err));
     }
   }, [vehicleIdsKey]);
 

@@ -1,3 +1,4 @@
+"use no memo";
 import React from 'react';
 import { FlexWidget, TextWidget } from 'react-native-android-widget';
 
@@ -30,16 +31,16 @@ export const DEFAULT_WIDGET_DATA: VehicleGlanceWidgetData = {
  * Provides glanceable vehicle health, current odometer, efficiency,
  * and 1-tap quick action buttons directly on the Android home screen.
  */
-export function VehicleGlanceWidget({
-  vehicleName,
-  regNumber,
-  odometer,
-  fuelEfficiency,
-  serviceText,
-  serviceUrgency,
-  pucText,
-  statusColor,
-}: VehicleGlanceWidgetData) {
+export function VehicleGlanceWidget(props: VehicleGlanceWidgetData) {
+  const vehicleName = props.vehicleName || DEFAULT_WIDGET_DATA.vehicleName;
+  const regNumber = props.regNumber || DEFAULT_WIDGET_DATA.regNumber;
+  const odometer = props.odometer ?? DEFAULT_WIDGET_DATA.odometer;
+  const fuelEfficiency = props.fuelEfficiency || DEFAULT_WIDGET_DATA.fuelEfficiency;
+  const serviceText = props.serviceText || DEFAULT_WIDGET_DATA.serviceText;
+  const serviceUrgency = props.serviceUrgency || DEFAULT_WIDGET_DATA.serviceUrgency;
+  const pucText = props.pucText || DEFAULT_WIDGET_DATA.pucText;
+  const statusColor = props.statusColor || DEFAULT_WIDGET_DATA.statusColor;
+
   const serviceBg =
     serviceUrgency === 'overdue'
       ? '#450A0A'
@@ -61,7 +62,7 @@ export function VehicleGlanceWidget({
         ? '#FCD34D'
         : '#6EE7B7';
 
-  const odoFormatted = odometer.toLocaleString('en-IN');
+  const odoFormatted = Number(odometer || 0).toLocaleString('en-IN');
 
   return (
     <FlexWidget
@@ -143,7 +144,6 @@ export function VehicleGlanceWidget({
       <FlexWidget
         style={{
           flexDirection: 'row',
-          justifyContent: 'space-between',
           alignItems: 'stretch',
           width: 'match_parent',
           flexGap: 8,
@@ -256,7 +256,6 @@ export function VehicleGlanceWidget({
       <FlexWidget
         style={{
           flexDirection: 'row',
-          justifyContent: 'space-between',
           width: 'match_parent',
           flexGap: 8,
         }}

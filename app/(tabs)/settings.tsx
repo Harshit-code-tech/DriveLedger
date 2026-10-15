@@ -189,6 +189,7 @@ export default function SettingsScreen() {
   const [showArchived, setShowArchived] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
   // Option picker visibility
   const [pickerCurrency, setPickerCurrency] = useState(false);
@@ -242,6 +243,21 @@ export default function SettingsScreen() {
         .catch(() => { /* user cancelled */ });
     } else {
       Alert.alert('😨 Export Failed', `Something went sideways: ${result.message}`);
+    }
+  };
+
+  // ── Check for Updates ──
+  const handleCheckUpdate = async () => {
+    setIsCheckingUpdate(true);
+    try {
+      await checkForAppUpdate({
+        manual: true,
+        onBeforeAlert: () => setIsCheckingUpdate(false),
+      });
+    } catch {
+      // Handled internally in checkForAppUpdate
+    } finally {
+      setIsCheckingUpdate(false);
     }
   };
 
@@ -550,7 +566,7 @@ export default function SettingsScreen() {
             title="Check for Updates"
             subtitle="Check GitHub Releases for a new APK version"
             colors={colors}
-            onPress={() => checkForAppUpdate({ manual: true })}
+            onPress={handleCheckUpdate}
           />
           <SettingsRow
             emoji="🛡️"
@@ -650,6 +666,37 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Checking for Updates Loading Modal ── */}
+      <Modal
+        visible={isCheckingUpdate}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setIsCheckingUpdate(false)}
+      >
+        <View style={styles.centerModalOverlay}>
+          <View
+            style={[
+              styles.checkingModalCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <View style={[styles.checkingIconContainer, { backgroundColor: colors.primary + '15' }]}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+            <Text style={[styles.checkingModalTitle, { color: colors.textPrimary }]}>
+              Checking for Updates
+            </Text>
+            <Text style={[styles.checkingModalSubtitle, { color: colors.textSecondary }]}>
+              Connecting to GitHub Releases to check for the latest APK build...
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -699,5 +746,44 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: Sizing.radiusXl, borderTopRightRadius: Sizing.radiusXl,
     padding: Spacing.xxl, paddingBottom: Spacing.section,
     maxHeight: '85%',
+  },
+  centerModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  checkingModalCard: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: Sizing.radiusLg,
+    borderWidth: 1,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  checkingIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
+  checkingModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: Spacing.xs,
+    textAlign: 'center',
+  },
+  checkingModalSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
   },
 });

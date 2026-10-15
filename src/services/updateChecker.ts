@@ -36,14 +36,23 @@ export function showDataSafetyGuide() {
 export async function checkForAppUpdate(options?: {
   manual?: boolean;
   repo?: string;
+  onBeforeAlert?: () => void;
 }): Promise<boolean> {
   const isManual = options?.manual ?? false;
   const repo = options?.repo ?? GITHUB_REPO;
   const currentVersion = Constants.expoConfig?.version || '1.0.3';
 
+  const showAlert = async (title: string, message: string, buttons?: any[]) => {
+    if (options?.onBeforeAlert) {
+      options.onBeforeAlert();
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    Alert.alert(title, message, buttons);
+  };
+
   if (repo === 'your-username/DriveLedger') {
     if (isManual) {
-      Alert.alert(
+      await showAlert(
         '🔧 GitHub Repo Not Set Up',
         `You're on v${currentVersion} and looking sharp! 🤝\n\n` +
         `To hook up GitHub release checking, set your "owner/repo" in src/utils/releaseParser.ts.\n\n` +
@@ -67,7 +76,7 @@ export async function checkForAppUpdate(options?: {
 
     if (response.status === 404) {
       if (isManual) {
-        Alert.alert(
+        await showAlert(
           '🌚 No Releases Yet',
           `No public releases on GitHub yet for DriveLedger.\n\nYou're on v${currentVersion} — the freshest build around! 💨`
         );
@@ -83,7 +92,7 @@ export async function checkForAppUpdate(options?: {
     const result = parseGitHubRelease(data, currentVersion);
 
     if (result.hasUpdate) {
-      Alert.alert(
+      await showAlert(
         `🎉 Update Available! v${result.version}`,
         `${result.releaseNotes}\n\n` +
         `🛡️ TWO GOLDEN RULES:\n` +
@@ -108,7 +117,7 @@ export async function checkForAppUpdate(options?: {
       );
       return true;
     } else if (isManual) {
-      Alert.alert(
+      await showAlert(
         "You're Up to Date! ✨",
         `DriveLedger v${currentVersion} is the latest version. You're all set, but it never hurts to check in once in a while! 🚗`
       );
@@ -116,7 +125,7 @@ export async function checkForAppUpdate(options?: {
     }
   } catch (err) {
     if (isManual) {
-      Alert.alert(
+      await showAlert(
         '😑 No Internet? Really?',
         `Couldn't reach GitHub to check for updates. Check your connection and try again!\n\nYou're on v${currentVersion} in the meantime 👍`,
         [{ text: 'Noted!' }]

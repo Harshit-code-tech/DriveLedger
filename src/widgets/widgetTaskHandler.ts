@@ -1,5 +1,7 @@
+"use no memo";
+import React from 'react';
 import type { WidgetTaskHandlerProps } from 'react-native-android-widget';
-import { VehicleGlanceWidget } from './VehicleGlanceWidget';
+import { DEFAULT_WIDGET_DATA, VehicleGlanceWidget } from './VehicleGlanceWidget';
 import { getCachedWidgetData, getWidgetDataSnapshot, WIDGET_NAME } from './widgetDataService';
 
 /**
@@ -11,9 +13,9 @@ import { getCachedWidgetData, getWidgetDataSnapshot, WIDGET_NAME } from './widge
  * - User resizes the widget (WIDGET_RESIZED)
  */
 export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
-  const { widgetAction, widgetName, renderWidget } = props;
+  const { widgetAction, widgetInfo, renderWidget } = props;
 
-  if (widgetName !== WIDGET_NAME) {
+  if (widgetInfo?.widgetName !== WIDGET_NAME) {
     return;
   }
 
@@ -21,17 +23,30 @@ export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
     case 'WIDGET_ADDED':
     case 'WIDGET_UPDATE':
     case 'WIDGET_RESIZED': {
-      // Try fresh data snapshot first, fallback to cached storage snapshot
-      let data = await getWidgetDataSnapshot();
-      if (!data || data.odometer === 0) {
-        data = await getCachedWidgetData();
+      try {
+        // Try fresh SQLite snapshot first, fallback to cached snapshot from storage
+        let data = await getWidgetDataSnapshot();
+        if (!data || data.odometer === 0) {
+          const cached = await getCachedWidgetData();
+          if (cached && cached.odometer > 0) {
+            data = cached;
+          }
+        }
+        renderWidget(<VehicleGlanceWidget {...(data ?? DEFAULT_WIDGET_DATA)} />);
+      } catch (err) {
+        console.warn('[DriveLedger] Error rendering widget in task handler:', err);
+        try {
+          const cached = await getCachedWidgetData();
+          renderWidget(<VehicleGlanceWidget {...(cached ?? DEFAULT_WIDGET_DATA)} />);
+        } catch {
+          renderWidget(<VehicleGlanceWidget {...DEFAULT_WIDGET_DATA} />);
+        }
       }
-      renderWidget(VehicleGlanceWidget(data));
       break;
     }
 
     case 'WIDGET_CLICK':
-      // Click actions with OPEN_APP and OPEN_URI are handled by native intents
+      // Click actions with OPEN_APP and OPEN_URI are handled natively by Android
       break;
 
     case 'WIDGET_DELETED':
