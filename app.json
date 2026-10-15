@@ -12,7 +12,8 @@
       "versionCode": 2,
       "adaptiveIcon": {
         "backgroundColor": "#084CB4",
-        "foregroundImage": "./assets/images/icon.png"
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false
     },
@@ -25,9 +26,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#084CB4",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 120
         }
       ],
       "expo-sqlite",
@@ -43,21 +44,27 @@
               "title": "Log Fuel",
               "subtitle": "Quick entry",
               "icon": "symbol:fuelpump.fill",
-              "params": { "href": "/add-fuel" }
+              "params": {
+                "href": "/add-fuel"
+              }
             },
             {
               "id": "add_expense",
               "title": "Log Expense",
               "subtitle": "Quick entry",
               "icon": "symbol:creditcard.fill",
-              "params": { "href": "/add-expense" }
+              "params": {
+                "href": "/add-expense"
+              }
             },
             {
               "id": "trip_checklist",
               "title": "Trip Checklist",
               "subtitle": "Highway readiness",
               "icon": "symbol:checklist",
-              "params": { "href": "/checklist" }
+              "params": {
+                "href": "/checklist"
+              }
             }
           ]
         }

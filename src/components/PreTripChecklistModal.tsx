@@ -6,6 +6,7 @@
  */
 
 import { Sizing, Spacing, Typography } from '@/constants/theme';
+import { TyreIcon } from '@/components/TyreIcon';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import {
   buildPreTripChecklist,
@@ -61,11 +62,11 @@ export function PreTripChecklistModal({
 
   // Group items by category
   const groupedItems = useMemo(() => {
-    const groups: { category: ChecklistCategory; title: string; icon: string; items: ChecklistItem[] }[] = [
+    const groups: { category: ChecklistCategory; title: string; icon: React.ReactNode; items: ChecklistItem[] }[] = [
       {
         category: 'tyres',
         title: 'Tyres, Wheels & Hardware',
-        icon: '🛞',
+        icon: <TyreIcon size={20} />,
         items: items.filter((i) => i.category === 'tyres'),
       },
       {
@@ -233,7 +234,11 @@ export function PreTripChecklistModal({
             <View key={group.category} style={styles.section}>
               <View style={styles.sectionHeader}>
                 <View style={[styles.sectionIconBadge, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderLight }]}>
-                  <Text style={styles.sectionIconText}>{group.icon}</Text>
+                  {typeof group.icon === 'string' ? (
+                    <Text style={styles.sectionIconText}>{group.icon}</Text>
+                  ) : (
+                    group.icon
+                  )}
                 </View>
                 <Text style={[Typography.caption, styles.sectionTitleText, { color: colors.textSecondary }]}>
                   {group.title}
