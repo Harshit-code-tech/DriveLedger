@@ -101,10 +101,38 @@ function urgencyColors(urgency: 'ok' | 'due_soon' | 'overdue' | 'expired' | 'not
 
 function fuelIcon(fuelType: string): string {
   switch (fuelType) {
-    case 'electric': return '⚡';
+    case 'electric':
+      return '⚡';
+    case 'hybrid':
+      return '🔋';
+    case 'hybrid_cng_petrol':
+    case 'hybrid_lpg_petrol':
+      return '🔄';
     case 'cng':
-    case 'lpg':      return '⛽';
-    default:         return '⛽';
+    case 'lpg':
+      return '⛽';
+    default:
+      return '⛽';
+  }
+}
+
+function fuelActionLabel(fuelType: string): string {
+  switch (fuelType) {
+    case 'electric':
+      return '⚡  Charge';
+    case 'hybrid':
+      return '🔋  Hybrid';
+    case 'hybrid_cng_petrol':
+    case 'hybrid_lpg_petrol':
+      return '⛽  Bi-Fuel';
+    case 'cng':
+      return '⛽  Log CNG';
+    case 'lpg':
+      return '⛽  Log LPG';
+    case 'diesel':
+      return '⛽  Log Diesel';
+    default:
+      return '⛽  Log Fuel';
   }
 }
 
@@ -479,11 +507,11 @@ export function VehicleGlanceWidget(props: VehicleGlanceWidgetData) {
           marginTop: 6,
         }}
       >
-        {/* + Log Fuel */}
+        {/* Vehicle-specific action button: Charge (EV), Hybrid, Bi-Fuel, or Fuel */}
         <FlexWidget
           style={{
             flex: 3,
-            backgroundColor: COLORS.blue,
+            backgroundColor: d.fuelType === 'electric' ? '#0284C7' : COLORS.blue,
             borderRadius: 10,
             paddingVertical: 7,
             alignItems: 'center',
@@ -493,7 +521,7 @@ export function VehicleGlanceWidget(props: VehicleGlanceWidgetData) {
           clickActionData={{ uri: 'driveledger://add-fuel' }}
         >
           <TextWidget
-            text="⛽  Log Fuel"
+            text={fuelActionLabel(d.fuelType)}
             style={{ fontSize: 11, fontWeight: 'bold', color: '#FFFFFF' }}
           />
         </FlexWidget>

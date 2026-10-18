@@ -125,11 +125,11 @@ export async function requestNotificationPermission(): Promise<boolean> {
 
   try {
     if (Platform.OS === 'android') {
-      const { status: existingStatus } = await N.getPermissionsAsync();
-      if (existingStatus === 'granted') return true;
+      const existing = await N.getPermissionsAsync();
+      if (existing.granted || (existing as any).status === 'granted') return true;
 
-      const { status } = await N.requestPermissionsAsync();
-      return status === 'granted';
+      const requested = await N.requestPermissionsAsync();
+      return Boolean(requested.granted || (requested as any).status === 'granted');
     }
   } catch {
     console.warn('[DriveLedger] Notification permission request failed.');
@@ -490,61 +490,3 @@ export async function setupNotificationChannel(): Promise<void> {
   }
 }
 
-// ─── Push All Test Notifications ─────────────────────────────────────
-
-import { NOTIFICATION_RULES, NotificationRuleInfo } from './notificationRules';
-export { NOTIFICATION_RULES, type NotificationRuleInfo };
-
-export interface TestPushResult {
-  success: boolean;
-  isExpoGo: boolean;
-  count: number;
-  rules: NotificationRuleInfo[];
-}
-
-/**
- * Pushes all notification types simultaneously for testing and diagnostics.
- * If running in a native dev/release build, delivers to the OS notification drawer.
- * If running in Expo Go (where native notifications are disabled by SDK 53+),
- * returns simulated status with isExpoGo: true.
- */
-export async function pushAllTestNotifications(): Promise<TestPushResult> {
-  const N = getNotifications();
-
-  if (!N || isExpoGo) {
-    return {
-      success: false,
-      isExpoGo: true,
-      count: 0,
-      rules: NOTIFICATION_RULES,
-    };
-  }
-
-  ensureHandlerConfigured();
-  await setupNotificationChannel();
-  await requestNotificationPermission();
-
-  let pushed = 0;
-  for (const rule of NOTIFICATION_RULES) {
-    try {
-      await N.scheduleNotificationAsync({
-        content: {
-          title: rule.exampleTitle,
-          body: rule.exampleBody,
-          data: { test: true, ruleId: rule.id },
-        },
-        trigger: Platform.OS === 'android' ? { channelId: rule.channelId } : null,
-      });
-      pushed++;
-    } catch (e) {
-      console.warn(`[DriveLedger] Failed to push test notification ${rule.id}:`, e);
-    }
-  }
-
-  return {
-    success: pushed > 0,
-    isExpoGo: false,
-    count: pushed,
-    rules: NOTIFICATION_RULES,
-  };
-}

@@ -74,6 +74,7 @@ const mockVehicle: Vehicle = {
   front_tyre_pressure: 33,
   rear_tyre_pressure: 33,
   service_interval_km: 10000,
+  service_interval_months: 6,
   purchase_date: '2022-01-01',
   notes: null,
   is_archived: 0,
