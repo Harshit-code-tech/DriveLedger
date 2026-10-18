@@ -40,7 +40,7 @@ export async function checkForAppUpdate(options?: {
 }): Promise<boolean> {
   const isManual = options?.manual ?? false;
   const repo = options?.repo ?? GITHUB_REPO;
-  const currentVersion = Constants.expoConfig?.version || '1.0.3';
+  const currentVersion = Constants.expoConfig?.version || '1.0.0';
 
   const showAlert = async (title: string, message: string, buttons?: any[]) => {
     if (options?.onBeforeAlert) {

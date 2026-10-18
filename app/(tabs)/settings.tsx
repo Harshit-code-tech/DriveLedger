@@ -9,6 +9,8 @@
  * 5. About — version info, update check, data safety guide
  */
 
+import { OptionPicker } from '@/components/OptionPicker';
+import { SettingsRow } from '@/components/SettingsRow';
 import { FUEL_TYPE_SHORT_LABELS } from '@/constants/fuelTypes';
 import { Sizing, Spacing, Typography } from '@/constants/theme';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
@@ -20,8 +22,6 @@ import {
 } from '@/engine/backupEngine';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { checkForAppUpdate, showDataSafetyGuide } from '@/services/updateChecker';
-import { OptionPicker } from '@/components/OptionPicker';
-import { SettingsRow } from '@/components/SettingsRow';
 import {
   CURRENCY_OPTIONS, DISTANCE_OPTIONS, FUEL_VOLUME_OPTIONS, PRESSURE_OPTIONS,
   usePreferencesStore,
@@ -441,12 +441,12 @@ export default function SettingsScreen() {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>About</Text>
           <SettingsRow
             emoji="ℹ️"
-            title="DriveLedger  v1.0.3"
+            title="DriveLedger  v1.0.0"
             subtitle="Offline · Private · No account needed"
             colors={colors}
             onPress={() =>
               Alert.alert(
-                'DriveLedger v1.0.3 🚗',
+                'DriveLedger v1.0.0 🚗',
                 'Fuel, mileage, services, documents - all tracked, all offline, zero drama.\n\nNo account. No cloud. Your data stays on your phone, where it belongs. 🔐',
                 [{ text: 'Love it! ❤️' }]
               )

@@ -10,7 +10,7 @@
  *     app_id:    "com.driveledger.app",   ← identifies the app
  *     version:   2,                        ← backup schema version
  *     created_at: "<ISO date>",
- *     app_version: "1.0.3",
+ *     app_version: "1.0.0",
  *     signature: "<64-char hex>",          ← HMAC over the data field (JSON)
  *     data: { vehicles, fuel_entries, service_records, expenses, documents }
  *   }
@@ -44,8 +44,8 @@ import type { FuelEntry } from '@/types/fuel';
 import type { ServiceRecord } from '@/types/service';
 import type { Vehicle } from '@/types/vehicle';
 import { nowISO } from '@/utils/date';
-import * as Crypto from 'expo-crypto';
 import Constants from 'expo-constants';
+import * as Crypto from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';

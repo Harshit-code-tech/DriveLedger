@@ -7,7 +7,7 @@
   'use strict';
 
   const GITHUB_REPO = 'JyotikaJayani-08/DriveLedger';
-  const DEFAULT_VERSION = 'v1.0.3';
+  const DEFAULT_VERSION = 'v1.0.0';
 
   // ─── Vehicle Demo Data for Receipt Card ───
   const VEHICLE_PROFILES = [
