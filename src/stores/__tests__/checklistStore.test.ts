@@ -2,18 +2,22 @@ import { buildPreTripChecklist, getChecklistStats } from '../checklistStore';
 import type { Vehicle } from '@/types/vehicle';
 import type { VehicleDocument } from '@/types/document';
 import { DocumentType } from '@/constants/documentTypes';
+import { FuelType, VehicleType } from '@/constants/fuelTypes';
 
 describe('Pre-Trip Road Trip Inspection Checklist (Feature 4.3)', () => {
   const mockCar: Vehicle = {
     id: 'veh_car_1',
-    name: 'Honda City',
-    type: 'car',
-    fuel_type: 'petrol',
+    nickname: 'Honda City',
+    manufacturer: 'Honda',
+    model: 'City',
+    variant: null,
+    year: null,
+    vehicle_type: VehicleType.CAR,
+    fuel_type: FuelType.PETROL,
     current_odometer: 45000,
     front_tyre_pressure: 32,
     rear_tyre_pressure: 35,
     tank_capacity: 40,
-    battery_capacity: null,
     registration_number: 'MH12AB1234',
     service_interval_km: 10000,
     service_interval_months: 12,
@@ -24,14 +28,17 @@ describe('Pre-Trip Road Trip Inspection Checklist (Feature 4.3)', () => {
 
   const mockBike: Vehicle = {
     id: 'veh_bike_1',
-    name: 'Royal Enfield Hunter',
-    type: 'bike',
-    fuel_type: 'petrol',
+    nickname: 'Royal Enfield Hunter',
+    manufacturer: 'Royal Enfield',
+    model: 'Hunter',
+    variant: null,
+    year: null,
+    vehicle_type: VehicleType.TWO_WHEELER,
+    fuel_type: FuelType.PETROL,
     current_odometer: 12000,
     front_tyre_pressure: 28,
     rear_tyre_pressure: 32,
     tank_capacity: 13,
-    battery_capacity: null,
     registration_number: 'MH14XY9999',
     service_interval_km: 5000,
     service_interval_months: 6,
@@ -42,14 +49,17 @@ describe('Pre-Trip Road Trip Inspection Checklist (Feature 4.3)', () => {
 
   const mockEV: Vehicle = {
     id: 'veh_ev_1',
-    name: 'Tata Nexon EV',
-    type: 'car',
-    fuel_type: 'ev',
+    nickname: 'Tata Nexon EV',
+    manufacturer: 'Tata',
+    model: 'Nexon EV',
+    variant: null,
+    year: null,
+    vehicle_type: VehicleType.CAR,
+    fuel_type: FuelType.ELECTRIC,
     current_odometer: 20000,
     front_tyre_pressure: 34,
     rear_tyre_pressure: 34,
-    tank_capacity: null,
-    battery_capacity: 40.5,
+    tank_capacity: 40.5,
     registration_number: 'DL1CAB0001',
     service_interval_km: 10000,
     service_interval_months: 12,

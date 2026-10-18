@@ -5,6 +5,7 @@
  * before embarking on an Indian highway road trip.
  */
 
+import { FuelType } from '@/constants/fuelTypes';
 import { Sizing, Spacing, Typography } from '@/constants/theme';
 import { TyreIcon } from '@/components/TyreIcon';
 import { useThemeColors } from '@/hooks/useThemeColors';
@@ -71,8 +72,8 @@ export function PreTripChecklistModal({
       },
       {
         category: 'fluids',
-        title: vehicle.fuel_type === 'ev' ? 'EV Battery & Charging' : 'Under the Bonnet & Fluids',
-        icon: vehicle.fuel_type === 'ev' ? '⚡' : '🔧',
+        title: vehicle.fuel_type === FuelType.ELECTRIC ? 'EV Battery & Charging' : 'Under the Bonnet & Fluids',
+        icon: vehicle.fuel_type === FuelType.ELECTRIC ? '⚡' : '🔧',
         items: items.filter((i) => i.category === 'fluids'),
       },
       {
@@ -110,7 +111,7 @@ export function PreTripChecklistModal({
   const handleShare = async () => {
     const lines = [
       `🛣️ DriveLedger Highway Readiness Report`,
-      `Vehicle: ${vehicle.nickname ?? vehicle.name} (${vehicle.registration_number})`,
+      `Vehicle: ${vehicle.nickname} (${vehicle.registration_number})`,
       `Status: ${stats.completed}/${stats.total} Checks Completed (${stats.percent}%)`,
       `Date: ${new Date().toLocaleDateString('en-IN')}`,
       '',
@@ -151,7 +152,7 @@ export function PreTripChecklistModal({
               </Text>
             </View>
             <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
-              {vehicle.nickname ?? vehicle.name} · {vehicle.registration_number}
+              {vehicle.nickname} · {vehicle.registration_number}
             </Text>
           </View>
 

@@ -232,14 +232,15 @@ export default function HomeScreen() {
   const { total: monthlyTotal } = getCurrentMonthTotalSpend(entries, serviceRecords, expenses);
 
   const isBiFuelVehicle = isBiFuel(selectedVehicle.fuel_type as FuelType);
+  const isEV = selectedVehicle.fuel_type === FuelType.ELECTRIC;
   const primaryUnit = (selectedVehicle.fuel_type === FuelType.CNG || isBiFuelVehicle)
     ? 'kg'
-    : selectedVehicle.fuel_type === FuelType.ELECTRIC
+    : isEV
       ? 'kWh'
       : 'L';
   const tankName = isBiFuelVehicle
     ? `Primary ${getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'primary')} Cylinder`
-    : selectedVehicle.fuel_type === FuelType.ELECTRIC
+    : isEV
       ? 'Battery Pack'
       : 'Fuel Tank';
 
@@ -280,14 +281,16 @@ export default function HomeScreen() {
     )
     : null;
 
-  /** Tips for why fuel levels can't be shown yet */
+  /** Tips for why fuel/battery levels can't be shown yet */
   const primaryFuelLevelTip: string | null =
     primaryFuelLevel !== null
       ? null
       : !selectedVehicle.tank_capacity
-        ? `Add your ${isBiFuelVehicle ? 'primary cylinder' : 'tank'} capacity (Edit Vehicle) to see an estimated fuel level.`
+        ? `Add your ${isBiFuelVehicle ? 'primary cylinder' : isEV ? 'battery' : 'tank'} capacity (Edit Vehicle) to see an estimated ${isEV ? 'battery' : 'fuel'} level.`
         : !primaryAvgMileage
-          ? `Log two full-tank fill-ups${isBiFuelVehicle ? ` for ${primarySystemLabel}` : ''} to unlock the estimated fuel level.`
+          ? isEV
+            ? 'Log two charge sessions to unlock the estimated battery level.'
+            : `Log two full-tank fill-ups${isBiFuelVehicle ? ` for ${primarySystemLabel}` : ''} to unlock the estimated fuel level.`
           : null;
 
   const secondaryFuelLevelTip: string | null =
@@ -354,7 +357,7 @@ export default function HomeScreen() {
             <>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
                 <Text style={[styles.mileageLabel, { color: 'rgba(255,255,255,0.85)' }]}>
-                  Last Fill Mileage
+                  {isEV ? 'Last Charge Efficiency' : 'Last Fill Mileage'}
                 </Text>
                 {isBiFuelVehicle && lastEntry && (
                   <View style={{ backgroundColor: 'rgba(255,255,255,0.22)', paddingVertical: 2, paddingHorizontal: 8, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -377,7 +380,8 @@ export default function HomeScreen() {
               </Text>
               {stats.runningAverage && (
                 <Text style={[Typography.bodySmall, { color: 'rgba(255,255,255,0.7)', marginTop: Spacing.xs }]}>
-                  Running avg: {formatMileage(
+                  {isEV ? 'Running efficiency: ' : 'Running avg: '}
+                  {formatMileage(
                     stats.runningAverage.value,
                     MILEAGE_UNIT_LABELS[stats.runningAverage.unit]
                   )}
@@ -388,13 +392,13 @@ export default function HomeScreen() {
             <>
               <Text style={[Typography.h3, { color: '#FFFFFF' }]}>
                 {entries.length === 0
-                  ? 'No fuel entries yet'
+                  ? (isEV ? 'No charge sessions yet' : 'No fuel entries yet')
                   : 'Not enough data yet'}
               </Text>
               <Text style={[Typography.bodySmall, { color: 'rgba(255,255,255,0.7)', marginTop: Spacing.sm }]}>
                 {entries.length === 0
-                  ? 'Fill up and tap + to log your first refill! ⛽'
-                  : 'One more full-tank fill and we can calculate your mileage! 🎉'}
+                  ? (isEV ? 'Charge up and tap + to log your first session! ⚡' : 'Fill up and tap + to log your first refill! ⛽')
+                  : (isEV ? 'Log one more charge session to calculate efficiency! ⚡' : 'One more full-tank fill and we can calculate your mileage! 🎉')}
               </Text>
             </>
           )}
@@ -487,7 +491,9 @@ export default function HomeScreen() {
             </Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Last Fill</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+              {isEV ? 'Last Charge' : 'Last Fill'}
+            </Text>
             <Text style={[Typography.statMedium, { color: colors.text }]}>
               {lastEntry ? formatDisplayDateLong(lastEntry.date) : '—'}
             </Text>
@@ -682,14 +688,14 @@ export default function HomeScreen() {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* ── FAB: Add Fuel (biggest button on screen) ── */}
+      {/* ── FAB: Add Fuel / Add Charge (biggest button on screen) ── */}
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.accent }]}
         activeOpacity={0.85}
         onPress={() => router.push('/add-fuel')}
       >
-        <Text style={styles.fabIcon}>⛽</Text>
-        <Text style={[styles.fabText, { color: '#1A1C1E' }]}>Add Fuel</Text>
+        <Text style={styles.fabIcon}>{isEV ? '⚡' : '⛽'}</Text>
+        <Text style={[styles.fabText, { color: '#1A1C1E' }]}>{isEV ? 'Add Charge' : 'Add Fuel'}</Text>
       </TouchableOpacity>
 
       {/* ── Pre-Trip Highway Checklist Modal (Feature 4.3) ── */}

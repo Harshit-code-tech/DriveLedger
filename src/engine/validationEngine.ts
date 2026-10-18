@@ -45,6 +45,53 @@ export interface ValidationIssue {
   message: string;
 }
 
+// ─── Shared Helpers ─────────────────────────────────────────────────
+
+/**
+ * Validates a date string field, checking it is non-empty, parseable,
+ * and not in the future. Returns any issues found.
+ *
+ * @param date   - ISO date string from user input
+ * @param field  - Name of the field (used in returned issues)
+ */
+function validateDateField(
+  date: string | undefined | null,
+  field: string = 'date'
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+
+  if (!date || !date.trim()) {
+    issues.push({
+      field,
+      severity: 'error',
+      message: 'Date is required.',
+    });
+    return issues;
+  }
+
+  const entryDate = new Date(date);
+  if (isNaN(entryDate.getTime())) {
+    issues.push({
+      field,
+      severity: 'error',
+      message: 'Invalid date format.',
+    });
+    return issues;
+  }
+
+  const today = new Date();
+  today.setHours(23, 59, 59, 999); // end of today
+  if (entryDate > today) {
+    issues.push({
+      field,
+      severity: 'warning',
+      message: 'This date is in the future. Are you sure?',
+    });
+  }
+
+  return issues;
+}
+
 // ─── Fuel Entry Validation ──────────────────────────────────────────
 
 /**
@@ -100,13 +147,14 @@ export function validateFuelEntry(
     }
   }
 
-  // ── Fuel amount validation ──
+  // ── Fuel / Energy amount validation ──
+  const isEV = vehicleFuelType === FuelType.ELECTRIC;
 
   if (input.fuel_amount <= 0) {
     issues.push({
       field: 'fuel_amount',
       severity: 'error',
-      message: 'Fuel amount must be greater than 0.',
+      message: isEV ? 'Energy charged must be greater than 0.' : 'Fuel amount must be greater than 0.',
     });
   }
 
@@ -119,48 +167,24 @@ export function validateFuelEntry(
     issues.push({
       field: 'fuel_amount',
       severity: 'warning',
-      message: `Fuel amount (${input.fuel_amount}) exceeds the tank capacity (${effectiveTankCapacity}). Are you sure?`,
+      message: isEV
+        ? `Energy charged (${input.fuel_amount} kWh) exceeds the battery capacity (${effectiveTankCapacity} kWh). Are you sure?`
+        : `Fuel amount (${input.fuel_amount}) exceeds the tank capacity (${effectiveTankCapacity}). Are you sure?`,
     });
   }
 
-  // ── Price validation ──
+  // ── Price / Rate validation ──
 
   if (input.price_per_unit <= 0) {
     issues.push({
       field: 'price_per_unit',
       severity: 'error',
-      message: 'Price per unit must be greater than 0.',
+      message: isEV ? 'Electricity rate per kWh must be greater than 0.' : 'Price per unit must be greater than 0.',
     });
   }
 
   // ── Date validation ──
-
-  if (!input.date || !input.date.trim()) {
-    issues.push({
-      field: 'date',
-      severity: 'error',
-      message: 'Date is required.',
-    });
-  } else {
-    const entryDate = new Date(input.date);
-    if (isNaN(entryDate.getTime())) {
-      issues.push({
-        field: 'date',
-        severity: 'error',
-        message: 'Invalid date format.',
-      });
-    } else {
-      const today = new Date();
-      today.setHours(23, 59, 59, 999); // End of today
-      if (entryDate > today) {
-        issues.push({
-          field: 'date',
-          severity: 'warning',
-          message: 'This date is in the future. Are you sure?',
-        });
-      }
-    }
-  }
+  issues.push(...validateDateField(input.date, 'date'));
 
   // ── EV specific validation ──
   if (vehicleFuelType === FuelType.ELECTRIC) {
@@ -294,32 +318,8 @@ export function validateExpense(input: {
     });
   }
 
-  if (!input.date || !input.date.trim()) {
-    issues.push({
-      field: 'date',
-      severity: 'error',
-      message: 'Date is required.',
-    });
-  } else {
-    const entryDate = new Date(input.date);
-    if (isNaN(entryDate.getTime())) {
-      issues.push({
-        field: 'date',
-        severity: 'error',
-        message: 'Invalid date format.',
-      });
-    } else {
-      const today = new Date();
-      today.setHours(23, 59, 59, 999);
-      if (entryDate > today) {
-        issues.push({
-          field: 'date',
-          severity: 'warning',
-          message: 'This date is in the future. Are you sure?',
-        });
-      }
-    }
-  }
+  // ── Date validation ──
+  issues.push(...validateDateField(input.date, 'date'));
 
   const hasErrors = issues.some((i) => i.severity === 'error');
   return { isValid: !hasErrors, issues };

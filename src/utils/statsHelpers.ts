@@ -10,6 +10,7 @@
 import type { FuelEntry } from '@/types/fuel';
 import type { ServiceRecord } from '@/types/service';
 import type { Expense } from '@/types/expense';
+import { EXPENSE_CHART_BUCKET } from '@/constants/expenseCategories';
 
 // ─── Fuel Level Estimation ───────────────────────────────────────────
 
@@ -249,40 +250,47 @@ export interface CostCategorySlice {
 /**
  * Aggregates fuel, service, and categorized expenses into 6 clean buckets
  * suitable for the Donut Chart and legend display.
+ *
+ * Category-to-bucket mapping is driven by EXPENSE_CHART_BUCKET in
+ * expenseCategories.ts. To add a new category, update that file only.
  */
 export function aggregateCostBreakdown(
   fuelEntries: FuelEntry[],
   serviceRecords: ServiceRecord[],
-  expenses: Expense[]
+  expenses: Expense[],
+  /** When true, relabels the fuel slice as "Charging" with ⚡ icon for electric vehicles. */
+  isEV: boolean = false,
 ): { slices: CostCategorySlice[]; totalCost: number } {
   const fuelCost = fuelEntries.reduce((s, e) => s + (e.total_cost || 0), 0);
   const serviceCost = serviceRecords.reduce((s, r) => s + (r.cost || 0), 0);
 
+  // Accumulate expenses into chart buckets using the typed constant map.
+  // Unknown category ids fall through to 'other'.
   let insuranceCost = 0;
   let repairTyresCost = 0;
   let tollsDailyCost = 0;
   let otherCost = 0;
 
   for (const exp of expenses) {
-    const cat = (exp.category || '').toLowerCase();
-    if (cat === 'insurance' || cat === 'fine' || cat.includes('challan') || cat.includes('tax')) {
-      insuranceCost += exp.amount || 0;
-    } else if (cat === 'repair' || cat === 'tyres' || cat === 'tire' || cat === 'tyre') {
-      repairTyresCost += exp.amount || 0;
-    } else if (cat === 'toll' || cat === 'parking' || cat === 'cleaning' || cat === 'accessories') {
-      tollsDailyCost += exp.amount || 0;
-    } else {
-      otherCost += exp.amount || 0;
+    const catId = (exp.category || '').toLowerCase().trim();
+    const bucket = EXPENSE_CHART_BUCKET[catId] ?? 'other';
+    const amount = exp.amount || 0;
+
+    switch (bucket) {
+      case 'insurance': insuranceCost += amount; break;
+      case 'repairs':   repairTyresCost += amount; break;
+      case 'daily':     tollsDailyCost += amount; break;
+      default:          otherCost += amount; break;
     }
   }
 
   const rawSlices: CostCategorySlice[] = [
-    { key: 'fuel', label: 'Fuel', icon: '⛽', amount: fuelCost, color: '#3B82F6' },
-    { key: 'service', label: 'Service & Maintenance', icon: '🔧', amount: serviceCost, color: '#10B981' },
-    { key: 'insurance', label: 'Insurance & Taxes', icon: '🛡️', amount: insuranceCost, color: '#8B5CF6' },
-    { key: 'repairs', label: 'Repairs & Tyres', icon: '🛠️', amount: repairTyresCost, color: '#F59E0B' },
-    { key: 'daily', label: 'Tolls & Daily Care', icon: '🛣️', amount: tollsDailyCost, color: '#EC4899' },
-    { key: 'other', label: 'Other Expenses', icon: '📝', amount: otherCost, color: '#64748B' },
+    { key: 'fuel',      label: isEV ? 'Charging' : 'Fuel', icon: isEV ? '⚡' : '⛽', amount: fuelCost, color: '#3B82F6' },
+    { key: 'service',   label: 'Service & Maintenance',icon: '🔧', amount: serviceCost,     color: '#10B981' },
+    { key: 'insurance', label: 'Insurance & Taxes',    icon: '🛡️', amount: insuranceCost,   color: '#8B5CF6' },
+    { key: 'repairs',   label: 'Repairs & Tyres',      icon: '🛠️', amount: repairTyresCost, color: '#F59E0B' },
+    { key: 'daily',     label: 'Tolls & Daily Care',   icon: '🛣️', amount: tollsDailyCost,  color: '#EC4899' },
+    { key: 'other',     label: 'Other Expenses',        icon: '📝', amount: otherCost,       color: '#64748B' },
   ];
 
   const slices = rawSlices.filter((s) => s.amount > 0);

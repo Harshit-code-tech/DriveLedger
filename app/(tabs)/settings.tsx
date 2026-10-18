@@ -20,6 +20,8 @@ import {
 } from '@/engine/backupEngine';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { checkForAppUpdate, showDataSafetyGuide } from '@/services/updateChecker';
+import { OptionPicker } from '@/components/OptionPicker';
+import { SettingsRow } from '@/components/SettingsRow';
 import {
   CURRENCY_OPTIONS, DISTANCE_OPTIONS, FUEL_VOLUME_OPTIONS, PRESSURE_OPTIONS,
   usePreferencesStore,
@@ -35,132 +37,22 @@ import {
   Alert,
   Modal,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 
-// ─── OptionPicker Modal ────────────────────────────────────────────────────
-// Reusable bottom-sheet that shows a list of options for a preference.
 
-interface OptionPickerProps<T extends string> {
-  visible: boolean;
-  title: string;
-  options: { value: T; label: string; symbol?: string }[];
-  selected: T;
-  onSelect: (value: T) => void;
-  onClose: () => void;
-  colors: ReturnType<typeof useThemeColors>;
-}
+// OptionPicker — see src/components/OptionPicker.tsx
+// SettingsRow  — see src/components/SettingsRow.tsx
 
-function OptionPicker<T extends string>({
-  visible, title, options, selected, onSelect, onClose, colors,
-}: OptionPickerProps<T>) {
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={[pickerStyles.overlay, { backgroundColor: colors.overlay }]}>
-        <View style={[pickerStyles.sheet, { backgroundColor: colors.background }]}>
-          <Text style={[Typography.h3, { color: colors.text, marginBottom: Spacing.lg }]}>
-            {title}
-          </Text>
-          {options.map((opt) => {
-            const isSelected = opt.value === selected;
-            return (
-              <TouchableOpacity
-                key={opt.value}
-                style={[
-                  pickerStyles.option,
-                  {
-                    backgroundColor: isSelected ? colors.primaryLight ?? colors.surface : colors.surface,
-                    borderColor: isSelected ? colors.primary : colors.border,
-                  },
-                ]}
-                onPress={() => { onSelect(opt.value); onClose(); }}
-                activeOpacity={0.7}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={[Typography.body, { color: isSelected ? colors.primary : colors.text, fontWeight: isSelected ? '700' : '400' }]}>
-                    {opt.label}
-                  </Text>
-                  {opt.symbol && (
-                    <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
-                      Symbol: {opt.symbol}
-                    </Text>
-                  )}
-                </View>
-                {isSelected && (
-                  <Text style={{ color: colors.primary, fontSize: 20, fontWeight: '700' }}>✓</Text>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-          <TouchableOpacity
-            style={[pickerStyles.cancelBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            onPress={onClose}
-            activeOpacity={0.7}
-          >
-            <Text style={[Typography.button, { color: colors.textSecondary }]}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-const pickerStyles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
-  sheet: {
-    borderTopLeftRadius: Sizing.radiusXl, borderTopRightRadius: Sizing.radiusXl,
-    padding: Spacing.xxl, paddingBottom: Spacing.section, maxHeight: '75%',
-  },
-  option: {
-    flexDirection: 'row', alignItems: 'center',
-    borderRadius: Sizing.radiusMd, borderWidth: 1.5,
-    padding: Spacing.lg, marginBottom: Spacing.sm,
-    minHeight: Sizing.touchTarget,
-  },
-  cancelBtn: {
-    borderRadius: Sizing.radiusMd, borderWidth: 1,
-    height: Sizing.primaryButton, alignItems: 'center', justifyContent: 'center',
-    marginTop: Spacing.sm,
-  },
-});
-
-// ─── SettingsRow ──────────────────────────────────────────────────────────
-
-interface SettingsRowProps {
-  emoji: string;
-  title: string;
-  subtitle?: string;
-  onPress?: () => void;
-  colors: ReturnType<typeof useThemeColors>;
-  danger?: boolean;
-  rightText?: string;
-}
-
-function SettingsRow({ emoji, title, subtitle, onPress, colors, danger, rightText }: SettingsRowProps) {
-  return (
-    <TouchableOpacity
-      style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <Text style={styles.rowEmoji}>{emoji}</Text>
-      <View style={styles.rowText}>
-        <Text style={[Typography.body, { color: danger ? colors.danger : colors.text }]}>{title}</Text>
-        {subtitle && (
-          <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>{subtitle}</Text>
-        )}
-      </View>
-      <Text style={{ color: rightText ? colors.primary : colors.textTertiary, fontSize: rightText ? 13 : 18, fontWeight: rightText ? '700' : '400' }}>
-        {rightText ?? '›'}
-      </Text>
-    </TouchableOpacity>
-  );
-}
+/** Sentinel value for "no explicit default — use the first-added vehicle". */
+const FIRST_VEHICLE_OPTION = '__first__';
 
 // ─── Main Screen ──────────────────────────────────────────────────────────
+
 
 export default function SettingsScreen() {
   const colors = useThemeColors();
@@ -216,7 +108,7 @@ export default function SettingsScreen() {
 
   // ── Vehicle picker options ──
   const vehiclePickerOptions = [
-    { value: '__first__', label: 'First Added (auto)' },
+    { value: FIRST_VEHICLE_OPTION, label: 'First Added (auto)' },
     ...vehicles.map((v) => ({ value: v.id, label: `${v.nickname} · ${v.registration_number}` })),
   ];
 
@@ -238,7 +130,6 @@ export default function SettingsScreen() {
   const handleExportCsv = () => {
     const result = createBackup();
     if (result.success && result.backup) {
-      const { Share } = require('react-native');
       Share.share({ message: buildLedgerCsv(result.backup.data), title: 'DriveLedger Ledger (CSV)' })
         .catch(() => { /* user cancelled */ });
     } else {
@@ -620,52 +511,17 @@ export default function SettingsScreen() {
         colors={colors}
       />
 
-      {/* Vehicle picker — custom because it uses vehicle IDs not string literals */}
-      <Modal visible={pickerVehicle} animationType="slide" transparent onRequestClose={() => setPickerVehicle(false)}>
-        <View style={[pickerStyles.overlay, { backgroundColor: colors.overlay }]}>
-          <View style={[pickerStyles.sheet, { backgroundColor: colors.background }]}>
-            <Text style={[Typography.h3, { color: colors.text, marginBottom: Spacing.lg }]}>
-              Default Vehicle
-            </Text>
-            {vehiclePickerOptions.map((opt) => {
-              const isSelected = opt.value === '__first__'
-                ? defaultVehicleId === null
-                : defaultVehicleId === opt.value;
-              return (
-                <TouchableOpacity
-                  key={opt.value}
-                  style={[
-                    pickerStyles.option,
-                    {
-                      backgroundColor: isSelected ? colors.primaryLight ?? colors.surface : colors.surface,
-                      borderColor: isSelected ? colors.primary : colors.border,
-                    },
-                  ]}
-                  onPress={() => {
-                    setDefaultVehicleId(opt.value === '__first__' ? null : opt.value);
-                    setPickerVehicle(false);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[Typography.body, { color: isSelected ? colors.primary : colors.text, fontWeight: isSelected ? '700' : '400', flex: 1 }]}>
-                    {opt.label}
-                  </Text>
-                  {isSelected && (
-                    <Text style={{ color: colors.primary, fontSize: 20, fontWeight: '700' }}>✓</Text>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-            <TouchableOpacity
-              style={[pickerStyles.cancelBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={() => setPickerVehicle(false)}
-              activeOpacity={0.7}
-            >
-              <Text style={[Typography.button, { color: colors.textSecondary }]}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Vehicle picker — vehicle IDs are plain strings, so the shared OptionPicker works;
+          the FIRST_VEHICLE_OPTION sentinel maps to a null preference. */}
+      <OptionPicker<string>
+        visible={pickerVehicle}
+        title="Default Vehicle"
+        options={vehiclePickerOptions}
+        selected={defaultVehicleId ?? FIRST_VEHICLE_OPTION}
+        onSelect={(id) => setDefaultVehicleId(id === FIRST_VEHICLE_OPTION ? null : id)}
+        onClose={() => setPickerVehicle(false)}
+        colors={colors}
+      />
 
       {/* ── Checking for Updates Loading Modal ── */}
       <Modal
@@ -688,7 +544,7 @@ export default function SettingsScreen() {
             <View style={[styles.checkingIconContainer, { backgroundColor: colors.primary + '15' }]}>
               <ActivityIndicator size="large" color={colors.primary} />
             </View>
-            <Text style={[styles.checkingModalTitle, { color: colors.textPrimary }]}>
+            <Text style={[styles.checkingModalTitle, { color: colors.text }]}>
               Checking for Updates
             </Text>
             <Text style={[styles.checkingModalSubtitle, { color: colors.textSecondary }]}>

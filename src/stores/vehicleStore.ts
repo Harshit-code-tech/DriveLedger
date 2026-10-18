@@ -16,10 +16,12 @@
  */
 
 import { create } from 'zustand';
+import { Platform } from 'react-native';
 import type { Vehicle, CreateVehicleInput, UpdateVehicleInput } from '@/types/vehicle';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import { getPreferences } from '@/stores/preferencesStore';
 import { syncWidgetState } from '@/widgets/widgetDataService';
+import { storeRegistry } from '@/stores/storeRegistry';
 
 interface VehicleState {
   /** All active (non-archived) vehicles */
@@ -53,6 +55,10 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
   error: null,
 
   loadVehicles: () => {
+    // Register this action with the cross-store registry on every call.
+    // Safe to call multiple times — the registry overwrites with the same fn.
+    storeRegistry.registerRefreshVehicles(() => useVehicleStore.getState().loadVehicles());
+
     try {
       const vehicles = vehicleRepo.getActiveVehicles();
       const currentSelected = get().selectedVehicle;
@@ -77,7 +83,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
   selectVehicle: (vehicleId: string) => {
     const vehicle = get().vehicles.find((v) => v.id === vehicleId) ?? null;
     set({ selectedVehicle: vehicle });
-    syncWidgetState();
+    if (Platform.OS === 'android') syncWidgetState();
   },
 
   addVehicle: (input: CreateVehicleInput) => {
@@ -88,7 +94,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
     const selected = get().selectedVehicle ?? newVehicle;
 
     set({ vehicles, selectedVehicle: selected });
-    syncWidgetState();
+    if (Platform.OS === 'android') syncWidgetState();
     return newVehicle;
   },
 
@@ -99,7 +105,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
       const currentSelected = get().selectedVehicle;
       const selected = currentSelected?.id === id ? updated : currentSelected;
       set({ vehicles, selectedVehicle: selected });
-      syncWidgetState();
+      if (Platform.OS === 'android') syncWidgetState();
     }
     return updated;
   },
@@ -115,7 +121,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
       : currentSelected;
 
     set({ vehicles, selectedVehicle: selected });
-    syncWidgetState();
+    if (Platform.OS === 'android') syncWidgetState();
   },
 
   restoreVehicle: (id: string) => {

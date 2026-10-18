@@ -2,83 +2,145 @@
 import React from 'react';
 import { FlexWidget, TextWidget } from 'react-native-android-widget';
 
+// ─── Data Shape ──────────────────────────────────────────────────────────────
+
 export interface VehicleGlanceWidgetData {
+  // Identity
   vehicleName: string;
   regNumber: string;
+  fuelType: string;           // 'petrol' | 'diesel' | 'cng' | 'ev' | 'hybrid' etc.
+
+  // Odometer & Mileage
   odometer: number;
-  fuelEfficiency: string; // e.g. "16.8 km/L" or "22.4 km/kg"
-  serviceText: string;    // e.g. "Due in 420 km" or "Overdue (150 km)"
+  lastFillMileage: string;    // e.g. "16.4 km/L" — most recent calculated mileage
+  runningAvgMileage: string;  // e.g. "Avg 15.2 km/L"
+  lastFillDate: string;       // e.g. "14 Oct" — date of last fill-up
+
+  // Spend
+  monthlySpend: string;       // e.g. "₹4,820 this month"
+
+  // Tyre Pressure
+  tyrePressFront: number | null;  // PSI, null if not set
+  tyrePressRear: number | null;   // PSI, null if not set
+
+  // Service
+  serviceText: string;
   serviceUrgency: 'ok' | 'due_soon' | 'overdue';
-  pucText: string;        // e.g. "PUC: 18 Days Left" or "PUC: Valid"
-  statusColor: string;    // '#10B981' | '#F59E0B' | '#EF4444'
+
+  // Documents
+  pucText: string;
+  pucUrgency: 'ok' | 'due_soon' | 'expired';
+  insuranceText: string;
+  insuranceUrgency: 'ok' | 'due_soon' | 'expired';
+
+  // Overall health dot
+  statusColor: `#${string}`;  // '#10B981' | '#F59E0B' | '#EF4444'
 }
 
 export const DEFAULT_WIDGET_DATA: VehicleGlanceWidgetData = {
   vehicleName: 'DriveLedger',
-  regNumber: 'Vehicle Tracker',
+  regNumber: '—',
+  fuelType: 'petrol',
   odometer: 0,
-  fuelEfficiency: 'No fill-ups yet',
+  lastFillMileage: '— km/L',
+  runningAvgMileage: 'No fill-ups yet',
+  lastFillDate: '—',
+  monthlySpend: '₹0 this month',
+  tyrePressFront: null,
+  tyrePressRear: null,
   serviceText: 'Service OK',
   serviceUrgency: 'ok',
-  pucText: 'PUC: Active',
+  pucText: 'PUC: Valid',
+  pucUrgency: 'ok',
+  insuranceText: 'Insurance: OK',
+  insuranceUrgency: 'ok',
   statusColor: '#10B981',
 };
 
+// ─── Colour Helpers ───────────────────────────────────────────────────────────
+
+const COLORS = {
+  bg:           '#0F172A',
+  surface:      '#162032',
+  surfaceMid:   '#1E293B',
+  border:       '#334155',
+  text:         '#F8FAFC',
+  textSub:      '#94A3B8',
+  textDim:      '#64748B',
+  blue:         '#3B82F6',
+  green:        '#10B981',
+  greenBg:      '#064E3B',
+  greenBorder:  '#059669',
+  greenText:    '#6EE7B7',
+  amber:        '#F59E0B',
+  amberBg:      '#451A03',
+  amberBorder:  '#D97706',
+  amberText:    '#FCD34D',
+  red:          '#EF4444',
+  redBg:        '#450A0A',
+  redBorder:    '#DC2626',
+  redText:      '#FCA5A5',
+  accent:       '#818CF8',  // indigo
+} as const;
+
+function urgencyColors(urgency: 'ok' | 'due_soon' | 'overdue' | 'expired') {
+  if (urgency === 'overdue' || urgency === 'expired') {
+    return { bg: COLORS.redBg, border: COLORS.redBorder, text: COLORS.redText };
+  }
+  if (urgency === 'due_soon') {
+    return { bg: COLORS.amberBg, border: COLORS.amberBorder, text: COLORS.amberText };
+  }
+  return { bg: COLORS.greenBg, border: COLORS.greenBorder, text: COLORS.greenText };
+}
+
+function fuelIcon(fuelType: string): string {
+  switch (fuelType) {
+    case 'electric': return '⚡';
+    case 'cng':
+    case 'lpg':      return '⛽';
+    default:         return '⛽';
+  }
+}
+
+// ─── Widget Component ─────────────────────────────────────────────────────────
+
 /**
- * VehicleGlanceWidget (4x2 Android Home Screen Widget)
+ * VehicleGlanceWidget — 4×2 Android Home Screen Widget
  *
- * Built with react-native-android-widget for native RemoteViews rendering.
- * Provides glanceable vehicle health, current odometer, efficiency,
- * and 1-tap quick action buttons directly on the Android home screen.
+ * Layout (top → bottom):
+ *   Row 1 — Header: vehicle name | reg chip | status dot
+ *   Row 2 — 3 stat pills: Odometer · Last Mileage · Monthly Spend
+ *   Row 3 — Tyre pressure row (hidden if not set) OR service + doc alert pills
+ *   Row 4 — Alert pills: Service | PUC | Insurance
+ *   Row 5 — Action buttons: + Log Fuel | + Add Service
  */
 export function VehicleGlanceWidget(props: VehicleGlanceWidgetData) {
-  const vehicleName = props.vehicleName || DEFAULT_WIDGET_DATA.vehicleName;
-  const regNumber = props.regNumber || DEFAULT_WIDGET_DATA.regNumber;
-  const odometer = props.odometer ?? DEFAULT_WIDGET_DATA.odometer;
-  const fuelEfficiency = props.fuelEfficiency || DEFAULT_WIDGET_DATA.fuelEfficiency;
-  const serviceText = props.serviceText || DEFAULT_WIDGET_DATA.serviceText;
-  const serviceUrgency = props.serviceUrgency || DEFAULT_WIDGET_DATA.serviceUrgency;
-  const pucText = props.pucText || DEFAULT_WIDGET_DATA.pucText;
-  const statusColor = props.statusColor || DEFAULT_WIDGET_DATA.statusColor;
+  const d: VehicleGlanceWidgetData = {
+    ...DEFAULT_WIDGET_DATA,
+    ...props,
+  };
 
-  const serviceBg =
-    serviceUrgency === 'overdue'
-      ? '#450A0A'
-      : serviceUrgency === 'due_soon'
-        ? '#451A03'
-        : '#064E3B';
-
-  const serviceBorder =
-    serviceUrgency === 'overdue'
-      ? '#DC2626'
-      : serviceUrgency === 'due_soon'
-        ? '#D97706'
-        : '#059669';
-
-  const serviceTextColor =
-    serviceUrgency === 'overdue'
-      ? '#FCA5A5'
-      : serviceUrgency === 'due_soon'
-        ? '#FCD34D'
-        : '#6EE7B7';
-
-  const odoFormatted = Number(odometer || 0).toLocaleString('en-IN');
+  const odoFormatted = Number(d.odometer || 0).toLocaleString('en-IN');
+  const svcColors  = urgencyColors(d.serviceUrgency);
+  const pucColors  = urgencyColors(d.pucUrgency);
+  const insColors  = urgencyColors(d.insuranceUrgency);
+  const hasTyres   = d.tyrePressFront !== null || d.tyrePressRear !== null;
 
   return (
     <FlexWidget
       style={{
         height: 'match_parent',
         width: 'match_parent',
-        backgroundColor: '#0F172A',
-        borderRadius: 22,
-        padding: 14,
+        backgroundColor: COLORS.bg,
+        borderRadius: 20,
+        padding: 12,
         justifyContent: 'space-between',
-        borderColor: '#1E293B',
+        borderColor: COLORS.border,
         borderWidth: 1,
       }}
       clickAction="OPEN_APP"
     >
-      {/* ── Top Header Row ── */}
+      {/* ── Row 1: Header ── */}
       <FlexWidget
         style={{
           flexDirection: 'row',
@@ -87,184 +149,318 @@ export function VehicleGlanceWidget(props: VehicleGlanceWidgetData) {
           width: 'match_parent',
         }}
       >
-        <TextWidget
-          text={vehicleName}
-          style={{
-            fontSize: 16,
-            fontWeight: 'bold',
-            color: '#FFFFFF',
-          }}
-          truncate="END"
-          maxLines={1}
-        />
-
-        <FlexWidget
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            flexGap: 8,
-          }}
-        >
-          <FlexWidget
-            style={{
-              backgroundColor: '#1E293B',
-              paddingHorizontal: 8,
-              paddingVertical: 2,
-              borderRadius: 6,
-              borderColor: '#334155',
-              borderWidth: 1,
-            }}
-          >
-            <TextWidget
-              text={regNumber}
-              style={{
-                fontSize: 10,
-                fontWeight: 'bold',
-                color: '#E2E8F0',
-                letterSpacing: 0.5,
-              }}
-              truncate="END"
-              maxLines={1}
-            />
-          </FlexWidget>
-
-          {/* Status Indicator Dot */}
-          <FlexWidget
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: 4,
-              backgroundColor: statusColor,
-            }}
-          />
-        </FlexWidget>
-      </FlexWidget>
-
-      {/* ── Center Glanceable Cards ── */}
-      <FlexWidget
-        style={{
-          flexDirection: 'row',
-          alignItems: 'stretch',
-          width: 'match_parent',
-          flexGap: 8,
-          marginVertical: 4,
-        }}
-      >
-        {/* Left Card: Odometer & Mileage */}
-        <FlexWidget
-          style={{
-            flex: 1,
-            backgroundColor: '#162032',
-            borderRadius: 12,
-            padding: 8,
-            justifyContent: 'center',
-          }}
-        >
-          <FlexWidget style={{ flexDirection: 'row', alignItems: 'flex-end', flexGap: 3 }}>
-            <TextWidget
-              text={odoFormatted}
-              style={{
-                fontSize: 18,
-                fontWeight: 'bold',
-                color: '#FFFFFF',
-              }}
-              truncate="END"
-              maxLines={1}
-            />
-            <TextWidget
-              text="km"
-              style={{
-                fontSize: 10,
-                color: '#94A3B8',
-                marginBottom: 2,
-              }}
-            />
-          </FlexWidget>
-
+        {/* Left: fuel icon + vehicle name */}
+        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 5 }}>
           <TextWidget
-            text={fuelEfficiency}
-            style={{
-              fontSize: 10,
-              color: '#60A5FA',
-              marginTop: 2,
-              fontWeight: '600',
-            }}
+            text={fuelIcon(d.fuelType)}
+            style={{ fontSize: 13 }}
+          />
+          <TextWidget
+            text={d.vehicleName}
+            style={{ fontSize: 15, fontWeight: 'bold', color: COLORS.text }}
             truncate="END"
             maxLines={1}
           />
         </FlexWidget>
 
-        {/* Right Column: Service & PUC Alerts */}
-        <FlexWidget
-          style={{
-            flex: 1,
-            justifyContent: 'space-between',
-            flexGap: 4,
-          }}
-        >
-          {/* Service Due alert pill */}
+        {/* Right: reg chip + last fill date + status dot */}
+        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 6 }}>
+          {/* Last fill label */}
+          {d.lastFillDate !== '—' && (
+            <TextWidget
+              text={d.lastFillDate}
+              style={{ fontSize: 9, color: COLORS.textDim }}
+            />
+          )}
+
+          {/* Reg number chip */}
           <FlexWidget
             style={{
-              backgroundColor: serviceBg,
-              borderColor: serviceBorder,
+              backgroundColor: COLORS.surfaceMid,
+              paddingHorizontal: 7,
+              paddingVertical: 2,
+              borderRadius: 6,
+              borderColor: COLORS.border,
               borderWidth: 1,
-              borderRadius: 8,
-              paddingHorizontal: 8,
-              paddingVertical: 4,
-              justifyContent: 'center',
             }}
           >
             <TextWidget
-              text={serviceText}
-              style={{
-                fontSize: 10,
-                fontWeight: 'bold',
-                color: serviceTextColor,
-              }}
+              text={d.regNumber}
+              style={{ fontSize: 9, fontWeight: 'bold', color: '#CBD5E1', letterSpacing: 0.5 }}
               truncate="END"
               maxLines={1}
             />
           </FlexWidget>
 
-          {/* PUC / Compliance pill */}
+          {/* Health dot */}
           <FlexWidget
             style={{
-              backgroundColor: '#162032',
-              borderColor: '#334155',
-              borderWidth: 1,
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: d.statusColor,
+            }}
+          />
+        </FlexWidget>
+      </FlexWidget>
+
+      {/* ── Row 2: 3 Stat Pills ── */}
+      <FlexWidget
+        style={{
+          flexDirection: 'row',
+          width: 'match_parent',
+          flexGap: 6,
+          marginTop: 6,
+        }}
+      >
+        {/* Odometer */}
+        <FlexWidget
+          style={{
+            flex: 1,
+            backgroundColor: COLORS.surface,
+            borderRadius: 10,
+            padding: 8,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderColor: COLORS.border,
+            borderWidth: 1,
+          }}
+        >
+          <TextWidget
+            text={odoFormatted}
+            style={{ fontSize: 16, fontWeight: 'bold', color: COLORS.text }}
+            truncate="END"
+            maxLines={1}
+          />
+          <TextWidget
+            text="km  odo"
+            style={{ fontSize: 8, color: COLORS.textDim, marginTop: 1 }}
+          />
+        </FlexWidget>
+
+        {/* Last Fill Mileage */}
+        <FlexWidget
+          style={{
+            flex: 1,
+            backgroundColor: COLORS.surface,
+            borderRadius: 10,
+            padding: 8,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderColor: COLORS.border,
+            borderWidth: 1,
+          }}
+        >
+          <TextWidget
+            text={d.lastFillMileage}
+            style={{ fontSize: 13, fontWeight: 'bold', color: '#60A5FA' }}
+            truncate="END"
+            maxLines={1}
+          />
+          <TextWidget
+            text={d.runningAvgMileage}
+            style={{ fontSize: 8, color: COLORS.textDim, marginTop: 1 }}
+            truncate="END"
+            maxLines={1}
+          />
+        </FlexWidget>
+
+        {/* Monthly Spend */}
+        <FlexWidget
+          style={{
+            flex: 1,
+            backgroundColor: COLORS.surface,
+            borderRadius: 10,
+            padding: 8,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderColor: COLORS.border,
+            borderWidth: 1,
+          }}
+        >
+          <TextWidget
+            text={d.monthlySpend.split(' ')[0]}
+            style={{ fontSize: 13, fontWeight: 'bold', color: '#FBBF24' }}
+            truncate="END"
+            maxLines={1}
+          />
+          <TextWidget
+            text="this month"
+            style={{ fontSize: 8, color: COLORS.textDim, marginTop: 1 }}
+          />
+        </FlexWidget>
+      </FlexWidget>
+
+      {/* ── Row 3: Tyre Pressure OR Alert Row ── */}
+      {hasTyres ? (
+        <FlexWidget
+          style={{
+            flexDirection: 'row',
+            width: 'match_parent',
+            flexGap: 6,
+            marginTop: 5,
+          }}
+        >
+          {/* Front tyre */}
+          <FlexWidget
+            style={{
+              flex: 1,
+              backgroundColor: COLORS.surfaceMid,
               borderRadius: 8,
               paddingHorizontal: 8,
-              paddingVertical: 4,
-              justifyContent: 'center',
+              paddingVertical: 5,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderColor: COLORS.border,
+              borderWidth: 1,
             }}
           >
             <TextWidget
-              text={pucText}
-              style={{
-                fontSize: 10,
-                fontWeight: '600',
-                color: '#CBD5E1',
-              }}
+              text="F Tyre"
+              style={{ fontSize: 9, color: COLORS.textSub }}
+            />
+            <TextWidget
+              text={d.tyrePressFront !== null ? `${d.tyrePressFront} PSI` : '— PSI'}
+              style={{ fontSize: 11, fontWeight: 'bold', color: COLORS.text }}
+            />
+          </FlexWidget>
+
+          {/* Rear tyre */}
+          <FlexWidget
+            style={{
+              flex: 1,
+              backgroundColor: COLORS.surfaceMid,
+              borderRadius: 8,
+              paddingHorizontal: 8,
+              paddingVertical: 5,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderColor: COLORS.border,
+              borderWidth: 1,
+            }}
+          >
+            <TextWidget
+              text="R Tyre"
+              style={{ fontSize: 9, color: COLORS.textSub }}
+            />
+            <TextWidget
+              text={d.tyrePressRear !== null ? `${d.tyrePressRear} PSI` : '— PSI'}
+              style={{ fontSize: 11, fontWeight: 'bold', color: COLORS.text }}
+            />
+          </FlexWidget>
+
+          {/* Service pill condensed */}
+          <FlexWidget
+            style={{
+              flex: 1,
+              backgroundColor: svcColors.bg,
+              borderRadius: 8,
+              paddingHorizontal: 8,
+              paddingVertical: 5,
+              justifyContent: 'center',
+              alignItems: 'center',
+              borderColor: svcColors.border,
+              borderWidth: 1,
+            }}
+          >
+            <TextWidget
+              text={d.serviceText}
+              style={{ fontSize: 9, fontWeight: 'bold', color: svcColors.text }}
               truncate="END"
               maxLines={1}
             />
           </FlexWidget>
         </FlexWidget>
-      </FlexWidget>
+      ) : (
+        /* No tyre data — show service full width */
+        <FlexWidget
+          style={{
+            width: 'match_parent',
+            backgroundColor: svcColors.bg,
+            borderRadius: 8,
+            paddingHorizontal: 10,
+            paddingVertical: 5,
+            justifyContent: 'center',
+            borderColor: svcColors.border,
+            borderWidth: 1,
+            marginTop: 5,
+          }}
+        >
+          <TextWidget
+            text={'🔧 ' + d.serviceText}
+            style={{ fontSize: 10, fontWeight: 'bold', color: svcColors.text }}
+            truncate="END"
+            maxLines={1}
+          />
+        </FlexWidget>
+      )}
 
-      {/* ── Bottom Action Row ── */}
+      {/* ── Row 4: PUC + Insurance pills ── */}
       <FlexWidget
         style={{
           flexDirection: 'row',
           width: 'match_parent',
-          flexGap: 8,
+          flexGap: 6,
+          marginTop: 5,
+        }}
+      >
+        <FlexWidget
+          style={{
+            flex: 1,
+            backgroundColor: pucColors.bg,
+            borderRadius: 8,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            justifyContent: 'center',
+            borderColor: pucColors.border,
+            borderWidth: 1,
+          }}
+        >
+          <TextWidget
+            text={d.pucText}
+            style={{ fontSize: 9, fontWeight: '600', color: pucColors.text }}
+            truncate="END"
+            maxLines={1}
+          />
+        </FlexWidget>
+
+        <FlexWidget
+          style={{
+            flex: 1,
+            backgroundColor: insColors.bg,
+            borderRadius: 8,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            justifyContent: 'center',
+            borderColor: insColors.border,
+            borderWidth: 1,
+          }}
+        >
+          <TextWidget
+            text={d.insuranceText}
+            style={{ fontSize: 9, fontWeight: '600', color: insColors.text }}
+            truncate="END"
+            maxLines={1}
+          />
+        </FlexWidget>
+      </FlexWidget>
+
+      {/* ── Row 5: Quick Action Buttons ── */}
+      <FlexWidget
+        style={{
+          flexDirection: 'row',
+          width: 'match_parent',
+          flexGap: 6,
+          marginTop: 6,
         }}
       >
         {/* + Log Fuel */}
         <FlexWidget
           style={{
-            flex: 1,
-            backgroundColor: '#2563EB',
+            flex: 3,
+            backgroundColor: COLORS.blue,
             borderRadius: 10,
             paddingVertical: 7,
             alignItems: 'center',
@@ -274,35 +470,50 @@ export function VehicleGlanceWidget(props: VehicleGlanceWidgetData) {
           clickActionData={{ uri: 'driveledger://add-fuel' }}
         >
           <TextWidget
-            text="+ Log Fuel"
-            style={{
-              fontSize: 12,
-              fontWeight: 'bold',
-              color: '#FFFFFF',
-            }}
+            text="⛽  Log Fuel"
+            style={{ fontSize: 11, fontWeight: 'bold', color: '#FFFFFF' }}
           />
         </FlexWidget>
 
-        {/* Trip Checklist */}
+        {/* + Service */}
         <FlexWidget
           style={{
-            flex: 1,
-            backgroundColor: '#334155',
+            flex: 2,
+            backgroundColor: COLORS.surfaceMid,
             borderRadius: 10,
             paddingVertical: 7,
             alignItems: 'center',
             justifyContent: 'center',
+            borderColor: COLORS.border,
+            borderWidth: 1,
           }}
           clickAction="OPEN_URI"
-          clickActionData={{ uri: 'driveledger://checklist' }}
+          clickActionData={{ uri: 'driveledger://add-service' }}
         >
           <TextWidget
-            text="Trip Checklist"
-            style={{
-              fontSize: 12,
-              fontWeight: 'bold',
-              color: '#F8FAFC',
-            }}
+            text="🔧  Service"
+            style={{ fontSize: 11, fontWeight: 'bold', color: '#F8FAFC' }}
+          />
+        </FlexWidget>
+
+        {/* + Expense */}
+        <FlexWidget
+          style={{
+            flex: 2,
+            backgroundColor: COLORS.surfaceMid,
+            borderRadius: 10,
+            paddingVertical: 7,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderColor: COLORS.border,
+            borderWidth: 1,
+          }}
+          clickAction="OPEN_URI"
+          clickActionData={{ uri: 'driveledger://add-expense' }}
+        >
+          <TextWidget
+            text="💰  Expense"
+            style={{ fontSize: 11, fontWeight: 'bold', color: '#F8FAFC' }}
           />
         </FlexWidget>
       </FlexWidget>

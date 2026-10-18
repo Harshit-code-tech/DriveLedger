@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Vehicle } from '@/types/vehicle';
 import type { VehicleDocument } from '@/types/document';
 import { DocumentType } from '@/constants/documentTypes';
+import { FuelType, VehicleType } from '@/constants/fuelTypes';
 
 export type ChecklistCategory = 'tyres' | 'fluids' | 'compliance' | 'safety';
 
@@ -127,8 +128,8 @@ export function buildPreTripChecklist(
   checkedItemIds: string[] = []
 ): ChecklistItem[] {
   const isChecked = (id: string) => checkedItemIds.includes(id);
-  const isBike = vehicle.type === 'bike' || vehicle.type === 'scooter';
-  const isEV = vehicle.fuel_type === 'ev';
+  const isBike = vehicle.vehicle_type === VehicleType.TWO_WHEELER;
+  const isEV = vehicle.fuel_type === FuelType.ELECTRIC;
 
   const items: ChecklistItem[] = [];
 

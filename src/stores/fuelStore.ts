@@ -15,11 +15,13 @@
  */
 
 import { create } from 'zustand';
+import { Platform } from 'react-native';
 import type { FuelEntry, CreateFuelEntryInput } from '@/types/fuel';
 import type { Vehicle } from '@/types/vehicle';
 import * as fuelRepo from '@/database/repositories/fuelRepo';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import { syncWidgetState } from '@/widgets/widgetDataService';
+import { storeRegistry } from '@/stores/storeRegistry';
 import {
   calculateMileageForEntry,
   calculatePartialEstimate,
@@ -48,8 +50,16 @@ interface FuelState {
   isLoading: boolean;
 
   // ── Actions ──
-  /** Load fuel entries + stats for a vehicle */
-  loadEntries: (vehicleId: string) => void;
+  /**
+   * Load fuel entries + stats for a vehicle.
+   *
+   * @param vehicleId  - ID of the vehicle to load entries for.
+   * @param fuelType   - Optional: caller should pass `vehicle.fuel_type` to
+   *                     avoid an internal store lookup. Falls back to
+   *                     undefined (stats will still be computed without
+   *                     fuel-type-specific logic) if omitted.
+   */
+  loadEntries: (vehicleId: string, fuelType?: FuelType) => void;
   /** Create a new fuel entry with mileage calculation */
   addFuelEntry: (input: CreateFuelEntryInput, vehicle: Vehicle) => {
     entry: FuelEntry;
@@ -88,12 +98,11 @@ export const useFuelStore = create<FuelState>((set) => ({
   stats: emptyStats,
   isLoading: true,
 
-  loadEntries: (vehicleId: string) => {
+  loadEntries: (vehicleId: string, fuelType?: FuelType) => {
     const entries = fuelRepo.getFuelEntriesByVehicle(vehicleId);
     const chronological = fuelRepo.getFuelEntriesByVehicleChronological(vehicleId);
-    const { useVehicleStore } = require('@/stores/vehicleStore');
-    const vehicle = useVehicleStore.getState().vehicles.find((v: Vehicle) => v.id === vehicleId);
-    const fuelType = vehicle ? (vehicle.fuel_type as FuelType) : undefined;
+    // fuelType is provided by the caller (who always has the vehicle object).
+    // No store lookup needed — eliminates the circular require.
     const stats = computeMileageStats(entries, fuelType);
     const partialEstimates = computePartialEstimates(chronological, fuelType);
     set({ entries, stats, partialEstimates, isLoading: false });
@@ -146,7 +155,8 @@ export const useFuelStore = create<FuelState>((set) => ({
     const stats = computeMileageStats(entries, vehicle.fuel_type as FuelType);
     const partialEstimates = computePartialEstimates(chronological2, vehicle.fuel_type as FuelType);
     set({ entries, stats, partialEstimates });
-    syncWidgetState();
+    // Widget is Android-only — guard to avoid no-op calls on other platforms.
+    if (Platform.OS === 'android') syncWidgetState();
 
     return { entry, warning };
   },
@@ -183,9 +193,10 @@ export const useFuelStore = create<FuelState>((set) => ({
     const partialEstimates = computePartialEstimates(chronological2, vehicle.fuel_type as FuelType);
     set({ entries, stats, partialEstimates });
 
-    // 5. Force vehicleStore to reload so selectedVehicle.current_odometer is fresh
-    const { useVehicleStore } = require('@/stores/vehicleStore');
-    useVehicleStore.getState().loadVehicles();
-    syncWidgetState();
+    // 5. Trigger vehicleStore reload via registry so odometer updates on Home.
+    //    Uses storeRegistry to avoid a circular import of vehicleStore here.
+    storeRegistry.refreshVehicles();
+    // Widget is Android-only — guard to avoid no-op calls on other platforms.
+    if (Platform.OS === 'android') syncWidgetState();
   },
 }));

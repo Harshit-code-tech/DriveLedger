@@ -16,132 +16,45 @@
  * - Fleet Comparison (when user has 2+ vehicles)
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share } from 'react-native';
 import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+import { VehicleContextHeader } from '@/components/VehicleContextHeader';
+import { FuelType, MILEAGE_UNIT_LABELS, getFuelSystemLabel, isElectricFuel, isHybridFuel } from '@/constants/fuelTypes';
+import { Sizing, Spacing, Typography } from '@/constants/theme';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { Typography, Spacing, Sizing } from '@/constants/theme';
+import { useExpenseStore } from '@/stores/expenseStore';
 import { useFuelStore } from '@/stores/fuelStore';
 import { useServiceStore } from '@/stores/serviceStore';
-import { useExpenseStore } from '@/stores/expenseStore';
 import { useVehicleStore } from '@/stores/vehicleStore';
-import { MILEAGE_UNIT_LABELS, isHybridFuel, FuelType, getFuelSystemLabel } from '@/constants/fuelTypes';
 import { formatCurrency, formatMileage, formatOdometer } from '@/utils/format';
-import {
-  getMonthlySpendHistory,
-  StatsTimeRange,
-  filterRecordsByTimeRange,
-  aggregateCostBreakdown,
-} from '@/utils/statsHelpers';
 import { buildShareSummary, computeCostPerKm } from '@/utils/shareSummary';
-import { VehicleContextHeader } from '@/components/VehicleContextHeader';
-import * as fuelRepo from '@/database/repositories/fuelRepo';
-import * as serviceRepo from '@/database/repositories/serviceRepo';
-import * as expenseRepo from '@/database/repositories/expenseRepo';
-import { computeMileageStats } from '@/engine/mileageEngine';
-import { CngTankIcon } from '@/components/CngTankIcon';
-import { MileageTrendChart, MileagePoint } from '@/components/charts/MileageTrendChart';
+import {
+  StatsTimeRange,
+  aggregateCostBreakdown,
+  filterRecordsByTimeRange,
+  getMonthlySpendHistory,
+  getMonthlyTotalSpend,
+} from '@/utils/statsHelpers';
+// serviceRepo and expenseRepo reads are now inside useCrossVehicleStats hook
+import { BarChart } from '@/components/charts/BarChart';
 import { CostBreakdownDonutChart } from '@/components/charts/CostBreakdownDonutChart';
+import { MileagePoint, MileageTrendChart } from '@/components/charts/MileageTrendChart';
+import { CngTankIcon } from '@/components/CngTankIcon';
 import { ReportExportModal } from '@/components/ReportExportModal';
+import { computeMileageStats } from '@/engine/mileageEngine';
+import { useCrossVehicleStats } from '@/hooks/useCrossVehicleStats';
 
-// ─── Pure RN Bar Chart Component (for Monthly Spend History) ─────────
-
-interface BarChartProps {
-  data: { label: string; value: number; color?: string }[];
-  maxValue?: number;
-  barColor: string;
-  labelColor: string;
-  valueColor: string;
-  height?: number;
-}
-
-function BarChart({ data, maxValue, barColor, labelColor, valueColor, height = 110 }: BarChartProps) {
-  const max = maxValue ?? Math.max(...data.map((d) => d.value), 1);
-
-  return (
-    <View style={chartStyles.container}>
-      <View style={[chartStyles.barsRow, { height }]}>
-        {data.map((item, i) => {
-          const barHeight = max > 0 ? (item.value / max) * height : 0;
-          return (
-            <View key={i} style={chartStyles.barColumn}>
-              <Text style={[chartStyles.barValue, { color: valueColor }]}>
-                {item.value >= 1000
-                  ? `${(item.value / 1000).toFixed(item.value >= 10000 ? 0 : 1)}k`
-                  : item.value % 1 === 0
-                  ? item.value
-                  : item.value.toFixed(0)}
-              </Text>
-              <View
-                style={[
-                  chartStyles.bar,
-                  {
-                    height: Math.max(barHeight, 4),
-                    backgroundColor: item.color || barColor,
-                    borderRadius: 4,
-                  },
-                ]}
-              />
-            </View>
-          );
-        })}
-      </View>
-      <View style={chartStyles.labelsRow}>
-        {data.map((item, i) => (
-          <View key={i} style={chartStyles.labelColumn}>
-            <Text style={[chartStyles.label, { color: labelColor }]} numberOfLines={1}>
-              {item.label}
-            </Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-const chartStyles = StyleSheet.create({
-  container: {},
-  barsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 6,
-  },
-  barColumn: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  bar: {
-    width: '80%',
-    minWidth: 12,
-  },
-  barValue: {
-    fontSize: 9,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  labelsRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginTop: 6,
-  },
-  labelColumn: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  label: {
-    fontSize: 10,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-});
+// BarChart is now in src/components/charts/BarChart.tsx (imported above)
 
 // ─── Stats Screen Component ─────────────────────────────────────────
 
 export default function StatsScreen() {
   const colors = useThemeColors();
+
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
+  const isEV = selectedVehicle ? isElectricFuel(selectedVehicle.fuel_type as FuelType) : false;
 
   const entries = useFuelStore((s) => s.entries);
   const stats = useFuelStore((s) => s.stats);
@@ -170,7 +83,7 @@ export default function StatsScreen() {
   useFocusEffect(
     useCallback(() => {
       if (selectedVehicle) {
-        loadEntries(selectedVehicle.id);
+        loadEntries(selectedVehicle.id, selectedVehicle.fuel_type as FuelType);
         loadRecords(selectedVehicle.id);
         loadExpenses(selectedVehicle.id);
       }
@@ -192,8 +105,19 @@ export default function StatsScreen() {
 
   // ── Aggregated Cost Breakdown for Donut Chart ──
   const costBreakdown = useMemo(() => {
-    return aggregateCostBreakdown(filteredEntries, filteredServices, filteredExpenses);
-  }, [filteredEntries, filteredServices, filteredExpenses]);
+    return aggregateCostBreakdown(filteredEntries, filteredServices, filteredExpenses, isEV);
+  }, [filteredEntries, filteredServices, filteredExpenses, isEV]);
+
+  // ── Time-scoped mileage calculation ──
+  // NOTE: Must be computed BEFORE any early return to satisfy Rules of Hooks.
+  const timeScopedMileageStats = useMemo(() => {
+    if (timeRange === 'all') return stats;
+    if (filteredEntries.length >= 2) {
+      const chronological = [...filteredEntries].reverse();
+      return computeMileageStats(chronological);
+    }
+    return stats;
+  }, [timeRange, filteredEntries, stats]);
 
   // ── Mileage Trend Points for MileageTrendChart ──
   const mileageTrendData = useMemo(() => {
@@ -256,24 +180,15 @@ export default function StatsScreen() {
   const monthlyCostData = useMemo(() => {
     if (!selectedVehicle) return [];
     if (monthlyChartRange === 'year') {
+      // Yearly aggregation: sum all 12 months per calendar year for the last 3 years.
+      // Uses getMonthlyTotalSpend to avoid duplicating the filter-reduce pattern inline.
       const now = new Date();
       return [0, 1, 2].reverse().map((yearsAgo) => {
         const year = now.getFullYear() - yearsAgo;
         let total = 0;
         for (let m = 0; m < 12; m++) {
-          const fuelSum = entries.filter((e) => {
-            const d = new Date(e.date);
-            return d.getFullYear() === year && d.getMonth() === m;
-          }).reduce((s, e) => s + e.total_cost, 0);
-          const svcSum = serviceRecords.filter((r) => {
-            const d = new Date(r.date);
-            return d.getFullYear() === year && d.getMonth() === m;
-          }).reduce((s, r) => s + (r.cost || 0), 0);
-          const expSum = expenses.filter((e) => {
-            const d = new Date(e.date);
-            return d.getFullYear() === year && d.getMonth() === m;
-          }).reduce((s, e) => s + e.amount, 0);
-          total += fuelSum + svcSum + expSum;
+          const { total: monthTotal } = getMonthlyTotalSpend(entries, serviceRecords, expenses, m, year);
+          total += monthTotal;
         }
         return { label: `${year}`, value: Math.round(total) };
       });
@@ -282,26 +197,9 @@ export default function StatsScreen() {
     return getMonthlySpendHistory(entries, serviceRecords, expenses, months);
   }, [monthlyChartRange, entries, serviceRecords, expenses, selectedVehicle]);
 
-  // ── Cross-vehicle comparison (reads DB directly) ──
-  const crossVehicleData = useMemo(() => {
-    if (vehicles.length < 2) return null;
-    return vehicles.map((v) => {
-      const vEntries = fuelRepo.getFuelEntriesByVehicleChronological(v.id);
-      const svc = serviceRepo.getServiceRecordsByVehicle(v.id);
-      const exp = expenseRepo.getExpensesByVehicle(v.id);
-      const mStats = computeMileageStats(vEntries);
-      const fuelCost = vEntries.reduce((s, e) => s + e.total_cost, 0);
-      const svcCost = svc.reduce((s, r) => s + (r.cost || 0), 0);
-      const expCost = exp.reduce((s, e) => s + e.amount, 0);
-      return {
-        id: v.id,
-        name: v.nickname,
-        avgMileage: mStats.runningAverage?.value ?? null,
-        mileageUnit: mStats.runningAverage ? MILEAGE_UNIT_LABELS[mStats.runningAverage.unit] : null,
-        totalCost: fuelCost + svcCost + expCost,
-      };
-    }).filter((d) => d.avgMileage !== null || d.totalCost > 0);
-  }, [vehicles]);
+  // -- Cross-vehicle comparison --
+  // Extracted to useCrossVehicleStats hook to separate data-loading from render.
+  const crossVehicleData = useCrossVehicleStats(vehicles);
 
   if (!selectedVehicle) {
     return (
@@ -324,15 +222,7 @@ export default function StatsScreen() {
   const totalFuelQuantity = filteredEntries.reduce((sum, e) => sum + e.fuel_amount, 0);
   const totalEntriesCount = filteredEntries.length;
 
-  // Time-scoped mileage calculation if filteredEntries has >= 2 fills
-  const timeScopedMileageStats = useMemo(() => {
-    if (timeRange === 'all') return stats;
-    if (filteredEntries.length >= 2) {
-      const chronological = [...filteredEntries].reverse();
-      return computeMileageStats(chronological);
-    }
-    return stats;
-  }, [timeRange, filteredEntries, stats]);
+  // timeScopedMileageStats is now computed above the early return (Rules of Hooks compliance).
 
   // Distance tracked & ₹/km
   const { kmTracked, costPerKm } = computeCostPerKm(
@@ -345,10 +235,10 @@ export default function StatsScreen() {
     timeRange === 'month'
       ? 'This Month'
       : timeRange === '6m'
-      ? 'Last 6 Months'
-      : timeRange === 'year'
-      ? 'Last 12 Months'
-      : 'All Time';
+        ? 'Last 6 Months'
+        : timeRange === 'year'
+          ? 'Last 12 Months'
+          : 'All Time';
 
   // ── Share summary handler ──
   const handleShare = async () => {
@@ -474,7 +364,7 @@ export default function StatsScreen() {
           <View style={styles.heroBreakdown}>
             <View style={styles.heroBreakdownPill}>
               <Text style={[Typography.caption, { color: 'rgba(255,255,255,0.9)', fontWeight: '600' }]}>
-                ⛽ {formatCurrency(totalFuelCost)}
+                {isEV ? '⚡' : '⛽'} {formatCurrency(totalFuelCost)}
               </Text>
             </View>
             <View style={styles.heroBreakdownPill}>
@@ -493,25 +383,25 @@ export default function StatsScreen() {
         {/* ── Summary KPI Cards ── */}
         <View style={styles.grid}>
           <View style={[styles.summaryCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Fuel Cost</Text>
+            <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>{isEV ? 'Charging Cost' : 'Fuel Cost'}</Text>
             <Text style={[Typography.statMedium, { color: colors.text }]}>
               {formatCurrency(totalFuelCost)}
             </Text>
           </View>
           <View style={[styles.summaryCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Fill-ups</Text>
+            <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>{isEV ? 'Charge Sessions' : 'Fill-ups'}</Text>
             <Text style={[Typography.statMedium, { color: colors.text }]}>
               {totalEntriesCount}
             </Text>
           </View>
           <View style={[styles.summaryCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Avg Mileage</Text>
+            <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>{isEV ? 'Avg Efficiency' : 'Avg Mileage'}</Text>
             <Text style={[Typography.statMedium, { color: colors.text }]}>
               {timeScopedMileageStats.runningAverage
                 ? formatMileage(
-                    timeScopedMileageStats.runningAverage.value,
-                    MILEAGE_UNIT_LABELS[timeScopedMileageStats.runningAverage.unit]
-                  )
+                  timeScopedMileageStats.runningAverage.value,
+                  MILEAGE_UNIT_LABELS[timeScopedMileageStats.runningAverage.unit]
+                )
                 : '—'}
             </Text>
           </View>
@@ -549,9 +439,9 @@ export default function StatsScreen() {
                 <Text style={[Typography.statMedium, { color: colors.primary, marginTop: 4 }]}>
                   {stats.primarySystemStats?.runningAverage
                     ? formatMileage(
-                        stats.primarySystemStats.runningAverage.value,
-                        MILEAGE_UNIT_LABELS[stats.primarySystemStats.runningAverage.unit]
-                      )
+                      stats.primarySystemStats.runningAverage.value,
+                      MILEAGE_UNIT_LABELS[stats.primarySystemStats.runningAverage.unit]
+                    )
                     : '—'}
                 </Text>
               </View>
@@ -565,9 +455,9 @@ export default function StatsScreen() {
                 <Text style={[Typography.statMedium, { color: '#B45309', marginTop: 4 }]}>
                   {stats.secondarySystemStats?.runningAverage
                     ? formatMileage(
-                        stats.secondarySystemStats.runningAverage.value,
-                        MILEAGE_UNIT_LABELS[stats.secondarySystemStats.runningAverage.unit]
-                      )
+                      stats.secondarySystemStats.runningAverage.value,
+                      MILEAGE_UNIT_LABELS[stats.secondarySystemStats.runningAverage.unit]
+                    )
                     : '—'}
                 </Text>
               </View>
@@ -636,7 +526,7 @@ export default function StatsScreen() {
               Cost Breakdown
             </Text>
             <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2 }]}>
-              {timeRangeLabel} spending across fuel, service & categories
+              {timeRangeLabel} spending across {isEV ? 'charging' : 'fuel'}, service & categories
             </Text>
           </View>
 
@@ -710,16 +600,16 @@ export default function StatsScreen() {
 
           <View style={[styles.quickRow, { borderBottomColor: colors.border }]}>
             <Text style={[Typography.body, { color: colors.textSecondary }]}>
-              Total {entries[0]?.fuel_unit || 'fuel'} consumed
+              {isEV ? 'Total energy consumed' : `Total ${entries[0]?.fuel_unit || 'fuel'} consumed`}
             </Text>
             <Text style={[Typography.body, { color: colors.text, fontWeight: '700' }]}>
-              {totalFuelQuantity.toFixed(1)} {entries[0]?.fuel_unit || 'L'}
+              {totalFuelQuantity.toFixed(1)} {isEV ? 'kWh' : (entries[0]?.fuel_unit || 'L')}
             </Text>
           </View>
 
           <View style={[styles.quickRow, { borderBottomColor: colors.border }]}>
             <Text style={[Typography.body, { color: colors.textSecondary }]}>
-              Avg cost per fill
+              {isEV ? 'Avg cost per charge' : 'Avg cost per fill'}
             </Text>
             <Text style={[Typography.body, { color: colors.text, fontWeight: '700' }]}>
               {totalEntriesCount > 0 ? formatCurrency(totalFuelCost / totalEntriesCount) : '—'}
@@ -948,3 +838,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 });
+

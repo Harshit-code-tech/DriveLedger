@@ -45,6 +45,7 @@ import type { ServiceRecord } from '@/types/service';
 import type { Vehicle } from '@/types/vehicle';
 import { nowISO } from '@/utils/date';
 import * as Crypto from 'expo-crypto';
+import Constants from 'expo-constants';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -446,7 +447,9 @@ export function createBackup(): BackupResult {
       app_id: APP_ID,
       version: 2,
       created_at: nowISO(),
-      app_version: '1.0.3',
+      // Read version dynamically from Expo config so backup files always
+      // reflect the actual installed version without any manual updates.
+      app_version: Constants.expoConfig?.version ?? 'unknown',
       data: { vehicles, fuel_entries: fuelEntries, service_records: serviceRecords, expenses, documents },
     };
 

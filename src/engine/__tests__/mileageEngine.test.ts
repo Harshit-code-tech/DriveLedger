@@ -57,6 +57,20 @@ describe('Mileage Engine — Multi-Fuel & Non-Liquid Calculations', () => {
       expect(res?.unit).toBe(MileageUnit.KM_PER_LITRE);
       expect(res?.value).toBeCloseTo(17.14, 1);
     });
+
+    it('calculates partial fill estimate using distance / fuel added in previous fill', () => {
+      const entries: FuelEntry[] = [
+        createMockEntry({ odometer: 10000, fuel_amount: 35, is_full_tank: 1 }),
+        createMockEntry({ odometer: 10200, fuel_amount: 10, is_full_tank: 0 }),
+      ];
+
+      // Distance = 200 km, previous fuel = 35 L -> 200 / 35 = 5.71 km/L
+      const estimate = calculatePartialEstimate(entries, 1, FuelType.PETROL);
+      expect(estimate).not.toBeNull();
+      expect(estimate?.isEstimate).toBe(true);
+      expect(estimate?.value).toBeCloseTo(5.71, 2);
+      expect(estimate?.unit).toBe(MileageUnit.KM_PER_LITRE);
+    });
   });
 
   describe('2. CNG / LPG Calculations (km/kg)', () => {

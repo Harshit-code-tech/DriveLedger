@@ -11,22 +11,22 @@
  * - Wired to centralized Zustand stores
  */
 
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, TextInput } from 'react-native';
-import { useState, useCallback, useMemo } from 'react';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { useVehicleStore } from '@/stores/vehicleStore';
+import { VehicleContextHeader } from '@/components/VehicleContextHeader';
+import { FuelType, MILEAGE_UNIT_LABELS, getFuelSystemLabel, isHybridFuel } from '@/constants/fuelTypes';
+import { Sizing, Spacing, Typography } from '@/constants/theme';
+import { useThemeColors } from '@/hooks/useThemeColors';
+import { useExpenseStore } from '@/stores/expenseStore';
 import { useFuelStore } from '@/stores/fuelStore';
 import { useServiceStore } from '@/stores/serviceStore';
-import { useExpenseStore } from '@/stores/expenseStore';
-import { useThemeColors } from '@/hooks/useThemeColors';
-import { Typography, Spacing, Sizing } from '@/constants/theme';
-import { formatCurrency } from '@/utils/format';
-import { formatDisplayDateLong } from '@/utils/date';
+import { useVehicleStore } from '@/stores/vehicleStore';
+import type { Expense } from '@/types/expense';
 import type { FuelEntry } from '@/types/fuel';
 import type { ServiceRecord } from '@/types/service';
-import type { Expense } from '@/types/expense';
-import { VehicleContextHeader } from '@/components/VehicleContextHeader';
-import { MILEAGE_UNIT_LABELS, isHybridFuel, FuelType, getFuelSystemLabel } from '@/constants/fuelTypes';
+import { formatDisplayDateLong } from '@/utils/date';
+import { formatCurrency } from '@/utils/format';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -34,10 +34,10 @@ type Tab = 'fuel' | 'service' | 'expenses';
 type DateRange = 'all' | 'week' | 'month' | '3months';
 
 const DATE_CHIPS: { value: DateRange; label: string }[] = [
-  { value: 'all',     label: 'All Time'   },
-  { value: 'week',    label: 'This Week'  },
-  { value: 'month',   label: 'This Month' },
-  { value: '3months', label: '3 Months'   },
+  { value: 'all', label: 'All Time' },
+  { value: 'week', label: 'This Week' },
+  { value: 'month', label: 'This Month' },
+  { value: '3months', label: '3 Months' },
 ];
 
 // ─── Date range helpers ───────────────────────────────────────────────
@@ -72,28 +72,29 @@ export default function HistoryScreen() {
   const colors = useThemeColors();
   const router = useRouter();
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
+  const isEV = selectedVehicle?.fuel_type === FuelType.ELECTRIC;
 
   // Stores
-  const fuelEntries      = useFuelStore((s) => s.entries);
-  const loadEntries      = useFuelStore((s) => s.loadEntries);
-  const deleteFuelEntry  = useFuelStore((s) => s.deleteFuelEntry);
+  const fuelEntries = useFuelStore((s) => s.entries);
+  const loadEntries = useFuelStore((s) => s.loadEntries);
+  const deleteFuelEntry = useFuelStore((s) => s.deleteFuelEntry);
 
-  const serviceRecords    = useServiceStore((s) => s.records);
-  const loadRecords       = useServiceStore((s) => s.loadRecords);
+  const serviceRecords = useServiceStore((s) => s.records);
+  const loadRecords = useServiceStore((s) => s.loadRecords);
   const deleteServiceRecord = useServiceStore((s) => s.deleteRecord);
 
-  const expenses      = useExpenseStore((s) => s.expenses);
-  const loadExpenses  = useExpenseStore((s) => s.loadExpenses);
+  const expenses = useExpenseStore((s) => s.expenses);
+  const loadExpenses = useExpenseStore((s) => s.loadExpenses);
   const deleteExpense = useExpenseStore((s) => s.deleteExpense);
 
   // UI state
-  const [tab, setTab]             = useState<Tab>('fuel');
+  const [tab, setTab] = useState<Tab>('fuel');
   const [searchText, setSearchText] = useState('');
-  const [dateRange, setDateRange]   = useState<DateRange>('all');
+  const [dateRange, setDateRange] = useState<DateRange>('all');
 
   const loadAll = useCallback(() => {
     if (selectedVehicle) {
-      loadEntries(selectedVehicle.id);
+      loadEntries(selectedVehicle.id, selectedVehicle.fuel_type as FuelType);
       loadRecords(selectedVehicle.id);
       loadExpenses(selectedVehicle.id);
     }
@@ -151,8 +152,8 @@ export default function HistoryScreen() {
   // ── Delete handlers ───────────────────────────────────────────────
   const handleDeleteFuel = (entry: FuelEntry) => {
     Alert.alert(
-      'Delete This Fill-up? ⛽',
-      `Heads up — deleting the entry from ${formatDisplayDateLong(entry.date)} will trigger a mileage recalculation for everything after it.\n${entry.fuel_amount} ${entry.fuel_unit} · ${formatCurrency(entry.total_cost)}\n\nStill want to nuke it?`,
+      isEV ? 'Delete This Charge? ⚡' : 'Delete This Fill-up? ⛽',
+      `Heads up — deleting the entry from ${formatDisplayDateLong(entry.date)} will trigger an ${isEV ? 'efficiency' : 'mileage'} recalculation for everything after it.\n${entry.fuel_amount} ${entry.fuel_unit} · ${formatCurrency(entry.total_cost)}\n\nStill want to delete it?`,
       [
         { text: 'Keep It', style: 'cancel' },
         {
@@ -229,9 +230,18 @@ export default function HistoryScreen() {
       </View>
       {item.fuel_station ? (
         <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2 }]}>
-          📍 {item.fuel_station}
+          {isEV ? '⚡' : '📍'} {item.fuel_station}
         </Text>
       ) : null}
+      {item.battery_start_percent != null && item.battery_end_percent != null && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+          <View style={[styles.badge, { backgroundColor: colors.primaryLight + '50', paddingVertical: 1, paddingHorizontal: 6 }]}>
+            <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700', fontSize: 10 }]}>
+              🔋 {item.battery_start_percent}% → {item.battery_end_percent}% (+{Math.round(item.battery_end_percent - item.battery_start_percent)}%)
+            </Text>
+          </View>
+        </View>
+      )}
       {item.calculated_mileage && item.mileage_unit ? (
         <View style={[styles.badge, { backgroundColor: colors.successLight }]}>
           <Text style={[Typography.caption, { color: colors.success }]}>
@@ -315,19 +325,19 @@ export default function HistoryScreen() {
   const renderEmpty = (type: string, isFiltered: boolean) => (
     <View style={styles.emptyState}>
       <Text style={{ fontSize: 48, marginBottom: Spacing.lg }}>
-        {isFiltered ? '🔍' : type === 'fuel' ? '⛽' : type === 'service' ? '🔧' : '💰'}
+        {isFiltered ? '🔍' : type === 'fuel' ? (isEV ? '⚡' : '⛽') : type === 'service' ? '🔧' : '💰'}
       </Text>
       <Text style={[Typography.h3, { color: colors.text }]}>
-        {isFiltered ? 'No results found' : `No ${type} entries yet`}
+        {isFiltered ? 'No results found' : type === 'fuel' ? (isEV ? 'No charging sessions yet' : 'No fuel entries yet') : `No ${type} entries yet`}
       </Text>
       <Text style={[Typography.bodySmall, { color: colors.textSecondary, marginTop: Spacing.sm, textAlign: 'center' }]}>
         {isFiltered
           ? 'Try a different search term or date range.'
           : type === 'fuel'
-          ? 'Tap ⛽ Add Fuel on the Home screen to record a refill.'
-          : type === 'service'
-          ? "Tap 🔧 below to record your vehicle's latest maintenance."
-          : 'Tap 💰 below to record non-fuel costs like tolls or parking.'}
+            ? (isEV ? 'Tap ⚡ Add Charge on the Home screen to record a session.' : 'Tap ⛽ Add Fuel on the Home screen to record a refill.')
+            : type === 'service'
+              ? "Tap 🔧 below to record your vehicle's latest maintenance."
+              : 'Tap 💰 below to record non-fuel costs like tolls or parking.'}
       </Text>
     </View>
   );
@@ -366,7 +376,7 @@ export default function HistoryScreen() {
                 { color: tab === t ? colors.primary : colors.textSecondary, fontWeight: tab === t ? '700' : '400' },
               ]}
             >
-              {t === 'fuel' ? `Fuel (${tabCounts.fuel})` : t === 'service' ? `Service (${tabCounts.service})` : `Expenses (${tabCounts.expenses})`}
+              {t === 'fuel' ? (isEV ? `Charging (${tabCounts.fuel})` : `Fuel (${tabCounts.fuel})`) : t === 'service' ? `Service (${tabCounts.service})` : `Expenses (${tabCounts.expenses})`}
             </Text>
           </TouchableOpacity>
         ))}
@@ -379,9 +389,9 @@ export default function HistoryScreen() {
           <TextInput
             style={[styles.searchInput, { color: colors.text }]}
             placeholder={
-              tab === 'fuel' ? 'Search by station, notes, date…'
-              : tab === 'service' ? 'Search by service type, garage…'
-              : 'Search by category, description…'
+              tab === 'fuel' ? (isEV ? 'Search by network, notes, date…' : 'Search by station, notes, date…')
+                : tab === 'service' ? 'Search by service type, garage…'
+                  : 'Search by category, description…'
             }
             placeholderTextColor={colors.textTertiary}
             value={searchText}

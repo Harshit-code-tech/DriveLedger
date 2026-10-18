@@ -6,13 +6,13 @@
 ![Expo](https://img.shields.io/badge/Expo-SDK_57-000020?style=for-the-badge&logo=expo&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-Offline_First-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
-![Tests](https://img.shields.io/badge/Tests-62_Passed-success?style=for-the-badge&logo=jest&logoColor=white)
+![Tests](https://img.shields.io/badge/Tests-Jest-success?style=for-the-badge&logo=jest&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
 **A private, offline-first vehicle ledger and expense tracker designed for car and bike owners.**  
 *Track fuel economy, maintenance history, running costs, tyre pressure, and document expiry — all without ads, logins, or tracking.*
 
-[Download Latest APK](https://github.com/JyotikaJayani-08/DriveLedger/releases/latest) • [Key Features](#-key-features) • [Installation](#-getting-started) • [Building the APK](#-building-the-apk) • [Data Safety](#-sideload--update-safety-rules)
+[Download Latest APK](https://github.com/JyotikaJayani-08/DriveLedger/releases/latest) • [Key Features](#-key-features) • [Installation](#-getting-started) • [Documentation](#-documentation) • [Building the APK](#-building-the-standalone-apk) • [Data Safety](#-sideload--update-safety-rules)
 
 </div>
 
@@ -36,9 +36,21 @@
 - Per-vehicle tank capacity, fuel type (Petrol, Diesel, CNG, EV), and specifications.
 
 ### ⛽ Accurate Fuel & Mileage Engine
-- True **tank-to-tank calculation** for exact fuel efficiency (km/L).
-- Handles partial fills, missed fills, and price-per-litre tracking.
-- Running averages, distance traveled between refills, and cost-per-km metrics.
+- True **tank-to-tank calculation** for exact fuel efficiency (km/L, km/kg for CNG/LPG, km/kWh for EV).
+- **Partial fills** are accumulated into the next full-tank calculation, and each one also gets a live `~est.` figure: `distance since previous entry ÷ fuel added in the previous fill`.
+- Bi-fuel (CNG + Petrol) vehicles track each tank independently.
+- Running averages, best/worst, distance between refills, cost-per-km, and sanity warnings for implausible mileage.
+- 📖 Full rules and worked examples: [mileage_calculation_guide.md](mileage_calculation_guide.md).
+
+### 🧮 Pay-by-Amount Fuel & EV Charging Entry (2-Way Calculator)
+- At the pump or charging station, you often know the money spent, not the exact volume or kWh. Enter **Total Amount Paid** *or* **Quantity / Energy (L / kg / kWh)** — the other calculates instantly from the rate per unit.
+- **EV-adaptive UX**: Automatically switches to **Energy Charged (kWh)**, **Electricity Rate (₹/kWh)**, charging locations/networks (Home AC, Tata Power EZ, Jio-bp pulse, ChargeZone), and battery % to kWh calculation.
+- Quick-pick chips (₹200 – ₹2,500), live calculation summary (`₹1,000 ÷ ₹105.00 = 9.52 L` or `₹500 ÷ ₹8.00 = 62.50 kWh`), and previous station/rate pre-filled.
+- Saving with any two of the three values (amount, quantity, price) auto-fills the third.
+
+### 📱 Android Home-Screen Widget
+- Odometer, last-fill mileage, monthly spend, tyre pressure, and colour-coded service / PUC / insurance alerts at a glance.
+- Quick actions to log fuel, service, or an expense; refreshes whenever fuel, service, expense, or vehicle data changes.
 
 ### 🔧 Vehicle Maintenance & Service Ledger
 - Automotive-centric record keeping: track oil changes, brake pads, filters, battery, tyre rotations, and general checkups.
@@ -75,7 +87,32 @@
 - **Local Database**: [Expo SQLite v57](https://docs.expo.dev/versions/latest/sdk/sqlite/)
 - **State Management**: [Zustand](https://github.com/pmndrs/zustand)
 - **Date & Storage Utilities**: DayJS, Expo FileSystem, Expo WebBrowser
-- **Testing**: [Jest](https://jestjs.io/) & [ts-jest](https://kulshekhar.github.io/ts-jest/) (62 unit tests)
+- **Testing**: [Jest](https://jestjs.io/) & [ts-jest](https://kulshekhar.github.io/ts-jest/)
+
+---
+
+## 📚 Documentation
+
+Start here if you want to understand or contribute to the codebase:
+
+| Document | What you will learn |
+|---|---|
+| 🏛️ **[ARCHITECTURE.md](ARCHITECTURE.md)** | The big picture: tech stack, directory layout, the screen → store → repository/engine layering, how Zustand stores, `storeRegistry`, and `preferencesStore` fit together, the backup security model (HMAC-SHA256 + AES-256-GCM), how to add an expense category, and how to run tests. Read this first. |
+| 🔀 **[DATA_FLOW.md](DATA_FLOW.md)** | Step-by-step traces of how data moves: adding and deleting a fuel entry (validation → store → repo → engine → odometer → UI refresh), loading screen data, backup export/restore, the Stats screen, theme/colour flow, and a worked mileage example. Read this when debugging or changing a feature end to end. |
+| 🧮 **[mileage_calculation_guide.md](mileage_calculation_guide.md)** | The mileage rules in detail: tank-to-tank (R1–R9), partial-fill accumulation and the `~est.` formula, EV charge-to-charge, aggregated stats, reasonableness thresholds per vehicle type, and recalculation on edit/delete, with a complete worked example table. |
+
+Coding conventions (TypeScript, hooks, styling tokens, store/repository rules, validation, testing, commit style) live in `docs/CODING_GUIDELINES.md`.
+
+### Project Structure at a Glance
+
+```text
+app/        Expo Router screens (tabs, add-fuel, add-service, add-expense, ...)
+src/engine/       Pure business logic: mileage, validation, backup
+src/stores/       Zustand stores (screens never touch the DB directly)
+src/database/     SQLite connection, schema, repositories
+src/widgets/      Android home-screen widget
+src/components/   Reusable UI components
+```
 
 ---
 
@@ -175,24 +212,14 @@ Because DriveLedger is distributed as an APK outside Google Play, keep these rul
 
 ## 🧪 Running Automated Tests
 
-DriveLedger includes comprehensive unit tests for calculations, date conversions, version checkers, and formatting:
+DriveLedger includes unit tests for the mileage engine (tank-to-tank, partial-fill estimates, EV, bi-fuel), validation, backup schema, statistics, CSV/PDF export, date/format helpers, and version checking:
 
 ```bash
-npm test
+npm test                              # run everything
+npx jest src/engine/__tests__         # engine only (mileage + validation)
 ```
 
-Current test suite status:
-```
-PASS src/utils/__tests__/releaseParser.test.ts
-PASS src/utils/__tests__/version.test.ts
-PASS src/utils/__tests__/dateInput.test.ts
-PASS src/utils/__tests__/format.test.ts
-PASS src/utils/__tests__/statsHelpers.test.ts
-PASS src/utils/__tests__/date.test.ts
-
-Test Suites: 6 passed, 6 total
-Tests:       62 passed, 62 total
-```
+Tests live in `__tests__/` folders next to the module they cover. Pure modules (engine, utils) are tested without mocks; store tests mock the repository layer. See [ARCHITECTURE.md](ARCHITECTURE.md#testing) for details.
 
 ---
 
