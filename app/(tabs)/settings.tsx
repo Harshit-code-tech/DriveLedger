@@ -30,6 +30,9 @@ import {
 import { useVehicleStore } from '@/stores/vehicleStore';
 import type { Vehicle } from '@/types/vehicle';
 import { buildLedgerCsv } from '@/utils/csvExport';
+import { seedRealLifeData } from '@/services/sampleDataService';
+import { pushAllTestNotifications } from '@/services/notificationService';
+import { NotificationConditionsModal } from '@/components/NotificationConditionsModal';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
@@ -82,6 +85,8 @@ export default function SettingsScreen() {
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [isSeedingData, setIsSeedingData] = useState(false);
 
   // Option picker visibility
   const [pickerCurrency, setPickerCurrency] = useState(false);
@@ -238,6 +243,83 @@ export default function SettingsScreen() {
         },
       ]
     );
+  };
+
+  // ── Testing: Seed real life data ──
+  const handleSeedData = () => {
+    Alert.alert(
+      '🧪 Load Real-Life Test Data?',
+      'This will add 4 realistic vehicles with complete history:\n\n' +
+        '• 🚗 White Swift (Petrol) — 11 fuel fills, service, ⚠️ PUC expires in 4d\n' +
+        '• 🛵 Activa Daily (2-Wheeler) — 7 fuel fills (16d ago), 🚨 Overdue service, 🚨 Expired insurance\n' +
+        '• ⚡ Nexon EV (Electric SUV) — 6 charging sessions, ⚠️ FASTag KYC in 12d\n' +
+        '• ⛽ Ertiga CNG (Bi-Fuel) — 6 CNG + 2 Petrol fills, dual-fuel stats\n\n' +
+        'Includes 30+ fuel/charge entries, services, expenses & documents. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes, Load Data!',
+          onPress: () => {
+            setIsSeedingData(true);
+            try {
+              const res = seedRealLifeData();
+              loadVehicles();
+              Alert.alert(
+                '🎉 Real-Life Data Loaded!',
+                `Successfully created:\n\n` +
+                  `🚗 ${res.vehiclesCount} Vehicles\n` +
+                  `⛽ ${res.fuelEntriesCount} Fuel/Charge Entries\n` +
+                  `🔧 ${res.serviceRecordsCount} Service Records\n` +
+                  `💸 ${res.expensesCount} Expenses\n` +
+                  `📄 ${res.documentsCount} Documents\n\n` +
+                  `Mileage calculations, notifications, and widget data have been synced!`
+              );
+            } catch (err) {
+              Alert.alert('Seed Failed', String(err));
+            } finally {
+              setIsSeedingData(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // ── Testing: Push all notifications ──
+  const handlePushAllNotifications = async () => {
+    try {
+      const result = await pushAllTestNotifications();
+      if (result.isExpoGo) {
+        Alert.alert(
+          '📱 Test Notifications Simulated',
+          `All ${result.rules.length} notification types were simulated!\n\n` +
+            `⚠️ Note: Expo Go runtime does not support native background push notifications. In an APK or native dev build, all ${result.rules.length} will push to your Android notification tray with sound.\n\n` +
+            `Opening the Notification Rules breakdown so you can inspect each condition...`,
+          [
+            {
+              text: 'View Rules & Conditions',
+              onPress: () => setShowNotificationModal(true),
+            },
+          ]
+        );
+      } else if (result.success) {
+        Alert.alert(
+          '🔔 Notifications Dispatched!',
+          `Pushed ${result.count} test notifications to your Android notification drawer!\n\n` +
+            `Pull down your notification shade to inspect them.`,
+          [
+            {
+              text: 'View Rules & Conditions',
+              onPress: () => setShowNotificationModal(true),
+            },
+          ]
+        );
+      } else {
+        setShowNotificationModal(true);
+      }
+    } catch (e) {
+      Alert.alert('Error', String(e));
+    }
   };
 
 
@@ -437,6 +519,33 @@ export default function SettingsScreen() {
             <Text style={{ color: colors.textSecondary, fontSize: 18 }}>📂</Text>
           </TouchableOpacity>
 
+          {/* ── Testing & Diagnostics ── */}
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Testing & Diagnostics</Text>
+
+          <SettingsRow
+            emoji="🧪"
+            title="Load Real-Life Test Data"
+            subtitle="4 vehicles, 30+ fuel refills, services, expenses & document alerts"
+            colors={colors}
+            onPress={handleSeedData}
+          />
+
+          <SettingsRow
+            emoji="⚡"
+            title="Push All Test Notifications"
+            subtitle="Simulate and trigger all 13 notification types at once"
+            colors={colors}
+            onPress={handlePushAllNotifications}
+          />
+
+          <SettingsRow
+            emoji="📋"
+            title="Notification Rules & Conditions"
+            subtitle="List of when each alert pops up and required conditions"
+            colors={colors}
+            onPress={() => setShowNotificationModal(true)}
+          />
+
           {/* ── About ── */}
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>About</Text>
           <SettingsRow
@@ -521,6 +630,13 @@ export default function SettingsScreen() {
         onSelect={(id) => setDefaultVehicleId(id === FIRST_VEHICLE_OPTION ? null : id)}
         onClose={() => setPickerVehicle(false)}
         colors={colors}
+      />
+
+      {/* ── Notification Conditions & Triggers Modal ── */}
+      <NotificationConditionsModal
+        visible={showNotificationModal}
+        onClose={() => setShowNotificationModal(false)}
+        onTestPushed={loadVehicles}
       />
 
       {/* ── Checking for Updates Loading Modal ── */}
