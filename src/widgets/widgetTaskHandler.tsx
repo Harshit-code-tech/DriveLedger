@@ -2,7 +2,7 @@
 import React from 'react';
 import type { WidgetTaskHandlerProps } from 'react-native-android-widget';
 import { DEFAULT_WIDGET_DATA, VehicleGlanceWidget } from './VehicleGlanceWidget';
-import { getCachedWidgetData, getWidgetDataSnapshot, WIDGET_NAME } from './widgetDataService';
+import { cycleWidgetVehicle, getCachedWidgetData, getWidgetDataSnapshot, WIDGET_NAME } from './widgetDataService';
 
 /**
  * Android Background Headless Widget Task Handler
@@ -13,13 +13,25 @@ import { getCachedWidgetData, getWidgetDataSnapshot, WIDGET_NAME } from './widge
  * - User resizes the widget (WIDGET_RESIZED)
  */
 export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
-  const { widgetAction, widgetInfo, renderWidget } = props;
+  const { widgetAction, widgetInfo, renderWidget, clickAction } = props;
 
   if (widgetInfo?.widgetName !== WIDGET_NAME) {
     return;
   }
 
   switch (widgetAction) {
+    case 'WIDGET_CLICK':
+      if (clickAction === 'SWITCH_VEHICLE') {
+        await cycleWidgetVehicle();
+        try {
+          const data = await getWidgetDataSnapshot();
+          renderWidget(<VehicleGlanceWidget {...(data ?? DEFAULT_WIDGET_DATA)} />);
+        } catch (err) {
+          console.warn('[DriveLedger] Error re-rendering after switch:', err);
+        }
+      }
+      break;
+
     case 'WIDGET_ADDED':
     case 'WIDGET_UPDATE':
     case 'WIDGET_RESIZED': {
@@ -44,10 +56,6 @@ export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
       }
       break;
     }
-
-    case 'WIDGET_CLICK':
-      // Click actions with OPEN_APP and OPEN_URI are handled natively by Android
-      break;
 
     case 'WIDGET_DELETED':
       // Widget was removed from home screen

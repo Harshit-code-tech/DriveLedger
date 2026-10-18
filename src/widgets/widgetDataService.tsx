@@ -20,6 +20,21 @@ import {
 
 const WIDGET_STORAGE_KEY = 'driveledger_widget_data_v2';
 export const WIDGET_NAME = 'VehicleGlanceWidget';
+const WIDGET_VEHICLE_KEY = 'driveledger_widget_vehicle_id';
+
+/** Cycles the widget to the next active vehicle and persists the choice. */
+export async function cycleWidgetVehicle(): Promise<void> {
+  try {
+    const vehicles = vehicleRepo.getActiveVehicles();
+    if (!vehicles || vehicles.length < 2) return;
+    const currentId = await AsyncStorage.getItem(WIDGET_VEHICLE_KEY);
+    const idx = vehicles.findIndex((v) => String(v.id) === currentId);
+    const next = vehicles[(idx + 1) % vehicles.length];
+    await AsyncStorage.setItem(WIDGET_VEHICLE_KEY, String(next.id));
+  } catch (e) {
+    console.warn('[DriveLedger] Failed to cycle widget vehicle:', e);
+  }
+}
 
 // ─── Currency formatting (no i18n deps) ──────────────────────────────────────
 
@@ -51,7 +66,7 @@ function currentYearMonth(): string {
 // ─── Urgency helper ───────────────────────────────────────────────────────────
 
 function docUrgency(days: number | null): 'ok' | 'due_soon' | 'expired' {
-  if (days === null) return 'ok';
+  if (days === null) return 'ok'; // Caller handles null (not_set) separately
   if (days < 0)  return 'expired';
   if (days <= 30) return 'due_soon';
   return 'ok';
@@ -78,7 +93,9 @@ export async function getWidgetDataSnapshot(): Promise<VehicleGlanceWidgetData> 
       return DEFAULT_WIDGET_DATA;
     }
 
-    const vehicle = vehicles[0]; // Active (first) vehicle
+    const storedId = await AsyncStorage.getItem(WIDGET_VEHICLE_KEY);
+    const vehicle = vehicles.find((v) => String(v.id) === storedId) ?? vehicles[0];
+    const vehicleCount = vehicles.length;
     const fuelType = vehicle.fuel_type as FuelType;
 
     // ── Fuel entries ──────────────────────────────────────────────────────────
@@ -162,29 +179,62 @@ export async function getWidgetDataSnapshot(): Promise<VehicleGlanceWidgetData> 
     // PUC
     const pucDoc = activeDocOf(DocumentType.PUC);
     const pucDays = pucDoc?.expiry_date ? daysUntil(pucDoc.expiry_date) : null;
-    let pucText = 'PUC: Valid';
-    if (pucDays !== null) {
-      if (pucDays < 0)    pucText = `PUC: Expired ${Math.abs(pucDays)}d ago`;
-      else if (pucDays === 0) pucText = 'PUC: Expires today!';
-      else if (pucDays <= 30) pucText = `PUC: ${pucDays}d left`;
-      else                pucText = `PUC: ${pucDays}d`;
+    let pucText: string;
+    let pucUrgency: 'ok' | 'due_soon' | 'expired' | 'not_set';
+    if (!pucDoc) {
+      pucText = 'PUC: Not Set';
+      pucUrgency = 'not_set';
+    } else if (pucDays === null) {
+      pucText = 'PUC: No Expiry';
+      pucUrgency = 'ok';
+    } else if (pucDays < 0) {
+      pucText = `PUC: Expired ${Math.abs(pucDays)}d ago`;
+      pucUrgency = 'expired';
+    } else if (pucDays === 0) {
+      pucText = 'PUC: Expires today!';
+      pucUrgency = 'expired';
+    } else if (pucDays <= 7) {
+      pucText = `PUC: ${pucDays}d left ⚠️`;
+      pucUrgency = 'due_soon';
+    } else if (pucDays <= 30) {
+      pucText = `PUC: ${pucDays}d left`;
+      pucUrgency = 'due_soon';
+    } else {
+      pucText = `PUC: ${pucDays}d`;
+      pucUrgency = 'ok';
     }
-    const pucUrgency = docUrgency(pucDays);
 
     // Insurance
     const insDoc = activeDocOf(DocumentType.INSURANCE);
     const insDays = insDoc?.expiry_date ? daysUntil(insDoc.expiry_date) : null;
-    let insuranceText = 'Insurance: OK';
-    if (insDays !== null) {
-      if (insDays < 0)     insuranceText = `Ins: Expired!`;
-      else if (insDays === 0) insuranceText = 'Ins: Expires today!';
-      else if (insDays <= 30) insuranceText = `Ins: ${insDays}d left`;
-      else                 insuranceText = `Ins: ${insDays}d`;
+    let insuranceText: string;
+    let insuranceUrgency: 'ok' | 'due_soon' | 'expired' | 'not_set';
+    if (!insDoc) {
+      insuranceText = 'Ins: Not Set';
+      insuranceUrgency = 'not_set';
+    } else if (insDays === null) {
+      insuranceText = 'Ins: No Expiry';
+      insuranceUrgency = 'ok';
+    } else if (insDays < 0) {
+      insuranceText = 'Ins: Expired!';
+      insuranceUrgency = 'expired';
+    } else if (insDays === 0) {
+      insuranceText = 'Ins: Expires today!';
+      insuranceUrgency = 'expired';
+    } else if (insDays <= 7) {
+      insuranceText = `Ins: ${insDays}d left ⚠️`;
+      insuranceUrgency = 'due_soon';
+    } else if (insDays <= 30) {
+      insuranceText = `Ins: ${insDays}d left`;
+      insuranceUrgency = 'due_soon';
+    } else {
+      insuranceText = `Ins: ${insDays}d`;
+      insuranceUrgency = 'ok';
     }
-    const insuranceUrgency = docUrgency(insDays);
 
     // ── Status Dot ────────────────────────────────────────────────────────────
-    // Red if anything is expired/overdue; amber if anything is due_soon; green otherwise
+    // Red if anything is expired/overdue; amber if anything is due_soon; green otherwise.
+    // 'not_set' does NOT trigger amber/red — it's informational only.
     const allUrgencies = [serviceUrgency, pucUrgency, insuranceUrgency];
     const statusColor =
       allUrgencies.some((u) => u === 'overdue' || u === 'expired')
@@ -211,6 +261,7 @@ export async function getWidgetDataSnapshot(): Promise<VehicleGlanceWidgetData> 
       insuranceText,
       insuranceUrgency,
       statusColor,
+      vehicleCount,
     };
   } catch (error) {
     console.warn('[DriveLedger] Failed to build widget snapshot:', error);
@@ -247,6 +298,15 @@ export async function getCachedWidgetData(): Promise<VehicleGlanceWidgetData> {
  */
 export async function syncWidgetState(): Promise<void> {
   if (Platform.OS !== 'android') return;
+
+  // Re-evaluate reminders whenever vehicle/fuel/service/document data changes.
+  // Lazy require: notificationService imports serviceStore, which imports this file.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('@/services/notificationService').refreshReminders();
+  } catch (e) {
+    console.debug('[DriveLedger] Reminder refresh skipped:', e);
+  }
 
   try {
     const data = await getWidgetDataSnapshot();

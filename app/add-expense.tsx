@@ -32,6 +32,7 @@ import { useExpenseStore } from '@/stores/expenseStore';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { Typography, Spacing, Sizing } from '@/constants/theme';
 import { EXPENSE_CATEGORIES } from '@/constants/expenseCategories';
+import { CategoryIcon } from '@/components/CategoryIcon';
 import { todayISO } from '@/utils/date';
 import { displayToISO, isoToDisplay, formatDateInput, validateDateDisplay } from '@/utils/dateInput';
 import { validateExpense } from '@/engine/validationEngine';
@@ -183,7 +184,7 @@ export default function AddExpenseScreen() {
                 },
               ]}
             >
-              <Text style={styles.chipEmoji}>{cat.icon}</Text>
+              <CategoryIcon icon={cat.icon} size={16} />
               <Text
                 style={[
                   styles.chipText,

@@ -32,6 +32,17 @@ import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import { getKmUntilService, getServiceDueStatus } from '@/stores/serviceStore';
 import { DOCUMENT_TYPE_LABELS } from '@/constants/documentTypes';
 import { daysUntil } from '@/utils/date';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as fuelRepo from '@/database/repositories/fuelRepo';
+import {
+  DEFAULT_COOLDOWN_DAYS,
+  FUEL_NUDGE_COOLDOWN_DAYS,
+  isInCooldown,
+  shouldSendFuelNudge,
+} from '@/services/reminderRules';
+
+const SENT_LOG_KEY = 'driveledger_notification_sent_log';
+const CHANNEL_GENERAL = 'general-reminders';
 
 // ─── Constants ──────────────────────────────────────────────────────
 
@@ -130,18 +141,46 @@ export async function requestNotificationPermission(): Promise<boolean> {
 
 type NotificationsModule = typeof import('expo-notifications');
 
-/** Fires a notification immediately on the given Android channel. */
-function notifyNow(
+/**
+ * Fires a notification immediately, at most once per cooldown window for the
+ * same message (prevents spam when data changes trigger a re-check).
+ */
+async function notifyNow(
   N: NotificationsModule,
   channelId: string,
   title: string,
   body: string,
-  data: Record<string, unknown>
-): Promise<string> {
-  return N.scheduleNotificationAsync({
+  data: Record<string, unknown>,
+  cooldownDays: number = DEFAULT_COOLDOWN_DAYS
+): Promise<string | null> {
+  const key = `${channelId}|${title}|${body}`;
+  const now = Date.now();
+  let log: Record<string, number> = {};
+  try {
+    const raw = await AsyncStorage.getItem(SENT_LOG_KEY);
+    if (raw) log = JSON.parse(raw);
+  } catch {
+    // ignore — treat as empty log
+  }
+  if (isInCooldown(log[key], now, cooldownDays)) return null;
+
+  const id = await N.scheduleNotificationAsync({
     content: { title, body, data },
     trigger: { channelId },
   });
+
+  // Persist, pruning entries older than 60 days
+  const pruned: Record<string, number> = {};
+  for (const [k, t] of Object.entries(log)) {
+    if (now - t < 60 * 24 * 60 * 60 * 1000) pruned[k] = t;
+  }
+  pruned[key] = now;
+  try {
+    await AsyncStorage.setItem(SENT_LOG_KEY, JSON.stringify(pruned));
+  } catch {
+    // non-fatal
+  }
+  return id;
 }
 
 /** "1 day" / "3 days" */
@@ -299,6 +338,47 @@ async function scheduleServiceNotifications(
   }
 }
 
+// ─── Fuel Logging Nudge ─────────────────────────────────────────────
+
+async function scheduleFuelNudge(
+  N: NotificationsModule,
+  vehicleId: string
+): Promise<void> {
+  const vehicle = vehicleRepo.getVehicleById(vehicleId);
+  if (!vehicle) return;
+  const entries = fuelRepo.getFuelEntriesByVehicle(vehicleId);
+  const daysSince = entries.length > 0 ? -daysUntil(entries[0].date) : null;
+  if (!shouldSendFuelNudge(daysSince)) return;
+
+  await notifyNow(
+    N,
+    CHANNEL_GENERAL,
+    '⛽ Time to log your fuel?',
+    `No fuel logged for ${vehicle.nickname} in ${daysSince} days. Keep your mileage stats accurate.`,
+    { vehicleId, type: 'fuel_nudge' },
+    FUEL_NUDGE_COOLDOWN_DAYS
+  );
+}
+
+// ─── Monthly Summary (repeating, static content) ────────────────────
+
+async function scheduleMonthlySummary(N: NotificationsModule): Promise<void> {
+  await N.scheduleNotificationAsync({
+    content: {
+      title: '📊 Your monthly driving summary is ready',
+      body: 'See how much you spent on fuel, service and expenses last month.',
+      data: { type: 'monthly_summary' },
+    },
+    trigger: {
+      type: N.SchedulableTriggerInputTypes.MONTHLY,
+      day: 1,
+      hour: 10,
+      minute: 0,
+      channelId: CHANNEL_GENERAL,
+    },
+  });
+}
+
 // ─── Schedule All Reminders ─────────────────────────────────────────
 
 /**
@@ -325,10 +405,33 @@ export async function scheduleReminderNotifications(vehicleIds: string[]): Promi
     for (const vehicleId of vehicleIds) {
       await scheduleDocumentNotifications(N, vehicleId);
       await scheduleServiceNotifications(N, vehicleId);
+      await scheduleFuelNudge(N, vehicleId);
     }
+    await scheduleMonthlySummary(N);
   } catch (error) {
     console.warn('[DriveLedger] Failed to schedule notifications:', error);
   }
+}
+
+// ─── Refresh (called after data changes) ────────────────────────────
+
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Re-evaluates reminders for all active vehicles. Debounced so rapid
+ * store mutations result in a single re-check. Safe to call anywhere.
+ */
+export function refreshReminders(): void {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    try {
+      const ids = vehicleRepo.getActiveVehicles().map((v) => v.id);
+      void scheduleReminderNotifications(ids);
+    } catch (e) {
+      console.warn('[DriveLedger] refreshReminders failed:', e);
+    }
+  }, 1500);
 }
 
 // ─── Cancel ─────────────────────────────────────────────────────────
@@ -375,6 +478,11 @@ export async function setupNotificationChannel(): Promise<void> {
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#0A84FF',
         description: 'Notifications for upcoming and overdue vehicle services',
+      });
+      await N.setNotificationChannelAsync(CHANNEL_GENERAL, {
+        name: 'General Reminders',
+        importance: N.AndroidImportance.DEFAULT,
+        description: 'Fuel logging nudges and monthly summaries',
       });
     }
   } catch {

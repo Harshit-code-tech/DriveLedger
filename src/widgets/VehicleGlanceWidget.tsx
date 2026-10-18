@@ -29,12 +29,15 @@ export interface VehicleGlanceWidgetData {
 
   // Documents
   pucText: string;
-  pucUrgency: 'ok' | 'due_soon' | 'expired';
+  pucUrgency: 'ok' | 'due_soon' | 'expired' | 'not_set';
   insuranceText: string;
-  insuranceUrgency: 'ok' | 'due_soon' | 'expired';
+  insuranceUrgency: 'ok' | 'due_soon' | 'expired' | 'not_set';
 
   // Overall health dot
   statusColor: `#${string}`;  // '#10B981' | '#F59E0B' | '#EF4444'
+
+  // Number of active vehicles (switch button shown when > 1)
+  vehicleCount?: number;
 }
 
 export const DEFAULT_WIDGET_DATA: VehicleGlanceWidgetData = {
@@ -48,12 +51,12 @@ export const DEFAULT_WIDGET_DATA: VehicleGlanceWidgetData = {
   monthlySpend: '₹0 this month',
   tyrePressFront: null,
   tyrePressRear: null,
-  serviceText: 'Service OK',
+  serviceText: 'No service data',
   serviceUrgency: 'ok',
-  pucText: 'PUC: Valid',
-  pucUrgency: 'ok',
-  insuranceText: 'Insurance: OK',
-  insuranceUrgency: 'ok',
+  pucText: 'PUC: Not Set',
+  pucUrgency: 'not_set',
+  insuranceText: 'Ins: Not Set',
+  insuranceUrgency: 'not_set',
   statusColor: '#10B981',
 };
 
@@ -83,12 +86,15 @@ const COLORS = {
   accent:       '#818CF8',  // indigo
 } as const;
 
-function urgencyColors(urgency: 'ok' | 'due_soon' | 'overdue' | 'expired') {
+function urgencyColors(urgency: 'ok' | 'due_soon' | 'overdue' | 'expired' | 'not_set') {
   if (urgency === 'overdue' || urgency === 'expired') {
     return { bg: COLORS.redBg, border: COLORS.redBorder, text: COLORS.redText };
   }
   if (urgency === 'due_soon') {
     return { bg: COLORS.amberBg, border: COLORS.amberBorder, text: COLORS.amberText };
+  }
+  if (urgency === 'not_set') {
+    return { bg: COLORS.surfaceMid, border: COLORS.border, text: COLORS.textDim };
   }
   return { bg: COLORS.greenBg, border: COLORS.greenBorder, text: COLORS.greenText };
 }
@@ -165,6 +171,23 @@ export function VehicleGlanceWidget(props: VehicleGlanceWidgetData) {
 
         {/* Right: reg chip + last fill date + status dot */}
         <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 6 }}>
+          {/* Vehicle switcher */}
+          {(d.vehicleCount ?? 1) > 1 && (
+            <FlexWidget
+              style={{
+                backgroundColor: COLORS.accent,
+                paddingHorizontal: 8,
+                paddingVertical: 2,
+                borderRadius: 6,
+              }}
+              clickAction="SWITCH_VEHICLE"
+            >
+              <TextWidget
+                text="⇄ Switch"
+                style={{ fontSize: 9, fontWeight: 'bold', color: '#FFFFFF' }}
+              />
+            </FlexWidget>
+          )}
           {/* Last fill label */}
           {d.lastFillDate !== '—' && (
             <TextWidget

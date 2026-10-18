@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { PieChart } from 'react-native-gifted-charts';
 import { Typography, Spacing, Sizing } from '@/constants/theme';
 import { formatCurrency } from '@/utils/format';
+import { CategoryIcon } from '@/components/CategoryIcon';
 
 import type { CostCategorySlice } from '@/utils/statsHelpers';
 export type { CostCategorySlice };
@@ -78,7 +79,7 @@ export function CostBreakdownDonutChart({
             >
               <View style={styles.legendLeft}>
                 <View style={[styles.colorIndicator, { backgroundColor: item.color }]} />
-                <Text style={{ fontSize: 14 }}>{item.icon}</Text>
+                <CategoryIcon icon={item.icon} size={14} />
                 <Text style={[Typography.bodySmall, { color: colors.text, fontWeight: '600' }]}>
                   {item.label}
                 </Text>

@@ -32,6 +32,7 @@ import { useServiceStore } from '@/stores/serviceStore';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { Typography, Spacing, Sizing } from '@/constants/theme';
 import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
+import { CategoryIcon } from '@/components/CategoryIcon';
 import { todayISO } from '@/utils/date';
 import { displayToISO, isoToDisplay, formatDateInput, validateDateDisplay } from '@/utils/dateInput';
 import { FormHeader } from '@/components/FormHeader';
@@ -235,7 +236,7 @@ export default function AddServiceScreen() {
                 },
               ]}
             >
-              <Text style={styles.chipEmoji}>{template.icon}</Text>
+              <CategoryIcon icon={template.icon} size={16} />
               <Text
                 style={[
                   styles.chipText,

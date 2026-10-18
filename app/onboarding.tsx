@@ -51,9 +51,7 @@ const SINGLE_FUEL_TYPES = [
 ];
 const BI_FUEL_TYPES = [
   FuelType.HYBRID_CNG_PETROL,
-  FuelType.HYBRID_CNG_DIESEL,
   FuelType.HYBRID_LPG_PETROL,
-  FuelType.HYBRID_LPG_DIESEL,
 ];
 
 type Step = 'welcome' | 'form';

@@ -26,9 +26,7 @@ export enum FuelType {
   HYBRID = 'hybrid',
   // ── Bi-Fuel Variants (dual-fuel, two physical tanks: gas + liquid) ──
   HYBRID_CNG_PETROL = 'hybrid_cng_petrol',
-  HYBRID_CNG_DIESEL = 'hybrid_cng_diesel',
   HYBRID_LPG_PETROL = 'hybrid_lpg_petrol',
-  HYBRID_LPG_DIESEL = 'hybrid_lpg_diesel',
 }
 
 /**
@@ -38,9 +36,7 @@ export enum FuelType {
 export function isBiFuel(ft: FuelType): boolean {
   return [
     FuelType.HYBRID_CNG_PETROL,
-    FuelType.HYBRID_CNG_DIESEL,
     FuelType.HYBRID_LPG_PETROL,
-    FuelType.HYBRID_LPG_DIESEL,
   ].includes(ft);
 }
 
@@ -100,9 +96,7 @@ export const FUEL_TYPE_TO_DEFAULT_UNIT: Record<FuelType, FuelUnit> = {
   [FuelType.ELECTRIC]: FuelUnit.KWH,
   [FuelType.HYBRID]: FuelUnit.LITRES,
   [FuelType.HYBRID_CNG_PETROL]: FuelUnit.KG,
-  [FuelType.HYBRID_CNG_DIESEL]: FuelUnit.KG,
   [FuelType.HYBRID_LPG_PETROL]: FuelUnit.KG,
-  [FuelType.HYBRID_LPG_DIESEL]: FuelUnit.KG,
 };
 
 /**
@@ -125,9 +119,7 @@ export const FUEL_TYPE_LABELS: Record<FuelType, string> = {
   [FuelType.ELECTRIC]: 'Electric ⚡',
   [FuelType.HYBRID]: 'Strong Hybrid (HEV)',
   [FuelType.HYBRID_CNG_PETROL]: 'CNG + Petrol',
-  [FuelType.HYBRID_CNG_DIESEL]: 'CNG + Diesel',
   [FuelType.HYBRID_LPG_PETROL]: 'LPG + Petrol',
-  [FuelType.HYBRID_LPG_DIESEL]: 'LPG + Diesel',
 };
 
 /** Short UI labels (e.g. for display in list cards) */
@@ -139,9 +131,7 @@ export const FUEL_TYPE_SHORT_LABELS: Record<FuelType, string> = {
   [FuelType.ELECTRIC]: 'EV',
   [FuelType.HYBRID]: 'Strong Hybrid',
   [FuelType.HYBRID_CNG_PETROL]: 'CNG+Petrol',
-  [FuelType.HYBRID_CNG_DIESEL]: 'CNG+Diesel',
   [FuelType.HYBRID_LPG_PETROL]: 'LPG+Petrol',
-  [FuelType.HYBRID_LPG_DIESEL]: 'LPG+Diesel',
 };
 
 /** Human-readable labels for vehicle types (used in UI dropdowns) */
@@ -166,10 +156,8 @@ export const MILEAGE_UNIT_LABELS: Record<MileageUnit, string> = {
 export function getPrimaryTankLabel(ft: FuelType): string | null {
   switch (ft) {
     case FuelType.HYBRID_CNG_PETROL:
-    case FuelType.HYBRID_CNG_DIESEL:
       return 'CNG Cylinder Capacity (kg)';
     case FuelType.HYBRID_LPG_PETROL:
-    case FuelType.HYBRID_LPG_DIESEL:
       return 'LPG Cylinder Capacity (kg)';
     default:
       return null;
@@ -185,9 +173,6 @@ export function getSecondaryTankLabel(ft: FuelType): string | null {
     case FuelType.HYBRID_CNG_PETROL:
     case FuelType.HYBRID_LPG_PETROL:
       return 'Petrol Fallback Tank Capacity (litres)';
-    case FuelType.HYBRID_CNG_DIESEL:
-    case FuelType.HYBRID_LPG_DIESEL:
-      return 'Diesel Fallback Tank Capacity (litres)';
     default:
       return null;
   }
@@ -209,11 +194,11 @@ export function getTankCapacityLabel(ft: FuelType): string {
  * Returns a user-friendly label for the specified fuel system in a hybrid vehicle.
  */
 export function getFuelSystemLabel(ft: FuelType, system: 'primary' | 'secondary'): string {
-  if (ft === FuelType.HYBRID || ft === FuelType.HYBRID_CNG_PETROL || ft === FuelType.HYBRID_CNG_DIESEL) {
-    return system === 'primary' ? 'CNG (Gas)' : (ft === FuelType.HYBRID_CNG_DIESEL ? 'Diesel' : 'Petrol');
+  if (ft === FuelType.HYBRID || ft === FuelType.HYBRID_CNG_PETROL) {
+    return system === 'primary' ? 'CNG (Gas)' : 'Petrol';
   }
-  if (ft === FuelType.HYBRID_LPG_PETROL || ft === FuelType.HYBRID_LPG_DIESEL) {
-    return system === 'primary' ? 'LPG (Gas)' : (ft === FuelType.HYBRID_LPG_PETROL ? 'Petrol' : 'Diesel');
+  if (ft === FuelType.HYBRID_LPG_PETROL) {
+    return system === 'primary' ? 'LPG (Gas)' : 'Petrol';
   }
   return system === 'primary' ? 'Primary Tank' : 'Secondary Tank';
 }
