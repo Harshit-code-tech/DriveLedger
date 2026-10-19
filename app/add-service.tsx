@@ -45,10 +45,17 @@ export default function AddServiceScreen() {
   const colors = useThemeColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ id?: string }>();
+  const params = useLocalSearchParams<{ id?: string; vehicleId?: string }>();
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
+  const selectVehicle = useVehicleStore((s) => s.selectVehicle);
   const addRecord = useServiceStore((s) => s.addRecord);
   const editRecord = useServiceStore((s) => s.editRecord);
+
+  useEffect(() => {
+    if (params.vehicleId && params.vehicleId !== selectedVehicle?.id) {
+      selectVehicle(params.vehicleId);
+    }
+  }, [params.vehicleId]);
 
   const isEditMode = !!params.id;
 

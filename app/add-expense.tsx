@@ -46,10 +46,17 @@ export default function AddExpenseScreen() {
   const colors = useThemeColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ id?: string }>();
+  const params = useLocalSearchParams<{ id?: string; vehicleId?: string }>();
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
+  const selectVehicle = useVehicleStore((s) => s.selectVehicle);
   const addExpense = useExpenseStore((s) => s.addExpense);
   const editExpense = useExpenseStore((s) => s.editExpense);
+
+  useEffect(() => {
+    if (params.vehicleId && params.vehicleId !== selectedVehicle?.id) {
+      selectVehicle(params.vehicleId);
+    }
+  }, [params.vehicleId]);
 
   const isEditMode = !!params.id;
 

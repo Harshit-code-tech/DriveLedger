@@ -72,12 +72,19 @@ export default function AddFuelScreen() {
   const colors = useThemeColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ id?: string }>();
+  const params = useLocalSearchParams<{ id?: string; vehicleId?: string }>();
 
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
+  const selectVehicle = useVehicleStore((s) => s.selectVehicle);
   const loadVehicles = useVehicleStore((s) => s.loadVehicles);
   const addFuelEntry = useFuelStore((s) => s.addFuelEntry);
   const loadEntries = useFuelStore((s) => s.loadEntries);
+
+  useEffect(() => {
+    if (params.vehicleId && params.vehicleId !== selectedVehicle?.id) {
+      selectVehicle(params.vehicleId);
+    }
+  }, [params.vehicleId]);
 
   const isEditMode = !!params.id;
 

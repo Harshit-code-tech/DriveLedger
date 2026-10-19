@@ -101,8 +101,6 @@ Start here if you want to understand or contribute to the codebase:
 | 🔀 **[DATA_FLOW.md](DATA_FLOW.md)** | Step-by-step traces of how data moves: adding and deleting a fuel entry (validation → store → repo → engine → odometer → UI refresh), loading screen data, backup export/restore, the Stats screen, theme/colour flow, and a worked mileage example. Read this when debugging or changing a feature end to end. |
 | 🧮 **[mileage_calculation_guide.md](mileage_calculation_guide.md)** | The mileage rules in detail: tank-to-tank (R1–R9), partial-fill accumulation and the `~est.` formula, EV charge-to-charge, aggregated stats, reasonableness thresholds per vehicle type, and recalculation on edit/delete, with a complete worked example table. |
 
-Coding conventions (TypeScript, hooks, styling tokens, store/repository rules, validation, testing, commit style) live in `docs/CODING_GUIDELINES.md`.
-
 ### Project Structure at a Glance
 
 ```text

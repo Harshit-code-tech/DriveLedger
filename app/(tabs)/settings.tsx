@@ -30,12 +30,14 @@ import {
 import { useVehicleStore } from '@/stores/vehicleStore';
 import type { Vehicle } from '@/types/vehicle';
 import { buildLedgerCsv } from '@/utils/csvExport';
+import { syncWidgetState } from '@/widgets/widgetDataService';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Modal,
+  Platform,
   ScrollView,
   Share,
   StyleSheet,
@@ -60,6 +62,8 @@ export default function SettingsScreen() {
 
   // Vehicle store
   const vehicles = useVehicleStore((s) => s.vehicles);
+  const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
+  const selectVehicle = useVehicleStore((s) => s.selectVehicle);
   const loadVehicles = useVehicleStore((s) => s.loadVehicles);
   const archiveVehicle = useVehicleStore((s) => s.archiveVehicle);
   const restoreVehicle = useVehicleStore((s) => s.restoreVehicle);
@@ -302,9 +306,18 @@ export default function SettingsScreen() {
               style={[styles.vehicleCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
             >
               <View style={styles.vehicleInfo}>
-                <Text style={[Typography.body, { color: colors.text, fontWeight: '700' }]}>
-                  {v.nickname}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={[Typography.body, { color: colors.text, fontWeight: '700' }]}>
+                    {v.nickname}
+                  </Text>
+                  {(v.id === defaultVehicleId || (!defaultVehicleId && vehicles[0]?.id === v.id)) && (
+                    <View style={{ backgroundColor: colors.primary + '20', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: colors.primary }}>
+                        DEFAULT
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
                   {v.registration_number} · {FUEL_TYPE_SHORT_LABELS[v.fuel_type as keyof typeof FUEL_TYPE_SHORT_LABELS] || v.fuel_type}
                 </Text>
@@ -519,7 +532,19 @@ export default function SettingsScreen() {
         title="Default Vehicle"
         options={vehiclePickerOptions}
         selected={defaultVehicleId ?? FIRST_VEHICLE_OPTION}
-        onSelect={(id) => setDefaultVehicleId(id === FIRST_VEHICLE_OPTION ? null : id)}
+        onSelect={async (id) => {
+          const newDefaultId = id === FIRST_VEHICLE_OPTION ? null : id;
+          await setDefaultVehicleId(newDefaultId);
+          // Set as active vehicle immediately so the app and screens switch to it
+          if (newDefaultId) {
+            selectVehicle(newDefaultId);
+          } else if (vehicles[0]) {
+            selectVehicle(vehicles[0].id);
+          }
+          if (Platform.OS === 'android') {
+            syncWidgetState().catch(() => {});
+          }
+        }}
         onClose={() => setPickerVehicle(false)}
         colors={colors}
       />

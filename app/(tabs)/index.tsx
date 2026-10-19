@@ -31,7 +31,7 @@ import { useVehicleStore } from '@/stores/vehicleStore';
 import { daysUntil, formatDisplayDateLong } from '@/utils/date';
 import { formatCurrency, formatMileage, formatOdometer } from '@/utils/format';
 import { estimateFuelLevel, getCurrentMonthTotalSpend, type FuelLevelResult } from '@/utils/statsHelpers';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   RefreshControl,
@@ -135,8 +135,16 @@ export default function HomeScreen() {
   const colors = useThemeColors();
   const router = useRouter();
 
+  const params = useLocalSearchParams<{ vehicleId?: string }>();
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
+  const selectVehicle = useVehicleStore((s) => s.selectVehicle);
   const loadVehicles = useVehicleStore((s) => s.loadVehicles);
+
+  useEffect(() => {
+    if (params.vehicleId && params.vehicleId !== selectedVehicle?.id) {
+      selectVehicle(params.vehicleId);
+    }
+  }, [params.vehicleId]);
 
   const entries = useFuelStore((s) => s.entries);
   const stats = useFuelStore((s) => s.stats);
@@ -232,6 +240,7 @@ export default function HomeScreen() {
   const { total: monthlyTotal } = getCurrentMonthTotalSpend(entries, serviceRecords, expenses);
 
   const isBiFuelVehicle = isBiFuel(selectedVehicle.fuel_type as FuelType);
+  const isPureCng = selectedVehicle.fuel_type === FuelType.CNG;
   const isEV = selectedVehicle.fuel_type === FuelType.ELECTRIC;
   const primaryUnit = (selectedVehicle.fuel_type === FuelType.CNG || isBiFuelVehicle)
     ? 'kg'
@@ -417,7 +426,7 @@ export default function HomeScreen() {
                     : 'Est. Fuel Level'
               }
               icon={
-                isBiFuelVehicle ? (
+                isBiFuelVehicle || isPureCng ? (
                   <CngTankIcon size={15} color={colors.primary} />
                 ) : selectedVehicle.fuel_type === FuelType.ELECTRIC ? (
                   <Text style={{ fontSize: 13 }}>⚡</Text>
@@ -694,8 +703,18 @@ export default function HomeScreen() {
         activeOpacity={0.85}
         onPress={() => router.push('/add-fuel')}
       >
-        <Text style={styles.fabIcon}>{isEV ? '⚡' : '⛽'}</Text>
-        <Text style={[styles.fabText, { color: '#1A1C1E' }]}>{isEV ? 'Add Charge' : 'Add Fuel'}</Text>
+        <View style={styles.fabIconContainer}>
+          {isEV ? (
+            <Text style={styles.fabIcon}>⚡</Text>
+          ) : isPureCng ? (
+            <CngTankIcon size={18} color="#1A1C1E" showLabel={false} />
+          ) : (
+            <Text style={styles.fabIcon}>⛽</Text>
+          )}
+        </View>
+        <Text style={[styles.fabText, { color: '#1A1C1E' }]}>
+          {isEV ? 'Add Charge' : isPureCng ? 'Add CNG' : 'Add Fuel'}
+        </Text>
       </TouchableOpacity>
 
       {/* ── Pre-Trip Highway Checklist Modal (Feature 4.3) ── */}
@@ -826,6 +845,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 12,
     gap: Spacing.sm,
+  },
+  fabIconContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   fabIcon: {
     fontSize: 22,

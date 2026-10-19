@@ -8,6 +8,7 @@ import * as serviceRepo from '@/database/repositories/serviceRepo';
 import * as expenseRepo from '@/database/repositories/expenseRepo';
 import * as documentRepo from '@/database/repositories/documentRepo';
 import { getServiceDueStatus } from '@/stores/serviceStore';
+import { getPreferences } from '@/stores/preferencesStore';
 import { daysUntil } from '@/utils/date';
 import { MILEAGE_UNIT_LABELS } from '@/constants/fuelTypes';
 import { DocumentType } from '@/constants/documentTypes';
@@ -20,14 +21,16 @@ import {
 
 const WIDGET_STORAGE_KEY = 'driveledger_widget_data_v2';
 export const WIDGET_NAME = 'VehicleGlanceWidget';
-const WIDGET_VEHICLE_KEY = 'driveledger_widget_vehicle_id';
+export const WIDGET_VEHICLE_KEY = 'driveledger_widget_vehicle_id';
 
 /** Cycles the widget to the next active vehicle and persists the choice. */
 export async function cycleWidgetVehicle(): Promise<void> {
   try {
     const vehicles = vehicleRepo.getActiveVehicles();
     if (!vehicles || vehicles.length < 2) return;
-    const currentId = await AsyncStorage.getItem(WIDGET_VEHICLE_KEY);
+    const storedId = await AsyncStorage.getItem(WIDGET_VEHICLE_KEY);
+    const { defaultVehicleId } = getPreferences();
+    const currentId = storedId ?? defaultVehicleId ?? vehicles[0].id;
     const idx = vehicles.findIndex((v) => String(v.id) === currentId);
     const next = vehicles[(idx + 1) % vehicles.length];
     await AsyncStorage.setItem(WIDGET_VEHICLE_KEY, String(next.id));
@@ -94,7 +97,10 @@ export async function getWidgetDataSnapshot(): Promise<VehicleGlanceWidgetData> 
     }
 
     const storedId = await AsyncStorage.getItem(WIDGET_VEHICLE_KEY);
-    const vehicle = vehicles.find((v) => String(v.id) === storedId) ?? vehicles[0];
+    const { defaultVehicleId } = getPreferences();
+    const vehicle = (storedId ? vehicles.find((v) => String(v.id) === storedId) : null)
+      ?? vehicles.find((v) => v.id === defaultVehicleId)
+      ?? vehicles[0];
     const vehicleCount = vehicles.length;
     const fuelType = vehicle.fuel_type as FuelType;
 
@@ -244,6 +250,7 @@ export async function getWidgetDataSnapshot(): Promise<VehicleGlanceWidgetData> 
           : '#10B981';
 
     return {
+      vehicleId:        vehicle.id,
       vehicleName:      vehicle.nickname,
       regNumber:        vehicle.registration_number,
       fuelType:         vehicle.fuel_type,

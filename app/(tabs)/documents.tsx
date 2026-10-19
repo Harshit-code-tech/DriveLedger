@@ -21,7 +21,7 @@ import { useDocumentStore } from '@/stores/documentStore';
 import { useVehicleStore } from '@/stores/vehicleStore';
 import type { VehicleDocument } from '@/types/document';
 import { daysUntil, formatDisplayDateLong } from '@/utils/date';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -32,7 +32,15 @@ import { ReportExportModal } from '@/components/ReportExportModal';
 export default function DocumentsScreen() {
   const colors = useThemeColors();
   const router = useRouter();
+  const params = useLocalSearchParams<{ vehicleId?: string }>();
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
+  const selectVehicle = useVehicleStore((s) => s.selectVehicle);
+
+  useEffect(() => {
+    if (params.vehicleId && params.vehicleId !== selectedVehicle?.id) {
+      selectVehicle(params.vehicleId);
+    }
+  }, [params.vehicleId]);
 
   const documents = useDocumentStore((s) => s.documents);
   const loadDocuments = useDocumentStore((s) => s.loadDocuments);

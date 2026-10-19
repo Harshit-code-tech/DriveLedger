@@ -17,7 +17,8 @@ import {
 import { usePreferencesStore } from '@/stores/preferencesStore';
 import { useVehicleStore } from '@/stores/vehicleStore';
 import { syncWidgetState } from '@/widgets/widgetDataService';
-import { Stack } from 'expo-router';
+import { Stack, useGlobalSearchParams } from 'expo-router';
+import * as Linking from 'expo-linking';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -37,9 +38,37 @@ export default function RootLayout() {
   // Only subscribe to a serialized key of vehicle IDs, so loadVehicles() does NOT re-render RootLayout on tab focus
   const vehicleIdsKey = useVehicleStore((s) => s.vehicles.map((v) => v.id).join(','));
   const loadPreferences = usePreferencesStore((s) => s.loadPreferences);
+  const globalParams = useGlobalSearchParams<{ vehicleId?: string }>();
   const [appIsReady, setAppIsReady] = useState(false);
   const [showAnimatedSplash, setShowAnimatedSplash] = useState(true);
   const nativeSplashHidden = useRef(false);
+
+  // Deep-link vehicle selection (e.g. from Widget tap)
+  // Changes currently active vehicle in session WITHOUT altering defaultVehicleId preference
+  useEffect(() => {
+    if (globalParams.vehicleId) {
+      useVehicleStore.getState().selectVehicle(globalParams.vehicleId);
+    }
+  }, [globalParams.vehicleId]);
+
+  useEffect(() => {
+    const handleUrl = (url: string | null) => {
+      if (!url) return;
+      try {
+        const parsed = Linking.parse(url);
+        const vid = parsed.queryParams?.vehicleId;
+        if (typeof vid === 'string' && vid) {
+          useVehicleStore.getState().selectVehicle(vid);
+        }
+      } catch (err) {
+        console.debug('Failed to parse deep link URL:', err);
+      }
+    };
+
+    Linking.getInitialURL().then(handleUrl);
+    const sub = Linking.addEventListener('url', (event) => handleUrl(event.url));
+    return () => sub.remove();
+  }, []);
 
   const handleRootLayout = useCallback(() => {
     if (nativeSplashHidden.current) return;

@@ -1,11 +1,28 @@
-"use no memo";
 import React from 'react';
-import { FlexWidget, TextWidget } from 'react-native-android-widget';
+import { FlexWidget, SvgWidget, TextWidget } from 'react-native-android-widget';
+
+// ─── Custom CNG Tank Vector Icon (SVG for Android Widget RemoteViews) ─────────
+// Authentic compressed natural gas cylinder matching CngTankIcon:
+// Brass valve knob (#D97706), steel neck (#475569), high-pressure body (#059669),
+// 3D gloss highlight, neck collar weld line, and bold "CNG" mark.
+const CNG_TANK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 26" width="20" height="26">
+  <rect x="7" y="0.5" width="6" height="2.5" rx="1" fill="#D97706" stroke="#B45309" stroke-width="0.5"/>
+  <rect x="8.5" y="3" width="3" height="2" fill="#475569"/>
+  <rect x="3" y="5" width="14" height="20.5" rx="5.5" fill="#059669"/>
+  <rect x="4.5" y="6.5" width="2" height="17.5" rx="1" fill="#FFFFFF" fill-opacity="0.35"/>
+  <line x1="3" y1="9.5" x2="17" y2="9.5" stroke="#000000" stroke-opacity="0.15" stroke-width="0.8"/>
+  <text x="10" y="17.5" font-size="5" font-family="sans-serif" font-weight="900" fill="#FFFFFF" text-anchor="middle">CNG</text>
+</svg>`;
+
+export function isCngFuel(fuelType: string): boolean {
+  return fuelType === 'cng';
+}
 
 // ─── Data Shape ──────────────────────────────────────────────────────────────
 
 export interface VehicleGlanceWidgetData {
   // Identity
+  vehicleId?: string;
   vehicleName: string;
   regNumber: string;
   fuelType: string;           // 'petrol' | 'diesel' | 'cng' | 'ev' | 'hybrid' etc.
@@ -41,6 +58,7 @@ export interface VehicleGlanceWidgetData {
 }
 
 export const DEFAULT_WIDGET_DATA: VehicleGlanceWidgetData = {
+  vehicleId: '',
   vehicleName: 'DriveLedger',
   regNumber: '—',
   fuelType: 'petrol',
@@ -107,10 +125,11 @@ function fuelIcon(fuelType: string): string {
       return '🔋';
     case 'hybrid_cng_petrol':
     case 'hybrid_lpg_petrol':
-      return '🔄';
+      return '⛽';
     case 'cng':
     case 'lpg':
-      return '⛽';
+    case 'petrol':
+    case 'diesel':
     default:
       return '⛽';
   }
@@ -126,7 +145,7 @@ function fuelActionLabel(fuelType: string): string {
     case 'hybrid_lpg_petrol':
       return '⛽  Bi-Fuel';
     case 'cng':
-      return '⛽  Log CNG';
+      return 'Log CNG';
     case 'lpg':
       return '⛽  Log LPG';
     case 'diesel':
@@ -172,7 +191,8 @@ export function VehicleGlanceWidget(props: VehicleGlanceWidgetData) {
         borderColor: COLORS.border,
         borderWidth: 1,
       }}
-      clickAction="OPEN_APP"
+      clickAction={d.vehicleId ? 'OPEN_URI' : 'OPEN_APP'}
+      clickActionData={d.vehicleId ? { uri: `driveledger://?vehicleId=${d.vehicleId}` } : undefined}
     >
       {/* ── Row 1: Header ── */}
       <FlexWidget
@@ -184,11 +204,29 @@ export function VehicleGlanceWidget(props: VehicleGlanceWidgetData) {
         }}
       >
         {/* Left: fuel icon + vehicle name */}
-        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 5 }}>
-          <TextWidget
-            text={fuelIcon(d.fuelType)}
-            style={{ fontSize: 13 }}
-          />
+        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 6 }}>
+          {d.fuelType === 'cng' ? (
+            <SvgWidget
+              svg={CNG_TANK_SVG}
+              style={{ width: 14, height: 18 }}
+            />
+          ) : d.fuelType === 'hybrid_cng_petrol' ? (
+            <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 3 }}>
+              <SvgWidget
+                svg={CNG_TANK_SVG}
+                style={{ width: 11, height: 15 }}
+              />
+              <TextWidget
+                text="⛽"
+                style={{ fontSize: 11 }}
+              />
+            </FlexWidget>
+          ) : (
+            <TextWidget
+              text={fuelIcon(d.fuelType)}
+              style={{ fontSize: 13 }}
+            />
+          )}
           <TextWidget
             text={d.vehicleName}
             style={{ fontSize: 15, fontWeight: 'bold', color: COLORS.text }}
@@ -438,6 +476,8 @@ export function VehicleGlanceWidget(props: VehicleGlanceWidgetData) {
             borderWidth: 1,
             marginTop: 5,
           }}
+          clickAction="OPEN_URI"
+          clickActionData={{ uri: d.vehicleId ? `driveledger://add-service?vehicleId=${d.vehicleId}` : 'driveledger://add-service' }}
         >
           <TextWidget
             text={'🔧 ' + d.serviceText}
@@ -468,6 +508,8 @@ export function VehicleGlanceWidget(props: VehicleGlanceWidgetData) {
             borderColor: pucColors.border,
             borderWidth: 1,
           }}
+          clickAction="OPEN_URI"
+          clickActionData={{ uri: d.vehicleId ? `driveledger://documents?vehicleId=${d.vehicleId}` : 'driveledger://documents' }}
         >
           <TextWidget
             text={d.pucText}
@@ -488,6 +530,8 @@ export function VehicleGlanceWidget(props: VehicleGlanceWidgetData) {
             borderColor: insColors.border,
             borderWidth: 1,
           }}
+          clickAction="OPEN_URI"
+          clickActionData={{ uri: d.vehicleId ? `driveledger://documents?vehicleId=${d.vehicleId}` : 'driveledger://documents' }}
         >
           <TextWidget
             text={d.insuranceText}
@@ -507,19 +551,32 @@ export function VehicleGlanceWidget(props: VehicleGlanceWidgetData) {
           marginTop: 6,
         }}
       >
-        {/* Vehicle-specific action button: Charge (EV), Hybrid, Bi-Fuel, or Fuel */}
+        {/* Vehicle-specific action button: Charge (EV), Log CNG, Hybrid, or Fuel */}
         <FlexWidget
           style={{
             flex: 3,
-            backgroundColor: d.fuelType === 'electric' ? '#0284C7' : COLORS.blue,
+            backgroundColor:
+              d.fuelType === 'electric'
+                ? '#0284C7'
+                : isCngFuel(d.fuelType)
+                ? '#059669'
+                : COLORS.blue,
             borderRadius: 10,
             paddingVertical: 7,
+            flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'center',
+            flexGap: 5,
           }}
           clickAction="OPEN_URI"
-          clickActionData={{ uri: 'driveledger://add-fuel' }}
+          clickActionData={{ uri: d.vehicleId ? `driveledger://add-fuel?vehicleId=${d.vehicleId}` : 'driveledger://add-fuel' }}
         >
+          {isCngFuel(d.fuelType) && (
+            <SvgWidget
+              svg={CNG_TANK_SVG}
+              style={{ width: 11, height: 14 }}
+            />
+          )}
           <TextWidget
             text={fuelActionLabel(d.fuelType)}
             style={{ fontSize: 11, fontWeight: 'bold', color: '#FFFFFF' }}
@@ -539,7 +596,7 @@ export function VehicleGlanceWidget(props: VehicleGlanceWidgetData) {
             borderWidth: 1,
           }}
           clickAction="OPEN_URI"
-          clickActionData={{ uri: 'driveledger://add-service' }}
+          clickActionData={{ uri: d.vehicleId ? `driveledger://add-service?vehicleId=${d.vehicleId}` : 'driveledger://add-service' }}
         >
           <TextWidget
             text="🔧  Service"
@@ -560,7 +617,7 @@ export function VehicleGlanceWidget(props: VehicleGlanceWidgetData) {
             borderWidth: 1,
           }}
           clickAction="OPEN_URI"
-          clickActionData={{ uri: 'driveledger://add-expense' }}
+          clickActionData={{ uri: d.vehicleId ? `driveledger://add-expense?vehicleId=${d.vehicleId}` : 'driveledger://add-expense' }}
         >
           <TextWidget
             text="💰  Expense"

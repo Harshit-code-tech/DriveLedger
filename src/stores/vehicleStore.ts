@@ -19,7 +19,7 @@ import { create } from 'zustand';
 import { Platform } from 'react-native';
 import type { Vehicle, CreateVehicleInput, UpdateVehicleInput } from '@/types/vehicle';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
-import { getPreferences } from '@/stores/preferencesStore';
+import { getPreferences, usePreferencesStore } from '@/stores/preferencesStore';
 import { syncWidgetState } from '@/widgets/widgetDataService';
 import { storeRegistry } from '@/stores/storeRegistry';
 
@@ -70,8 +70,11 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
         // On first load: honour the user's preferred default vehicle, fall back to first
         selected = vehicles.find((v) => v.id === defaultVehicleId) ?? vehicles[0];
       } else if (selected) {
-        // Refresh selected vehicle data in case it was edited
-        selected = vehicles.find((v) => v.id === selected!.id) ?? vehicles[0] ?? null;
+        // Refresh selected vehicle data in case it was edited; fallback to default if removed
+        selected = vehicles.find((v) => v.id === selected!.id)
+          ?? vehicles.find((v) => v.id === defaultVehicleId)
+          ?? vehicles[0]
+          ?? null;
       }
 
       set({ vehicles, selectedVehicle: selected, isLoading: false, error: null });
@@ -114,10 +117,16 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
     vehicleRepo.archiveVehicle(id);
     const vehicles = vehicleRepo.getActiveVehicles();
     const currentSelected = get().selectedVehicle;
+    const { defaultVehicleId, setDefaultVehicleId } = usePreferencesStore.getState();
 
-    // If the archived vehicle was selected, switch to the first available
+    // If the archived vehicle was the default, reset default preference to null (auto first-added)
+    if (defaultVehicleId === id) {
+      void setDefaultVehicleId(null);
+    }
+
+    // If the archived vehicle was selected, switch to default or first available
     const selected = currentSelected?.id === id
-      ? (vehicles[0] ?? null)
+      ? (vehicles.find((v) => v.id === defaultVehicleId) ?? vehicles[0] ?? null)
       : currentSelected;
 
     set({ vehicles, selectedVehicle: selected });

@@ -55,6 +55,7 @@ export default function StatsScreen() {
 
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
   const isEV = selectedVehicle ? isElectricFuel(selectedVehicle.fuel_type as FuelType) : false;
+  const isPureCng = selectedVehicle ? selectedVehicle.fuel_type === FuelType.CNG : false;
 
   const entries = useFuelStore((s) => s.entries);
   const stats = useFuelStore((s) => s.stats);
@@ -362,9 +363,16 @@ export default function StatsScreen() {
             {formatCurrency(totalOwnershipCost)}
           </Text>
           <View style={styles.heroBreakdown}>
-            <View style={styles.heroBreakdownPill}>
+            <View style={[styles.heroBreakdownPill, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+              {isEV ? (
+                <Text style={{ fontSize: 11 }}>⚡</Text>
+              ) : isPureCng ? (
+                <CngTankIcon size={12} color="#FFFFFF" showLabel={false} />
+              ) : (
+                <Text style={{ fontSize: 11 }}>⛽</Text>
+              )}
               <Text style={[Typography.caption, { color: 'rgba(255,255,255,0.9)', fontWeight: '600' }]}>
-                {isEV ? '⚡' : '⛽'} {formatCurrency(totalFuelCost)}
+                {formatCurrency(totalFuelCost)}
               </Text>
             </View>
             <View style={styles.heroBreakdownPill}>
