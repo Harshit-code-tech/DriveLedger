@@ -38,9 +38,10 @@ import {
   getMonthlyTotalSpend,
 } from '@/utils/statsHelpers';
 // serviceRepo and expenseRepo reads are now inside useCrossVehicleStats hook
-import { BarChart } from '@/components/charts/BarChart';
+import { MonthlySpendCard } from '@/components/MonthlySpendCard';
 import { CostBreakdownDonutChart } from '@/components/charts/CostBreakdownDonutChart';
 import { MileagePoint, MileageTrendChart } from '@/components/charts/MileageTrendChart';
+import { FleetComparisonCard } from '@/components/FleetComparisonCard';
 import { CngTankIcon } from '@/components/CngTankIcon';
 import { ReportExportModal } from '@/components/ReportExportModal';
 import { computeMileageStats } from '@/engine/mileageEngine';
@@ -74,9 +75,6 @@ export default function StatsScreen() {
 
   // Bi-Fuel Mileage Trend Filter (for Hybrid / Dual-fuel vehicles)
   const [biFuelTrendFilter, setBiFuelTrendFilter] = useState<'all' | 'primary' | 'secondary'>('all');
-
-  // Monthly Bar Chart range toggle: 6M | 12M | Year
-  const [monthlyChartRange, setMonthlyChartRange] = useState<'6m' | '12m' | 'year'>('6m');
 
   // Report Export Modal
   const [showExportModal, setShowExportModal] = useState<boolean>(false);
@@ -124,11 +122,11 @@ export default function StatsScreen() {
   const mileageTrendData = useMemo(() => {
     if (!selectedVehicle) return { points: [] as MileagePoint[], average: null, unitLabel: 'km/L' };
 
-    const isHybrid = isHybridFuel(selectedVehicle.fuel_type as FuelType);
+    const isBiFuelVehicle = isHybridFuel(selectedVehicle.fuel_type as FuelType);
     let candidateEntries = entries.filter((e) => e.calculated_mileage != null);
 
     // Apply Bi-Fuel system filter if selected
-    if (isHybrid && biFuelTrendFilter !== 'all') {
+    if (isBiFuelVehicle && biFuelTrendFilter !== 'all') {
       candidateEntries = candidateEntries.filter(
         (e) => (e.fuel_system ?? (e.fuel_unit === 'kg' ? 'primary' : 'secondary')) === biFuelTrendFilter
       );
@@ -142,61 +140,58 @@ export default function StatsScreen() {
       }
     }
 
-    // Newest entries are first in store; take up to 15 newest and reverse for chronological order
+    // Newest entries are first in store; take up to 10 newest and reverse for chronological order
     const points: MileagePoint[] = candidateEntries
-      .slice(0, 15)
+      .slice(0, 10)
       .reverse()
       .map((e) => {
         const d = new Date(e.date);
+        let fuelSystem: 'primary' | 'secondary' | undefined;
+        let fuelSystemLabel: string | undefined;
+
+        if (isBiFuelVehicle) {
+          fuelSystem = (e.fuel_system ?? (e.fuel_unit === 'kg' ? 'primary' : 'secondary')) as 'primary' | 'secondary';
+          const isLPG = selectedVehicle.fuel_type === FuelType.HYBRID_LPG_PETROL;
+          fuelSystemLabel = fuelSystem === 'primary' ? (isLPG ? '🟢 LPG' : '🟢 CNG') : '⛽ Petrol';
+        }
+
         return {
           date: e.date,
           displayDate: `${d.getDate()}/${d.getMonth() + 1}`,
           value: e.calculated_mileage!,
           fuelStation: e.fuel_station,
-          fuelSystem: (e.fuel_system ?? (e.fuel_unit === 'kg' ? 'primary' : 'secondary')) as 'primary' | 'secondary',
+          fuelSystem,
+          fuelSystemLabel,
         };
       });
 
     // Determine appropriate average reference line
     let average: number | null = null;
-    if (isHybrid && biFuelTrendFilter === 'primary' && stats.primarySystemStats?.runningAverage) {
+    if (isBiFuelVehicle && biFuelTrendFilter === 'primary' && stats.primarySystemStats?.runningAverage) {
       average = stats.primarySystemStats.runningAverage.value;
-    } else if (isHybrid && biFuelTrendFilter === 'secondary' && stats.secondarySystemStats?.runningAverage) {
+    } else if (isBiFuelVehicle && biFuelTrendFilter === 'secondary' && stats.secondarySystemStats?.runningAverage) {
       average = stats.secondarySystemStats.runningAverage.value;
     } else if (stats.runningAverage) {
       average = stats.runningAverage.value;
     }
 
     // Determine unit label
-    let unitLabel = stats.runningAverage ? MILEAGE_UNIT_LABELS[stats.runningAverage.unit] : 'km/L';
-    if (isHybrid) {
-      if (biFuelTrendFilter === 'primary') unitLabel = 'km/kg';
-      else if (biFuelTrendFilter === 'secondary') unitLabel = 'km/L';
+    const defaultUnit = selectedVehicle.fuel_type === FuelType.ELECTRIC
+      ? 'km/kWh'
+      : (selectedVehicle.fuel_type === FuelType.CNG ? 'km/kg' : 'km/L');
+    let unitLabel = stats.runningAverage ? MILEAGE_UNIT_LABELS[stats.runningAverage.unit] : defaultUnit;
+    if (isBiFuelVehicle) {
+      if (biFuelTrendFilter === 'primary') {
+        unitLabel = selectedVehicle.fuel_type === FuelType.HYBRID_LPG_PETROL ? 'km/L' : 'km/kg';
+      } else if (biFuelTrendFilter === 'secondary') {
+        unitLabel = 'km/L';
+      }
     }
 
     return { points, average, unitLabel };
   }, [entries, selectedVehicle, biFuelTrendFilter, timeRange, stats]);
 
-  // ── Monthly Spend History Chart Data ──
-  const monthlyCostData = useMemo(() => {
-    if (!selectedVehicle) return [];
-    if (monthlyChartRange === 'year') {
-      // Yearly aggregation: sum all 12 months per calendar year for the last 3 years.
-      // Uses getMonthlyTotalSpend to avoid duplicating the filter-reduce pattern inline.
-      const now = new Date();
-      return [0, 1, 2].reverse().map((yearsAgo) => {
-        const year = now.getFullYear() - yearsAgo;
-        let total = 0;
-        for (let m = 0; m < 12; m++) {
-          const { total: monthTotal } = getMonthlyTotalSpend(entries, serviceRecords, expenses, m, year);
-          total += monthTotal;
-        }
-        return { label: `${year}`, value: Math.round(total) };
-      });
-    }
-    const months = monthlyChartRange === '12m' ? 12 : 6;
-    return getMonthlySpendHistory(entries, serviceRecords, expenses, months);
-  }, [monthlyChartRange, entries, serviceRecords, expenses, selectedVehicle]);
+
 
   // -- Cross-vehicle comparison --
   // Extracted to useCrossVehicleStats hook to separate data-loading from render.
@@ -223,7 +218,28 @@ export default function StatsScreen() {
   const totalFuelQuantity = filteredEntries.reduce((sum, e) => sum + e.fuel_amount, 0);
   const totalEntriesCount = filteredEntries.length;
 
-  // timeScopedMileageStats is now computed above the early return (Rules of Hooks compliance).
+  // Number of calendar months for consistent monthly average calculation
+  const numMonths = useMemo(() => {
+    if (timeRange === 'month') return 1;
+    if (timeRange === '6m') return 6;
+    if (timeRange === 'year') return 12;
+    // All time: calculate elapsed months between oldest record and now
+    const allDates = [
+      ...filteredEntries.map((e) => e.date),
+      ...filteredServices.map((r) => r.date),
+      ...filteredExpenses.map((e) => e.date),
+    ].filter(Boolean);
+    if (allDates.length === 0) return 1;
+    const oldest = new Date(allDates.reduce((min, d) => (d < min ? d : min), allDates[0]));
+    const now = new Date();
+    const months = (now.getFullYear() - oldest.getFullYear()) * 12 + (now.getMonth() - oldest.getMonth()) + 1;
+    return Math.max(1, months);
+  }, [timeRange, filteredEntries, filteredServices, filteredExpenses]);
+
+  const monthlyAverageCost = totalOwnershipCost / numMonths;
+  const nonFuelCost = totalServiceCost + totalExpenseCost;
+  const fuelPercentage = totalOwnershipCost > 0 ? (totalFuelCost / totalOwnershipCost) * 100 : 0;
+  const nonFuelPercentage = totalOwnershipCost > 0 ? (nonFuelCost / totalOwnershipCost) * 100 : 0;
 
   // Distance tracked & ₹/km
   const { kmTracked, costPerKm } = computeCostPerKm(
@@ -397,9 +413,10 @@ export default function StatsScreen() {
             </Text>
           </View>
           <View style={[styles.summaryCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>{isEV ? 'Charge Sessions' : 'Fill-ups'}</Text>
+            <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Monthly Average</Text>
             <Text style={[Typography.statMedium, { color: colors.text }]}>
-              {totalEntriesCount}
+              {formatCurrency(monthlyAverageCost)}
+              <Text style={{ fontSize: 11, fontWeight: '400', color: colors.textTertiary }}>/mo</Text>
             </Text>
           </View>
           <View style={[styles.summaryCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
@@ -414,16 +431,136 @@ export default function StatsScreen() {
             </Text>
           </View>
           <View style={[styles.summaryCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Best / Worst</Text>
-            <Text style={[Typography.statMedium, { color: colors.success }]}>
-              {timeScopedMileageStats.best ? timeScopedMileageStats.best.value.toFixed(1) : '—'}
+            <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Operating Cost/km</Text>
+            <Text style={[Typography.statMedium, { color: colors.primary }]}>
+              {costPerKm != null ? `${formatCurrency(costPerKm)}/km` : '—'}
             </Text>
-            {timeScopedMileageStats.worst && (
-              <Text style={[Typography.caption, { color: colors.danger, marginTop: 1 }]}>
-                / {timeScopedMileageStats.worst.value.toFixed(1)}
+          </View>
+        </View>
+
+        {/* ── Fuel vs Non-Fuel Spending Split ── */}
+        <View style={[styles.chartCard, { backgroundColor: colors.surface, ...Sizing.cardShadow, marginBottom: Spacing.lg }]}>
+          {/* Header */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.xs }}>
+            <View>
+              <Text style={[Typography.h3, { color: colors.text }]}>Spending Split</Text>
+              <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 1 }]}>
+                {isEV ? 'Charging vs. Running Costs' : 'Fuel vs. Running Costs'}
               </Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+              {totalOwnershipCost > 0 && (
+                <View style={{ backgroundColor: colors.primary + '18', paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Sizing.radiusFull }}>
+                  <Text style={[Typography.caption, { color: colors.primary, fontWeight: '800', fontSize: 11 }]}>
+                    {fuelPercentage.toFixed(0)} : {nonFuelPercentage.toFixed(0)} Ratio
+                  </Text>
+                </View>
+              )}
+              <View style={{ backgroundColor: colors.borderLight, paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Sizing.radiusFull }}>
+                <Text style={[Typography.caption, { color: colors.textSecondary, fontWeight: '700', fontSize: 11 }]}>
+                  {timeRangeLabel}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Enhanced Proportion Bar */}
+          <View style={{ height: 14, borderRadius: 7, flexDirection: 'row', overflow: 'hidden', backgroundColor: colors.borderLight, marginVertical: Spacing.md }}>
+            {totalOwnershipCost > 0 ? (
+              <>
+                <View style={{ flex: Math.max(0.01, fuelPercentage), backgroundColor: colors.primary }} />
+                <View style={{ flex: Math.max(0.01, nonFuelPercentage), backgroundColor: colors.accent }} />
+              </>
+            ) : (
+              <View style={{ flex: 1, backgroundColor: colors.borderLight, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontSize: 9, color: colors.textTertiary, fontWeight: '600' }}>NO EXPENSES RECORDED</Text>
+              </View>
             )}
           </View>
+
+          {/* Split Detail Tiles */}
+          <View style={{ flexDirection: 'row', gap: Spacing.md }}>
+            {/* Fuel / Charging Tile */}
+            <View style={[styles.splitTile, { backgroundColor: colors.background, borderColor: colors.border }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.xs }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={[styles.splitIconBadge, { backgroundColor: colors.primary + '20' }]}>
+                    <Text style={{ fontSize: 12 }}>{isEV ? '⚡' : '⛽'}</Text>
+                  </View>
+                  <Text style={[Typography.caption, { color: colors.textSecondary, fontWeight: '700', fontSize: 11 }]}>
+                    {isEV ? 'CHARGING' : 'FUEL'}
+                  </Text>
+                </View>
+                <View style={[styles.splitPercentPill, { backgroundColor: colors.primary + '20' }]}>
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: colors.primary }}>
+                    {totalOwnershipCost > 0 ? `${fuelPercentage.toFixed(0)}%` : '0%'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={[Typography.h3, { color: colors.text, marginTop: 4, fontWeight: '800' }]}>
+                {formatCurrency(totalFuelCost)}
+              </Text>
+              <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2, fontSize: 11 }]}>
+                Direct consumption
+              </Text>
+            </View>
+
+            {/* Non-Fuel (Service & Expenses) Tile */}
+            <View style={[styles.splitTile, { backgroundColor: colors.background, borderColor: colors.border }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.xs }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={[styles.splitIconBadge, { backgroundColor: colors.accent + '25' }]}>
+                    <Text style={{ fontSize: 12 }}>🛠️</Text>
+                  </View>
+                  <Text style={[Typography.caption, { color: colors.textSecondary, fontWeight: '700', fontSize: 11 }]}>
+                    NON-FUEL
+                  </Text>
+                </View>
+                <View style={[styles.splitPercentPill, { backgroundColor: colors.accent + '25' }]}>
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: colors.accent }}>
+                    {totalOwnershipCost > 0 ? `${nonFuelPercentage.toFixed(0)}%` : '0%'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={[Typography.h3, { color: colors.text, marginTop: 4, fontWeight: '800' }]}>
+                {formatCurrency(nonFuelCost)}
+              </Text>
+              <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2, fontSize: 11 }]}>
+                Service & expenses
+              </Text>
+            </View>
+          </View>
+
+          {/* Sub-breakdown if non-fuel exists */}
+          {nonFuelCost > 0 && (
+            <View style={[styles.splitDetailsRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ fontSize: 12 }}>🔧</Text>
+                <Text style={[Typography.caption, { color: colors.textSecondary }]}>
+                  Service: <Text style={{ color: colors.text, fontWeight: '700' }}>{formatCurrency(totalServiceCost)}</Text>
+                </Text>
+              </View>
+              <View style={{ width: 1, height: 12, backgroundColor: colors.border }} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ fontSize: 12 }}>📄</Text>
+                <Text style={[Typography.caption, { color: colors.textSecondary }]}>
+                  Other: <Text style={{ color: colors.text, fontWeight: '700' }}>{formatCurrency(totalExpenseCost)}</Text>
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Contextual Distribution Insight */}
+          {totalOwnershipCost > 0 && (
+            <View style={[styles.splitInsightCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+              <Text style={[Typography.caption, { color: colors.textSecondary, lineHeight: 18 }]}>
+                💡 <Text style={{ fontWeight: '700', color: colors.text }}>For every ₹100 spent:</Text>{' '}
+                <Text style={{ fontWeight: '700', color: colors.primary }}>₹{fuelPercentage.toFixed(0)}</Text> to {isEV ? 'charging' : 'fuel'},{' '}
+                <Text style={{ fontWeight: '700', color: colors.accent }}>₹{((totalServiceCost / totalOwnershipCost) * 100).toFixed(0)}</Text> to maintenance, and{' '}
+                <Text style={{ fontWeight: '700', color: colors.text }}>₹{((totalExpenseCost / totalOwnershipCost) * 100).toFixed(0)}</Text> to running costs.
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* ── Bi-Fuel Dual Stream Breakdown Card (if Hybrid) ── */}
@@ -478,10 +615,10 @@ export default function StatsScreen() {
           <View style={styles.chartHeader}>
             <View style={{ flex: 1 }}>
               <Text style={[Typography.h3, { color: colors.text }]}>
-                Mileage Trendline
+                {isEV ? 'Efficiency Trendline' : 'Mileage Trendline'}
               </Text>
               <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2 }]}>
-                Efficiency curve with rolling average reference line
+                {isEV ? 'Energy efficiency (km/kWh) with rolling average line' : 'Efficiency curve with rolling average reference line'}
               </Text>
             </View>
 
@@ -508,7 +645,7 @@ export default function StatsScreen() {
                         },
                       ]}
                     >
-                      {sys === 'all' ? 'All' : sys === 'primary' ? 'CNG' : 'Petrol'}
+                      {sys === 'all' ? 'All' : sys === 'primary' ? (selectedVehicle.fuel_type === FuelType.HYBRID_LPG_PETROL ? 'LPG' : 'CNG') : 'Petrol'}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -547,58 +684,13 @@ export default function StatsScreen() {
         </View>
 
         {/* ── Visual Chart 3: Monthly Spend History ── */}
-        {monthlyCostData.some((d) => d.value > 0) && (
-          <View style={[styles.chartCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            <View style={styles.chartHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={[Typography.h3, { color: colors.text }]}>
-                  Monthly Total Spend
-                </Text>
-                <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2 }]}>
-                  Fuel + Service + Expenses
-                </Text>
-              </View>
-
-              {/* Monthly Range toggle */}
-              <View style={[styles.segmentControl, { borderColor: colors.border }]}>
-                {(['6m', '12m', 'year'] as const).map((range) => (
-                  <TouchableOpacity
-                    key={range}
-                    style={[
-                      styles.segmentBtn,
-                      monthlyChartRange === range && { backgroundColor: colors.primary },
-                    ]}
-                    onPress={() => setMonthlyChartRange(range)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        Typography.caption,
-                        {
-                          color: monthlyChartRange === range ? '#FFF' : colors.textSecondary,
-                          fontWeight: '700',
-                          fontSize: 11,
-                        },
-                      ]}
-                    >
-                      {range === '6m' ? '6M' : range === '12m' ? '12M' : 'Year'}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={{ marginTop: Spacing.lg }}>
-              <BarChart
-                data={monthlyCostData}
-                barColor={colors.accent}
-                labelColor={colors.textTertiary}
-                valueColor={colors.textSecondary}
-                height={monthlyChartRange === 'year' ? 90 : 110}
-              />
-            </View>
-          </View>
-        )}
+        <MonthlySpendCard
+          entries={entries}
+          serviceRecords={serviceRecords}
+          expenses={expenses}
+          colors={colors}
+          isEV={isEV}
+        />
 
         {/* ── Quick Numbers / Amortization Trajectory ── */}
         <View style={[styles.chartCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
@@ -654,10 +746,15 @@ export default function StatsScreen() {
           )}
 
           {costPerKm != null && (
-            <View style={[styles.quickRow, { borderBottomColor: colors.border }]}>
-              <Text style={[Typography.body, { color: colors.textSecondary }]}>
-                Cost per km
-              </Text>
+            <View style={[styles.quickRow, { borderBottomColor: colors.border, alignItems: 'flex-start' }]}>
+              <View style={{ flex: 1, paddingRight: Spacing.sm }}>
+                <Text style={[Typography.body, { color: colors.textSecondary }]}>
+                  Recorded Operating Cost per km
+                </Text>
+                <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2 }]}>
+                  Fuel + service + general expenses over tracked distance. Excludes purchase price, depreciation & financing.
+                </Text>
+              </View>
               <Text style={[Typography.body, { color: colors.primary, fontWeight: '700' }]}>
                 {formatCurrency(costPerKm)}/km
               </Text>
@@ -668,45 +765,11 @@ export default function StatsScreen() {
         <View style={{ height: Spacing.section }} />
 
         {/* ── Cross-vehicle Comparison ── */}
-        {crossVehicleData && crossVehicleData.length >= 2 && (() => {
-          const mileageRows = crossVehicleData.filter((d) => d.avgMileage !== null);
-          const costRows = [...crossVehicleData].sort((a, b) => b.totalCost - a.totalCost);
-          return (
-            <View style={[styles.chartCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-              <Text style={[Typography.h3, { color: colors.text, marginBottom: Spacing.md }]}>
-                🚗 Fleet Comparison
-              </Text>
-
-              {mileageRows.length >= 2 && (
-                <>
-                  <Text style={[Typography.caption, { color: colors.textTertiary, marginBottom: Spacing.sm }]}>
-                    Avg mileage per vehicle
-                  </Text>
-                  <BarChart
-                    data={mileageRows.map((d) => ({ label: d.name, value: Number(d.avgMileage!.toFixed(1)) }))}
-                    barColor={colors.primary}
-                    labelColor={colors.textTertiary}
-                    valueColor={colors.textSecondary}
-                    height={90}
-                  />
-                  <View style={{ height: Spacing.lg }} />
-                </>
-              )}
-
-              <Text style={[Typography.caption, { color: colors.textTertiary, marginBottom: Spacing.sm }]}>
-                Total ownership cost
-              </Text>
-              {costRows.map((d) => (
-                <View key={d.id} style={[styles.quickRow, { borderBottomColor: colors.border }]}>
-                  <Text style={[Typography.body, { color: colors.textSecondary }]}>{d.name}</Text>
-                  <Text style={[Typography.body, { color: colors.text, fontWeight: '700' }]}>
-                    {formatCurrency(d.totalCost)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          );
-        })()}
+        <FleetComparisonCard
+          data={crossVehicleData}
+          vehicles={vehicles}
+          colors={colors}
+        />
 
         <View style={{ height: Spacing.section }} />
       </View>
@@ -817,6 +880,41 @@ const styles = StyleSheet.create({
     borderRadius: Sizing.radiusMd,
     padding: Spacing.xl,
     marginBottom: Spacing.lg,
+  },
+  splitTile: {
+    flex: 1,
+    padding: Spacing.md,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+  },
+  splitIconBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  splitPercentPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Sizing.radiusFull,
+  },
+  splitDetailsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Sizing.radiusSm,
+    borderWidth: 1,
+    marginTop: Spacing.md,
+  },
+  splitInsightCard: {
+    paddingVertical: 8,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Sizing.radiusSm,
+    borderWidth: 1,
+    marginTop: Spacing.md,
   },
   quickRow: {
     flexDirection: 'row',

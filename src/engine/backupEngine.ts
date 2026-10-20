@@ -30,7 +30,7 @@ import { getDatabase } from '@/database/connection';
 import type { VehicleDocument } from '@/types/document';
 import type { Expense } from '@/types/expense';
 import type { FuelEntry } from '@/types/fuel';
-import type { ServiceRecord } from '@/types/service';
+import type { ServiceRecord, MaintenanceComponent } from '@/types/service';
 import type { Vehicle } from '@/types/vehicle';
 import { nowISO } from '@/utils/date';
 import Constants from 'expo-constants';
@@ -51,6 +51,7 @@ import {
   CURRENT_BACKUP_VERSION,
   ENCRYPTED_BACKUP_FORMAT,
   type BackupData,
+  type BackupAttachment,
   type BackupResult,
   type RestoreResult,
   type ExportFileResult,
@@ -86,6 +87,7 @@ export function createBackup(): BackupResult {
     let serviceRecords: ServiceRecord[] = [];
     let expenses: Expense[] = [];
     let documents: VehicleDocument[] = [];
+    let maintenanceComponents: MaintenanceComponent[] = [];
 
     db.withTransactionSync(() => {
       vehicles = db.getAllSync<Vehicle>('SELECT * FROM vehicles');
@@ -93,6 +95,11 @@ export function createBackup(): BackupResult {
       serviceRecords = db.getAllSync<ServiceRecord>('SELECT * FROM service_records');
       expenses = db.getAllSync<Expense>('SELECT * FROM expenses');
       documents = db.getAllSync<VehicleDocument>('SELECT * FROM documents');
+      try {
+        maintenanceComponents = db.getAllSync<MaintenanceComponent>('SELECT * FROM maintenance_components');
+      } catch {
+        maintenanceComponents = [];
+      }
     });
 
     const backup: BackupData = {
@@ -106,6 +113,7 @@ export function createBackup(): BackupResult {
         service_records: serviceRecords,
         expenses,
         documents,
+        maintenance_components: maintenanceComponents,
       },
     };
 
@@ -114,7 +122,8 @@ export function createBackup(): BackupResult {
       fuelEntries.length +
       serviceRecords.length +
       expenses.length +
-      documents.length;
+      documents.length +
+      maintenanceComponents.length;
 
     return { success: true, message: `Backup created with ${total} records.`, backup };
   } catch (e) {
@@ -189,6 +198,43 @@ export async function exportBackupString(
   }
   if (asyncState.checklists && Object.keys(asyncState.checklists).length > 0) {
     result.backup.data.checklists = asyncState.checklists;
+  }
+
+  // 2b. Collect attachments from records if files exist on device
+  const attachments: BackupAttachment[] = [];
+  const urisToRead = new Set<string>();
+
+  for (const d of result.backup.data.documents) {
+    if (d.file_uri) urisToRead.add(d.file_uri);
+  }
+  for (const f of result.backup.data.fuel_entries) {
+    if (f.receipt_photo_uri) urisToRead.add(f.receipt_photo_uri);
+  }
+  for (const s of result.backup.data.service_records) {
+    if (s.receipt_photo_uri) urisToRead.add(s.receipt_photo_uri);
+  }
+  for (const e of result.backup.data.expenses) {
+    if (e.receipt_photo_uri) urisToRead.add(e.receipt_photo_uri);
+  }
+
+  for (const uri of urisToRead) {
+    try {
+      const info = await FileSystem.getInfoAsync(uri);
+      if (info.exists && !info.isDirectory) {
+        const base64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        const filename = uri.replace(/^.*[\\/]/, '');
+        if (filename && !filename.includes('..') && !filename.includes('/') && !filename.includes('\\')) {
+          attachments.push({ filename, base64 });
+        }
+      }
+    } catch {
+      // Ignore unreadable or missing local files
+    }
+  }
+  if (attachments.length > 0) {
+    result.backup.data.attachments = attachments;
   }
 
   // 3. Encrypt envelope with user password
@@ -547,6 +593,9 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
   try {
     db.withTransactionSync(() => {
       // Clear all tables in foreign-key dependency order
+      try {
+        db.execSync('DELETE FROM maintenance_components');
+      } catch {}
       db.execSync('DELETE FROM documents');
       db.execSync('DELETE FROM expenses');
       db.execSync('DELETE FROM service_records');
@@ -630,8 +679,8 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
       for (const s of backup.data.service_records) {
         db.runSync(
           `INSERT INTO service_records (id, vehicle_id, date, odometer, service_type, cost, work_done,
-           garage_name, next_due_km, next_due_date, notes, created_at, updated_at, deleted_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           garage_name, next_due_km, next_due_date, notes, receipt_photo_uri, created_at, updated_at, deleted_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             s.id,
             s.vehicle_id,
@@ -644,6 +693,7 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
             s.next_due_km ?? null,
             s.next_due_date ?? null,
             s.notes ?? null,
+            s.receipt_photo_uri ?? null,
             s.created_at || nowISO(),
             s.updated_at || nowISO(),
             s.deleted_at ?? null,
@@ -651,11 +701,39 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
         );
       }
 
+      // 3b. Maintenance components
+      if (backup.data.maintenance_components) {
+        for (const mc of backup.data.maintenance_components) {
+          try {
+            db.runSync(
+              `INSERT INTO maintenance_components (id, service_record_id, vehicle_id, component_name,
+               action, brand, cost, next_due_km, next_due_date, notes, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                mc.id,
+                mc.service_record_id,
+                mc.vehicle_id,
+                mc.component_name,
+                mc.action || 'replaced',
+                mc.brand ?? null,
+                mc.cost ?? null,
+                mc.next_due_km ?? null,
+                mc.next_due_date ?? null,
+                mc.notes ?? null,
+                mc.created_at || nowISO(),
+                mc.updated_at || nowISO(),
+                mc.deleted_at ?? null,
+              ]
+            );
+          } catch {}
+        }
+      }
+
       // 4. Expenses
       for (const e of backup.data.expenses) {
         db.runSync(
-          `INSERT INTO expenses (id, vehicle_id, date, category, amount, description, created_at, updated_at, deleted_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO expenses (id, vehicle_id, date, category, amount, description, receipt_photo_uri, created_at, updated_at, deleted_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             e.id,
             e.vehicle_id,
@@ -663,6 +741,7 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
             e.category,
             e.amount,
             e.description ?? null,
+            e.receipt_photo_uri ?? null,
             e.created_at || nowISO(),
             e.updated_at || nowISO(),
             e.deleted_at ?? null,
@@ -715,7 +794,38 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
       }
     });
 
-    // 7. Restore AsyncStorage state if included in backup
+    // 7. Restore attachments safely outside SQLite transaction
+    if (backup.data.attachments && backup.data.attachments.length > 0) {
+      const attachDir = `${FileSystem.documentDirectory}attachments/`;
+      try {
+        FileSystem.getInfoAsync(attachDir).then((dirInfo) => {
+          if (!dirInfo.exists) {
+            FileSystem.makeDirectoryAsync(attachDir, { intermediates: true }).catch(() => {});
+          }
+        }).catch(() => {});
+
+        for (const att of backup.data.attachments) {
+          if (
+            !att.filename ||
+            att.filename.includes('..') ||
+            att.filename.includes('/') ||
+            att.filename.includes('\\')
+          ) {
+            continue;
+          }
+          const targetPath = `${attachDir}${att.filename}`;
+          FileSystem.writeAsStringAsync(targetPath, att.base64, {
+            encoding: FileSystem.EncodingType.Base64,
+          }).catch((err) => {
+            console.warn('[BackupEngine] Failed to restore attachment file:', att.filename, err);
+          });
+        }
+      } catch (attErr) {
+        console.warn('[BackupEngine] Error while processing attachments:', attErr);
+      }
+    }
+
+    // 8. Restore AsyncStorage state if included in backup
     if (backup.data.preferences) {
       AsyncStorage.setItem('@driveledger_preferences', JSON.stringify(backup.data.preferences)).catch(
         () => {}
@@ -730,7 +840,7 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
       }
     }
 
-    // 8. Reconcile notifications after database commit
+    // 9. Reconcile notifications after database commit
     refreshReminders();
 
     return {
@@ -740,6 +850,7 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
         vehicles: backup.data.vehicles.length,
         fuel_entries: backup.data.fuel_entries.length,
         service_records: backup.data.service_records.length,
+        maintenance_components: backup.data.maintenance_components?.length ?? 0,
         expenses: backup.data.expenses.length,
         documents: backup.data.documents.length,
       },

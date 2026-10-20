@@ -155,8 +155,14 @@ export function calculateMileageForEntry(
 
   // ── Petrol / Diesel / CNG / LPG / Hybrid: tank-to-tank ──
 
-  // R1: Current entry must be a full tank fill
-  if (current.is_full_tank !== 1) {
+  // R1: Current entry must be a valid full tank fill with positive odometer and fuel
+  if (
+    current.is_full_tank !== 1 ||
+    current.odometer == null ||
+    current.odometer <= 0 ||
+    current.fuel_amount == null ||
+    current.fuel_amount <= 0
+  ) {
     return null;
   }
 
@@ -174,8 +180,15 @@ export function calculateMileageForEntry(
       continue;
     }
 
+    const entryAmount = entries[i].fuel_amount;
+    const entryOdo = entries[i].odometer;
+    if (entryAmount == null || entryAmount <= 0 || entryOdo == null || entryOdo <= 0) {
+      // Incomplete or invalid data in the measurement interval
+      return null;
+    }
+
     // R4: Accumulate fuel from partial fills
-    accumulatedFuel += entries[i].fuel_amount;
+    accumulatedFuel += entryAmount;
 
     if (entries[i].is_full_tank === 1) {
       previousFullTankIndex = i;
@@ -285,11 +298,20 @@ function calculateEVEfficiency(
   const current = entries[currentIndex];
   const previous = entries[currentIndex - 1];
 
+  if (
+    current.odometer == null ||
+    previous.odometer == null ||
+    current.odometer <= 0 ||
+    previous.odometer <= 0
+  ) {
+    return null;
+  }
+
   const distance = current.odometer - previous.odometer;
   if (distance <= 0) return null;
 
   const kWh = current.fuel_amount;
-  if (kWh <= 0) return null;
+  if (kWh == null || kWh <= 0) return null;
 
   const efficiency = distance / kWh;
 

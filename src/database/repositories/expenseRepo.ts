@@ -25,6 +25,7 @@ export function createExpense(input: CreateExpenseInput): Expense {
     category: input.category,
     amount: input.amount,
     description: input.description ?? null,
+    receipt_photo_uri: input.receipt_photo_uri ?? null,
     created_at: now,
     updated_at: now,
     deleted_at: null,
@@ -32,13 +33,13 @@ export function createExpense(input: CreateExpenseInput): Expense {
 
   db.runSync(
     `INSERT INTO expenses (
-      id, vehicle_id, date, category, amount, description,
+      id, vehicle_id, date, category, amount, description, receipt_photo_uri,
       created_at, updated_at, deleted_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       expense.id, expense.vehicle_id, expense.date, expense.category,
-      expense.amount, expense.description, expense.created_at,
-      expense.updated_at, expense.deleted_at,
+      expense.amount, expense.description, expense.receipt_photo_uri ?? null,
+      expense.created_at, expense.updated_at, expense.deleted_at,
     ]
   );
 
@@ -98,7 +99,7 @@ export function updateExpense(id: string, input: UpdateExpenseInput): Expense | 
 
   // Whitelist: only these columns can be updated
   const ALLOWED_COLUMNS = new Set([
-    'date', 'category', 'amount', 'description',
+    'date', 'category', 'amount', 'description', 'receipt_photo_uri',
   ]);
 
   const { fields, values } = buildSafeUpdate(input as Record<string, unknown>, ALLOWED_COLUMNS);

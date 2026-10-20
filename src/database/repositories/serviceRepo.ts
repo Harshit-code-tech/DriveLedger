@@ -38,6 +38,7 @@ export function createServiceRecord(input: CreateServiceRecordInput): ServiceRec
     next_due_km: input.next_due_km ?? null,
     next_due_date: input.next_due_date ?? null,
     notes: input.notes ?? null,
+    receipt_photo_uri: input.receipt_photo_uri ?? null,
     created_at: now,
     updated_at: now,
     deleted_at: null,
@@ -46,14 +47,14 @@ export function createServiceRecord(input: CreateServiceRecordInput): ServiceRec
   db.runSync(
     `INSERT INTO service_records (
       id, vehicle_id, date, odometer, service_type, cost, work_done,
-      garage_name, next_due_km, next_due_date, notes,
+      garage_name, next_due_km, next_due_date, notes, receipt_photo_uri,
       created_at, updated_at, deleted_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       record.id, record.vehicle_id, record.date, record.odometer,
       record.service_type, record.cost, record.work_done,
       record.garage_name, record.next_due_km, record.next_due_date,
-      record.notes, record.created_at, record.updated_at, record.deleted_at,
+      record.notes, record.receipt_photo_uri ?? null, record.created_at, record.updated_at, record.deleted_at,
     ]
   );
 
@@ -113,6 +114,7 @@ export function updateServiceRecord(
   const ALLOWED_COLUMNS = new Set([
     'date', 'odometer', 'service_type', 'cost', 'work_done',
     'garage_name', 'next_due_km', 'next_due_date', 'notes',
+    'receipt_photo_uri',
   ]);
 
   const { fields, values } = buildSafeUpdate(input as Record<string, unknown>, ALLOWED_COLUMNS);

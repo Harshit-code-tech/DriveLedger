@@ -105,6 +105,25 @@ const CREATE_SERVICE_RECORDS_TABLE = `
     next_due_km          REAL,
     next_due_date        TEXT,
     notes                TEXT,
+    receipt_photo_uri    TEXT,
+    created_at           TEXT NOT NULL,
+    updated_at           TEXT NOT NULL,
+    deleted_at           TEXT
+  );
+`;
+
+const CREATE_MAINTENANCE_COMPONENTS_TABLE = `
+  CREATE TABLE IF NOT EXISTS maintenance_components (
+    id                   TEXT PRIMARY KEY NOT NULL,
+    service_record_id    TEXT NOT NULL REFERENCES service_records(id),
+    vehicle_id           TEXT NOT NULL REFERENCES vehicles(id),
+    component_name       TEXT NOT NULL,
+    action               TEXT DEFAULT 'replaced',
+    brand                TEXT,
+    cost                 REAL,
+    next_due_km          REAL,
+    next_due_date        TEXT,
+    notes                TEXT,
     created_at           TEXT NOT NULL,
     updated_at           TEXT NOT NULL,
     deleted_at           TEXT
@@ -119,6 +138,7 @@ const CREATE_EXPENSES_TABLE = `
     category             TEXT NOT NULL,
     amount               REAL NOT NULL CHECK (amount > 0),
     description          TEXT,
+    receipt_photo_uri    TEXT,
     created_at           TEXT NOT NULL,
     updated_at           TEXT NOT NULL,
     deleted_at           TEXT
@@ -169,6 +189,12 @@ const CREATE_INDEXES = `
 
   CREATE INDEX IF NOT EXISTS idx_documents_expiry
     ON documents(expiry_date);
+
+  CREATE INDEX IF NOT EXISTS idx_maint_components_service
+    ON maintenance_components(service_record_id);
+
+  CREATE INDEX IF NOT EXISTS idx_maint_components_vehicle_name
+    ON maintenance_components(vehicle_id, component_name);
 `;
 
 // ─── Public API ──────────────────────────────────────────────────────
@@ -293,6 +319,7 @@ export function createTables(db: SQLite.SQLiteDatabase): void {
   db.execSync(CREATE_VEHICLES_TABLE);
   db.execSync(CREATE_FUEL_ENTRIES_TABLE);
   db.execSync(CREATE_SERVICE_RECORDS_TABLE);
+  db.execSync(CREATE_MAINTENANCE_COMPONENTS_TABLE);
   db.execSync(CREATE_EXPENSES_TABLE);
   db.execSync(CREATE_DOCUMENTS_TABLE);
   db.execSync(CREATE_INDEXES);
@@ -337,6 +364,22 @@ export function createTables(db: SQLite.SQLiteDatabase): void {
   try {
     db.execSync(
       `ALTER TABLE vehicles ADD COLUMN service_interval_months REAL DEFAULT 12`
+    );
+  } catch {
+    // Column already exists
+  }
+
+  // v1.4 — Attachments for service records & expenses
+  try {
+    db.execSync(
+      `ALTER TABLE service_records ADD COLUMN receipt_photo_uri TEXT`
+    );
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.execSync(
+      `ALTER TABLE expenses ADD COLUMN receipt_photo_uri TEXT`
     );
   } catch {
     // Column already exists

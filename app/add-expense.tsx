@@ -4,12 +4,10 @@
  * Logs non-fuel vehicle expenses: insurance, repair, parking, etc.
  * Uses predefined expense categories for one-tap selection.
  *
- * EDIT MODE: If opened with ?id=<expenseId>, loads existing expense for editing.
+ * P1 EXTENSIONS:
+ * - Receipt / Invoice attachment linking (Images & PDFs) with permanent storage.
  *
- * FEATURES:
- * - Editable date field (DD/MM/YYYY)
- * - Category chips for one-tap selection
- * - Wired to centralized expenseStore
+ * EDIT MODE: If opened with ?id=<expenseId>, loads existing expense for editing.
  */
 
 import { useState, useEffect } from 'react';
@@ -24,9 +22,13 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  Modal,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { useVehicleStore } from '@/stores/vehicleStore';
 import { useExpenseStore } from '@/stores/expenseStore';
 import { useThemeColors } from '@/hooks/useThemeColors';
@@ -41,6 +43,11 @@ import { NoVehicleState } from '@/components/NoVehicleState';
 import { VehicleContextHeader } from '@/components/VehicleContextHeader';
 import * as expenseRepo from '@/database/repositories/expenseRepo';
 import { getCurrencySymbol } from '@/stores/preferencesStore';
+import {
+  copyToPermanentStorage,
+  openAttachment,
+  isPdfAttachment,
+} from '@/utils/attachmentStorage';
 
 export default function AddExpenseScreen() {
   const colors = useThemeColors();
@@ -65,6 +72,8 @@ export default function AddExpenseScreen() {
   const [description, setDescription] = useState('');
   const [dateDisplay, setDateDisplay] = useState('');
   const [date, setDate] = useState(todayISO());
+  const [receiptPhotoUri, setReceiptPhotoUri] = useState<string | null>(null);
+  const [viewerUri, setViewerUri] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   // Initialize date display
@@ -82,6 +91,7 @@ export default function AddExpenseScreen() {
         setDescription(existing.description || '');
         setDate(existing.date);
         setDateDisplay(isoToDisplay(existing.date));
+        setReceiptPhotoUri(existing.receipt_photo_uri || null);
       }
     }
   }, [params.id]);
@@ -96,6 +106,72 @@ export default function AddExpenseScreen() {
     const parsed = displayToISO(formatted);
     if (parsed) {
       setDate(parsed);
+    }
+  };
+
+  // Attachment Handlers
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Camera Permission', 'Camera access is required to photograph your receipt.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+    if (!result.canceled && result.assets && result.assets[0]) {
+      const savedUri = await copyToPermanentStorage(result.assets[0].uri);
+      setReceiptPhotoUri(savedUri);
+    }
+  };
+
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Gallery Permission', 'Gallery access is required to attach your receipt.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets && result.assets[0]) {
+      const savedUri = await copyToPermanentStorage(result.assets[0].uri);
+      setReceiptPhotoUri(savedUri);
+    }
+  };
+
+  const pickPDF = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: false,
+      });
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const savedUri = await copyToPermanentStorage(result.assets[0].uri, result.assets[0].name);
+        setReceiptPhotoUri(savedUri);
+      }
+    } catch (e) {
+      Alert.alert('Attachment Error', e instanceof Error ? e.message : 'Could not attach PDF.');
+    }
+  };
+
+  const handlePickReceipt = () => {
+    Alert.alert('Attach Receipt or Bill 🧾', 'Select file source:', [
+      { text: '📷 Camera', onPress: takePhoto },
+      { text: '🖼️ Gallery', onPress: pickImage },
+      { text: '📄 PDF Bill', onPress: pickPDF },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const handleViewReceipt = async () => {
+    if (!receiptPhotoUri) return;
+    if (isPdfAttachment(receiptPhotoUri)) {
+      const res = await openAttachment(receiptPhotoUri, 'Expense Receipt / Bill');
+      if (!res.success && res.message) {
+        Alert.alert('View Document', res.message);
+      }
+    } else {
+      setViewerUri(receiptPhotoUri);
     }
   };
 
@@ -136,6 +212,7 @@ export default function AddExpenseScreen() {
         amount: amountVal,
         date: isoDate,
         description: description || null,
+        receipt_photo_uri: receiptPhotoUri || null,
       });
       Alert.alert('✅ Expense Updated!', 'Got it, every rupee counts 💰', [
         { text: 'Cool!', onPress: () => router.back() },
@@ -147,6 +224,7 @@ export default function AddExpenseScreen() {
         category,
         amount: amountVal,
         description: description || undefined,
+        receipt_photo_uri: receiptPhotoUri || undefined,
       });
       router.back();
     }
@@ -227,6 +305,80 @@ export default function AddExpenseScreen() {
           numberOfLines={3}
         />
 
+        {/* ── Feature 5: Receipt / Bill Attachment ── */}
+        <Text style={[styles.label, { color: colors.textSecondary }]}>Receipt or Bill 🧾</Text>
+        {receiptPhotoUri ? (
+          <View style={[styles.attachmentContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {isPdfAttachment(receiptPhotoUri) ? (
+              <TouchableOpacity
+                style={styles.pdfBadge}
+                onPress={handleViewReceipt}
+                activeOpacity={0.8}
+              >
+                <Text style={{ fontSize: 32 }}>📄</Text>
+                <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+                  <Text style={[Typography.bodySmall, { fontWeight: '700', color: colors.text }]}>PDF Bill / Invoice</Text>
+                  <Text style={[Typography.caption, { color: colors.textTertiary }]} numberOfLines={1}>
+                    {receiptPhotoUri.split('/').pop()} (tap to view)
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.imageBadge}
+                onPress={handleViewReceipt}
+                activeOpacity={0.8}
+              >
+                <Image source={{ uri: receiptPhotoUri }} style={styles.imageThumbnail} resizeMode="cover" />
+                <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+                  <Text style={[Typography.bodySmall, { fontWeight: '700', color: colors.text }]}>Receipt Photo</Text>
+                  <Text style={[Typography.caption, { color: colors.textTertiary }]} numberOfLines={1}>
+                    {receiptPhotoUri.split('/').pop()} (tap to view)
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
+            <View style={styles.attachmentActions}>
+              <TouchableOpacity
+                style={[styles.attachBtn, { backgroundColor: colors.primary }]}
+                onPress={handleViewReceipt}
+                activeOpacity={0.8}
+              >
+                <Text style={{ color: colors.textOnPrimary, fontSize: 12, fontWeight: '700' }}>
+                  {isPdfAttachment(receiptPhotoUri) ? 'View Document 📄' : 'View Photo 👁️'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.attachBtn, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}
+                onPress={handlePickReceipt}
+              >
+                <Text style={{ color: colors.text, fontSize: 12, fontWeight: '600' }}>Change</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.attachBtn, { backgroundColor: colors.danger + '20' }]}
+                onPress={() => setReceiptPhotoUri(null)}
+              >
+                <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '700' }}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[styles.attachPlaceholder, { borderColor: colors.border, backgroundColor: colors.surface }]}
+            onPress={handlePickReceipt}
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontSize: 24 }}>📎</Text>
+            <Text style={[Typography.bodySmall, { color: colors.primary, fontWeight: '600', marginTop: Spacing.xs }]}>
+              Attach Bill / Receipt (Camera, Gallery, or PDF)
+            </Text>
+            <Text style={[Typography.caption, { color: colors.textTertiary }]}>
+              Saved offline and bundled in safe backups
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {error ? (
           <Text style={[Typography.bodySmall, { color: colors.danger, marginTop: Spacing.md }]}>
             ❌ {error}
@@ -248,6 +400,30 @@ export default function AddExpenseScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+      {/* ── Fullscreen Receipt Viewer Modal ── */}
+      <Modal
+        visible={!!viewerUri}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewerUri(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalClose}
+            onPress={() => setViewerUri(null)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.modalCloseText}>✕ Close</Text>
+          </TouchableOpacity>
+          {viewerUri && (
+            <Image
+              source={{ uri: viewerUri }}
+              style={styles.modalImage}
+              resizeMode="contain"
+            />
+          )}
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -284,5 +460,71 @@ const styles = StyleSheet.create({
   saveButton: {
     height: Sizing.primaryButton, borderRadius: Sizing.radiusMd,
     justifyContent: 'center', alignItems: 'center',
+  },
+  attachmentContainer: {
+    borderWidth: 1.5,
+    borderRadius: Sizing.radiusMd,
+    padding: Spacing.md,
+    marginTop: Spacing.xs,
+  },
+  pdfBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  imageBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  imageThumbnail: {
+    width: 48,
+    height: 48,
+    borderRadius: Sizing.radiusSm,
+  },
+  attachmentActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  attachBtn: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Sizing.radiusSm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachPlaceholder: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderRadius: Sizing.radiusMd,
+    padding: Spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.xs,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalClose: {
+    position: 'absolute',
+    top: 56,
+    right: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    zIndex: 10,
+  },
+  modalCloseText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalImage: {
+    width: '95%',
+    height: '80%',
+    borderRadius: 12,
   },
 });

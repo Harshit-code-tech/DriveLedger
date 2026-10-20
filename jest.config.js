@@ -12,6 +12,7 @@ module.exports = {
     '^expo-file-system/legacy$': '<rootDir>/src/__mocks__/expo-file-system.ts',
     '^expo-file-system$': '<rootDir>/src/__mocks__/expo-file-system.ts',
     '^expo-sharing$': '<rootDir>/src/__mocks__/expo-sharing.ts',
+    '^expo-intent-launcher$': '<rootDir>/src/__mocks__/expo-intent-launcher.ts',
     '^react-native$': '<rootDir>/src/__mocks__/react-native.ts',
     '^expo$': '<rootDir>/src/__mocks__/expo.ts',
     '^react-native-android-widget$': '<rootDir>/src/__mocks__/react-native-android-widget.ts',

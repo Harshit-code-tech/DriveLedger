@@ -21,11 +21,13 @@ import { useServiceStore } from '@/stores/serviceStore';
 import { useVehicleStore } from '@/stores/vehicleStore';
 import type { Expense } from '@/types/expense';
 import type { FuelEntry } from '@/types/fuel';
-import type { ServiceRecord } from '@/types/service';
+import type { ServiceRecord, MaintenanceComponent } from '@/types/service';
+import * as maintCompRepo from '@/database/repositories/maintenanceComponentRepo';
+import { TyreIcon } from '@/components/TyreIcon';
 import { formatDisplayDateLong } from '@/utils/date';
 import { formatCurrency } from '@/utils/format';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -66,6 +68,22 @@ function isInRange(dateStr: string, rangeStart: Date | null): boolean {
   return new Date(dateStr) >= rangeStart;
 }
 
+function renderComponentTagIcon(name: string) {
+  const lower = name.toLowerCase();
+  if (lower.includes('tyre') || lower.includes('tire')) {
+    return <TyreIcon size={12} />;
+  }
+  if (lower.includes('oil filter')) return <Text style={{ fontSize: 10 }}>⚙️</Text>;
+  if (lower.includes('oil')) return <Text style={{ fontSize: 10 }}>🛢️</Text>;
+  if (lower.includes('brake')) return <Text style={{ fontSize: 10 }}>🛑</Text>;
+  if (lower.includes('spark')) return <Text style={{ fontSize: 10 }}>⚡</Text>;
+  if (lower.includes('battery')) return <Text style={{ fontSize: 10 }}>🔋</Text>;
+  if (lower.includes('air')) return <Text style={{ fontSize: 10 }}>💨</Text>;
+  if (lower.includes('coolant')) return <Text style={{ fontSize: 10 }}>🧪</Text>;
+  if (lower.includes('belt')) return <Text style={{ fontSize: 10 }}>🔄</Text>;
+  return <Text style={{ fontSize: 10 }}>⚙️</Text>;
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────
 
 export default function HistoryScreen() {
@@ -91,16 +109,50 @@ export default function HistoryScreen() {
   const [tab, setTab] = useState<Tab>('fuel');
   const [searchText, setSearchText] = useState('');
   const [dateRange, setDateRange] = useState<DateRange>('all');
+  const [componentsByService, setComponentsByService] = useState<Record<string, MaintenanceComponent[]>>({});
 
   const loadAll = useCallback(() => {
     if (selectedVehicle) {
       loadEntries(selectedVehicle.id, selectedVehicle.fuel_type as FuelType);
       loadRecords(selectedVehicle.id);
       loadExpenses(selectedVehicle.id);
+
+      try {
+        const allComps = maintCompRepo.getMaintenanceComponentsByVehicle(selectedVehicle.id);
+        const map: Record<string, MaintenanceComponent[]> = {};
+        for (const c of allComps) {
+          if (!map[c.service_record_id]) {
+            map[c.service_record_id] = [];
+          }
+          map[c.service_record_id].push(c);
+        }
+        setComponentsByService(map);
+      } catch (err) {
+        console.warn('[HistoryScreen] Failed to load maintenance components:', err);
+      }
     }
   }, [selectedVehicle?.id]);
 
   useFocusEffect(loadAll);
+
+  // Sync components whenever service records change in store
+  useEffect(() => {
+    if (selectedVehicle) {
+      try {
+        const allComps = maintCompRepo.getMaintenanceComponentsByVehicle(selectedVehicle.id);
+        const map: Record<string, MaintenanceComponent[]> = {};
+        for (const c of allComps) {
+          if (!map[c.service_record_id]) {
+            map[c.service_record_id] = [];
+          }
+          map[c.service_record_id].push(c);
+        }
+        setComponentsByService(map);
+      } catch (err) {
+        console.warn('[HistoryScreen] Failed to sync maintenance components:', err);
+      }
+    }
+  }, [selectedVehicle?.id, serviceRecords]);
 
   // ── Filtered data (pure, no side-effects) ────────────────────────
   const rangeStart = useMemo(() => getDateRangeStart(dateRange), [dateRange]);
@@ -124,7 +176,15 @@ export default function HistoryScreen() {
     return serviceRecords.filter((r) => {
       if (!isInRange(r.date, rangeStart)) return false;
       if (!query) return true;
+      const comps = componentsByService[r.id] || [];
+      const compMatch = comps.some(
+        (c) =>
+          c.component_name.toLowerCase().includes(query) ||
+          c.brand?.toLowerCase().includes(query) ||
+          c.notes?.toLowerCase().includes(query)
+      );
       return (
+        compMatch ||
         r.service_type.toLowerCase().includes(query) ||
         r.garage_name?.toLowerCase().includes(query) ||
         r.work_done?.toLowerCase().includes(query) ||
@@ -132,7 +192,7 @@ export default function HistoryScreen() {
         formatDisplayDateLong(r.date).toLowerCase().includes(query)
       );
     });
-  }, [serviceRecords, rangeStart, query]);
+  }, [serviceRecords, componentsByService, rangeStart, query]);
 
   const filteredExpenses = useMemo(() => {
     return expenses.filter((e) => {
@@ -260,37 +320,78 @@ export default function HistoryScreen() {
     </TouchableOpacity>
   );
 
-  const renderServiceRecord = ({ item }: { item: ServiceRecord }) => (
-    <TouchableOpacity
-      onPress={() => router.push({ pathname: '/add-service', params: { id: item.id } })}
-      onLongPress={() => handleDeleteService(item)}
-      activeOpacity={0.7}
-      style={[styles.entryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-    >
-      <View style={styles.entryHeader}>
-        <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>
-          {item.service_type}
-        </Text>
-        {item.cost != null && (
-          <Text style={[Typography.body, { color: colors.primary, fontWeight: '700' }]}>
-            {formatCurrency(item.cost)}
+  const renderServiceRecord = ({ item }: { item: ServiceRecord }) => {
+    const comps =
+      componentsByService[item.id] && componentsByService[item.id].length > 0
+        ? componentsByService[item.id]
+        : maintCompRepo.getMaintenanceComponentsByService(item.id);
+    return (
+      <TouchableOpacity
+        onPress={() => router.push({ pathname: '/add-service', params: { id: item.id } })}
+        onLongPress={() => handleDeleteService(item)}
+        activeOpacity={0.7}
+        style={[styles.entryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      >
+        <View style={styles.entryHeader}>
+          <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>
+            {item.service_type}
           </Text>
-        )}
-      </View>
-      <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
-        {formatDisplayDateLong(item.date)}
-        {item.garage_name ? ` · ${item.garage_name}` : ''}
-      </Text>
-      {item.work_done ? (
-        <Text style={[Typography.bodySmall, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
-          {item.work_done}
+          {item.cost != null && (
+            <Text style={[Typography.body, { color: colors.primary, fontWeight: '700' }]}>
+              {formatCurrency(item.cost)}
+            </Text>
+          )}
+        </View>
+
+        <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
+          {formatDisplayDateLong(item.date)}
+          {item.odometer != null ? ` · ${Math.round(item.odometer).toLocaleString('en-IN')} km` : ''}
+          {item.garage_name ? ` · ${item.garage_name}` : ''}
         </Text>
-      ) : null}
-      <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
-        Tap to edit · Long press to delete
-      </Text>
-    </TouchableOpacity>
-  );
+
+        {item.work_done ? (
+          <Text style={[Typography.bodySmall, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
+            {item.work_done}
+          </Text>
+        ) : null}
+
+        {/* ── Parts & Components Serviced Tags ── */}
+        {(comps.length > 0 || !!item.receipt_photo_uri) && (
+          <View style={styles.compTagsContainer}>
+            {comps.map((c) => (
+              <View
+                key={c.id}
+                style={[styles.compTagPill, { backgroundColor: colors.borderLight, borderColor: colors.border }]}
+              >
+                {renderComponentTagIcon(c.component_name)}
+                <Text style={[styles.compTagText, { color: colors.text }]}>
+                  {c.component_name}
+                  {c.brand ? ` (${c.brand})` : ''}
+                </Text>
+              </View>
+            ))}
+            {item.receipt_photo_uri ? (
+              <View
+                style={[
+                  styles.compTagPill,
+                  { backgroundColor: colors.primaryLight, borderColor: colors.primary + '40' },
+                ]}
+              >
+                <Text style={{ fontSize: 10 }}>🧾</Text>
+                <Text style={[styles.compTagText, { color: colors.primary, fontWeight: '700' }]}>
+                  Invoice
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        )}
+
+        <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
+          Tap to edit · Long press to delete
+        </Text>
+      </TouchableOpacity>
+    );
+  };
 
   const renderExpense = ({ item }: { item: Expense }) => (
     <TouchableOpacity
@@ -315,6 +416,23 @@ export default function HistoryScreen() {
           {item.description}
         </Text>
       ) : null}
+
+      {item.receipt_photo_uri ? (
+        <View style={styles.compTagsContainer}>
+          <View
+            style={[
+              styles.compTagPill,
+              { backgroundColor: colors.accent + '18', borderColor: colors.accent + '35' },
+            ]}
+          >
+            <Text style={{ fontSize: 10 }}>🧾</Text>
+            <Text style={[styles.compTagText, { color: colors.accent, fontWeight: '700' }]}>
+              Receipt
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
       <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
         Tap to edit · Long press to delete
       </Text>
@@ -597,6 +715,25 @@ const styles = StyleSheet.create({
   entryDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  compTagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: Spacing.sm,
+  },
+  compTagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Sizing.radiusSm,
+    borderWidth: 1,
+  },
+  compTagText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   badge: {
     alignSelf: 'flex-start',

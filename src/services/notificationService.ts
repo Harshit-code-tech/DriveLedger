@@ -28,6 +28,7 @@ import { Platform } from 'react-native';
 import { isRunningInExpoGo } from 'expo';
 import * as documentRepo from '@/database/repositories/documentRepo';
 import * as serviceRepo from '@/database/repositories/serviceRepo';
+import * as maintCompRepo from '@/database/repositories/maintenanceComponentRepo';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import { getKmUntilService, getServiceDueStatus } from '@/stores/serviceStore';
 import { DOCUMENT_TYPE_LABELS } from '@/constants/documentTypes';
@@ -318,6 +319,25 @@ async function scheduleServiceNotifications(
       dueStatus.subtext,
       data
     );
+  }
+
+  // Check individual component maintenance targets
+  try {
+    const compHistories = maintCompRepo.getAllComponentHistories(vehicleId);
+    for (const [compName, history] of Object.entries(compHistories)) {
+      const compDue = maintCompRepo.computeComponentDueStatus(vehicle, compName, history);
+      if (compDue.status === 'overdue' || compDue.status === 'due_soon') {
+        await notifyNow(
+          N,
+          CHANNEL_SERVICE_DUE,
+          `🔧 ${compDue.headline}`,
+          compDue.subtext,
+          { vehicleId, componentName: compName, type: 'component_due' }
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('[NotificationService] Error checking component due status:', err);
   }
 }
 

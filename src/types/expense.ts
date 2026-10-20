@@ -28,6 +28,9 @@ export interface Expense {
   /** Free-text description (optional) */
   description: string | null;
 
+  /** URI to receipt photo or invoice document (optional) */
+  receipt_photo_uri?: string | null;
+
   /** ISO 8601 timestamp */
   created_at: string;
 
@@ -47,6 +50,7 @@ export interface CreateExpenseInput {
 
   // Optional
   description?: string;
+  receipt_photo_uri?: string;
 }
 
 // ─── Update Input ────────────────────────────────────────────────────

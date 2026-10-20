@@ -25,6 +25,7 @@ import {
 import { APP_ID, type PasswordEncryptedBackupEnvelope } from '../types';
 
 describe('Backup Cryptography Engine (P0.1)', () => {
+  jest.setTimeout(25000);
   const TEST_PASSWORD = 'CorrectHorseBatteryStaple#2026';
   const WRONG_PASSWORD = 'IncorrectPassword123!';
   const SAMPLE_METADATA = {

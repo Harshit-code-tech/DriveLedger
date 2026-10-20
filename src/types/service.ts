@@ -46,6 +46,9 @@ export interface ServiceRecord {
   /** Free-text notes (optional) */
   notes: string | null;
 
+  /** URI to receipt photo or invoice document (optional) */
+  receipt_photo_uri?: string | null;
+
   /** ISO 8601 timestamp */
   created_at: string;
 
@@ -70,9 +73,77 @@ export interface CreateServiceRecordInput {
   next_due_km?: number;
   next_due_date?: string;
   notes?: string;
+  receipt_photo_uri?: string;
 }
 
 // ─── Update Input ────────────────────────────────────────────────────
 export type UpdateServiceRecordInput = Partial<
   Omit<ServiceRecord, 'id' | 'vehicle_id' | 'created_at' | 'updated_at' | 'deleted_at'>
+>;
+
+// ─── Maintenance Component Types ─────────────────────────────────────
+export type MaintenanceAction =
+  | 'replaced'
+  | 'inspected'
+  | 'serviced'
+  | 'topped_up'
+  | 'cleaned';
+
+export interface MaintenanceComponent {
+  /** Primary key — UUID v4 */
+  id: string;
+
+  /** FK → service_records.id */
+  service_record_id: string;
+
+  /** FK → vehicles.id */
+  vehicle_id: string;
+
+  /** Name of the component (e.g. Engine Oil, Brake Pads, Tyres) */
+  component_name: string;
+
+  /** Action taken: 'replaced' | 'inspected' | 'serviced' | 'topped_up' | 'cleaned' */
+  action: string;
+
+  /** Brand / manufacturer of the part installed (optional) */
+  brand: string | null;
+
+  /** Itemized cost if entered (optional — service_record.cost remains financial total) */
+  cost: number | null;
+
+  /** Next due odometer reading for this specific component (optional) */
+  next_due_km: number | null;
+
+  /** Next due date for this specific component (optional) */
+  next_due_date: string | null;
+
+  /** Component-specific notes (optional) */
+  notes: string | null;
+
+  /** ISO 8601 timestamp */
+  created_at: string;
+
+  /** ISO 8601 timestamp */
+  updated_at: string;
+
+  /** ISO 8601 timestamp — soft delete marker. NULL = not deleted. */
+  deleted_at: string | null;
+}
+
+export interface CreateMaintenanceComponentInput {
+  service_record_id?: string;
+  vehicle_id?: string;
+  component_name: string;
+  action?: string | MaintenanceAction;
+  brand?: string;
+  cost?: number;
+  next_due_km?: number;
+  next_due_date?: string;
+  notes?: string;
+  maintenance_date?: string;
+  odometer?: number;
+}
+
+export type UpdateMaintenanceComponentInput = Partial<
+  Omit<MaintenanceComponent, 'id' | 'service_record_id' | 'vehicle_id' | 'created_at' | 'updated_at' | 'deleted_at'>
 >;

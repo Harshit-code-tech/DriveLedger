@@ -31,6 +31,7 @@ import * as fuelRepo from '@/database/repositories/fuelRepo';
 import * as serviceRepo from '@/database/repositories/serviceRepo';
 import * as expenseRepo from '@/database/repositories/expenseRepo';
 import * as documentRepo from '@/database/repositories/documentRepo';
+import * as maintCompRepo from '@/database/repositories/maintenanceComponentRepo';
 import { computeMileageStats } from '@/engine/mileageEngine';
 import { MILEAGE_UNIT_LABELS } from '@/constants/fuelTypes';
 import {
@@ -38,6 +39,8 @@ import {
   exportServiceLedgerPdf,
   saveVehicleDossierPdf,
   exportVehicleDossierPdf,
+  saveVehicleHistoryReportPdf,
+  exportVehicleHistoryReportPdf,
   saveFuelExpensesCsvFile,
   exportFuelExpensesCsvFile,
 } from '@/services/reportService';
@@ -49,6 +52,8 @@ export interface ReportExportModalProps {
 }
 
 type ExportActionKey =
+  | 'save_history'
+  | 'share_history'
   | 'save_service'
   | 'share_service'
   | 'save_dossier'
@@ -60,6 +65,76 @@ type ExportActionKey =
 export function ReportExportModal({ visible, onClose, vehicle }: ReportExportModalProps) {
   const colors = useThemeColors();
   const [activeExport, setActiveExport] = useState<ExportActionKey>(null);
+
+  // ─── 0. Vehicle History Report Handlers (Feature 7) ───────────────
+
+  const handleSaveVehicleHistory = async () => {
+    try {
+      setActiveExport('save_history');
+      const fuelEntries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
+      const serviceRecords = serviceRepo.getServiceRecordsByVehicle(vehicle.id);
+      const maintenanceComponents = maintCompRepo.getMaintenanceComponentsByVehicle(vehicle.id);
+      const expenses = expenseRepo.getExpensesByVehicle(vehicle.id);
+      const documents = documentRepo.getCurrentDocumentsByVehicle(vehicle.id);
+      const allDocuments = documentRepo.getAllDocumentsByVehicle(vehicle.id);
+
+      const result = await saveVehicleHistoryReportPdf({
+        vehicle,
+        fuelEntries,
+        serviceRecords,
+        maintenanceComponents,
+        expenses,
+        documents,
+        allDocuments,
+      });
+
+      if (result.success) {
+        Alert.alert('✅ Saved to Device', result.message);
+      } else if (!result.cancelled && result.message) {
+        Alert.alert('Save Failed', result.message);
+      }
+    } catch (err) {
+      Alert.alert(
+        'Save Failed',
+        err instanceof Error ? err.message : 'An unexpected error occurred while saving the PDF.'
+      );
+    } finally {
+      setActiveExport(null);
+    }
+  };
+
+  const handleShareVehicleHistory = async () => {
+    try {
+      setActiveExport('share_history');
+      const fuelEntries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
+      const serviceRecords = serviceRepo.getServiceRecordsByVehicle(vehicle.id);
+      const maintenanceComponents = maintCompRepo.getMaintenanceComponentsByVehicle(vehicle.id);
+      const expenses = expenseRepo.getExpensesByVehicle(vehicle.id);
+      const documents = documentRepo.getCurrentDocumentsByVehicle(vehicle.id);
+      const allDocuments = documentRepo.getAllDocumentsByVehicle(vehicle.id);
+
+      const result = await exportVehicleHistoryReportPdf({
+        vehicle,
+        fuelEntries,
+        serviceRecords,
+        maintenanceComponents,
+        expenses,
+        documents,
+        allDocuments,
+      });
+
+      if (!result.success && !result.cancelled && result.message) {
+        Alert.alert('Share Failed', result.message);
+      }
+    } catch (err) {
+      Alert.alert(
+        'Share Failed',
+        err instanceof Error ? err.message : 'An unexpected error occurred while sharing the PDF.'
+      );
+    } finally {
+      setActiveExport(null);
+    }
+  };
 
   // ─── 1. Service Ledger Handlers ────────────────────────────────────
 
@@ -298,6 +373,86 @@ export function ReportExportModal({ visible, onClose, vehicle }: ReportExportMod
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
+            {/* Card 0: Credible Vehicle History Report (Feature 7) */}
+            <View style={[styles.reportCard, { borderColor: colors.primary, backgroundColor: colors.card }]}>
+              <View style={styles.cardHeaderRow}>
+                <View style={styles.cardTitleGroup}>
+                  <Text style={styles.cardEmoji}>📜</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[Typography.body, { fontWeight: '700', color: colors.text }]}>
+                      Credible Vehicle History Report
+                    </Text>
+                    <View style={styles.badgeRow}>
+                      <View style={[styles.badgePill, { backgroundColor: '#E0F2FE' }]}>
+                        <Text style={[styles.badgeText, { color: '#0369A1' }]}>PDF</Text>
+                      </View>
+                      <View style={[styles.badgePill, { backgroundColor: '#DCFCE7' }]}>
+                        <Text style={[styles.badgeText, { color: '#15803D' }]}>5 Sections</Text>
+                      </View>
+                      <View style={[styles.badgePill, { backgroundColor: '#FEF3C7' }]}>
+                        <Text style={[styles.badgeText, { color: '#B45309' }]}>Provenance</Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: Spacing.sm }]}>
+                Executive 5-section provenance report: vehicle summary with mandatory truth disclosure, fuel & efficiency ledger with anomaly detection, parts-level maintenance history, category ownership costs with operating cost/km, and active/renewed documents.
+              </Text>
+
+              {/* Dual Action Buttons: Save to Device + Share */}
+              <View style={styles.actionRow}>
+                <TouchableOpacity
+                  onPress={handleSaveVehicleHistory}
+                  disabled={activeExport !== null}
+                  activeOpacity={0.8}
+                  style={[
+                    styles.primarySaveButton,
+                    { backgroundColor: colors.primary },
+                    activeExport === 'save_history' && { opacity: 0.8 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Save Vehicle History Report PDF to device"
+                >
+                  {activeExport === 'save_history' ? (
+                    <View style={styles.loadingRow}>
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <Text style={[styles.primarySaveButtonText, { marginLeft: Spacing.xs }]}>
+                        Saving...
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.primarySaveButtonText}>💾 Save to Device</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleShareVehicleHistory}
+                  disabled={activeExport !== null}
+                  activeOpacity={0.8}
+                  style={[
+                    styles.secondaryShareButton,
+                    { borderColor: colors.border, backgroundColor: colors.surface },
+                    activeExport === 'share_history' && { opacity: 0.8 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Share Vehicle History Report PDF"
+                >
+                  {activeExport === 'share_history' ? (
+                    <View style={styles.loadingRow}>
+                      <ActivityIndicator size="small" color={colors.text} />
+                      <Text style={[styles.secondaryShareButtonText, { color: colors.text, marginLeft: Spacing.xs }]}>
+                        Sharing...
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text style={[styles.secondaryShareButtonText, { color: colors.text }]}>📤 Share</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+
             {/* Card 1: Service Ledger (PDF) */}
             <View style={[styles.reportCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
               <View style={styles.cardHeaderRow}>

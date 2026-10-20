@@ -172,6 +172,15 @@ export function getCurrentMonthTotalSpend(
   return getMonthlyTotalSpend(entries, serviceRecords, expenses, now.getMonth(), now.getFullYear());
 }
 
+export interface MonthlySpendDataPoint {
+  label: string;
+  value: number;
+  fuel: number;
+  service: number;
+  expense: number;
+  fullLabel?: string;
+}
+
 /**
  * Computes monthly spending data for the last N months (for charts).
  */
@@ -180,21 +189,34 @@ export function getMonthlySpendHistory(
   serviceRecords: ServiceRecord[],
   expenses: Expense[],
   months: number = 6
-): { label: string; value: number }[] {
+): MonthlySpendDataPoint[] {
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const fullMonthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
   const now = new Date();
-  const result: { label: string; value: number }[] = [];
+  const result: MonthlySpendDataPoint[] = [];
 
   for (let i = months - 1; i >= 0; i--) {
     const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const { total } = getMonthlyTotalSpend(
+    const m = monthDate.getMonth();
+    const y = monthDate.getFullYear();
+    const { fuel, service, expense, total } = getMonthlyTotalSpend(
       entries,
       serviceRecords,
       expenses,
-      monthDate.getMonth(),
-      monthDate.getFullYear()
+      m,
+      y
     );
-    result.push({ label: monthNames[monthDate.getMonth()], value: Math.round(total) });
+    result.push({
+      label: monthNames[m],
+      fullLabel: `${fullMonthNames[m]} ${y}`,
+      value: Math.round(total),
+      fuel: Math.round(fuel),
+      service: Math.round(service),
+      expense: Math.round(expense),
+    });
   }
 
   return result;

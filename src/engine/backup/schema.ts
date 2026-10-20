@@ -81,6 +81,29 @@ export function isValidDocument(d: unknown): boolean {
   );
 }
 
+export function isValidMaintenanceComponent(m: unknown): boolean {
+  if (!m || typeof m !== 'object') return false;
+  const r = m as Record<string, unknown>;
+  return (
+    typeof r.id === 'string' &&
+    typeof r.service_record_id === 'string' &&
+    typeof r.vehicle_id === 'string' &&
+    typeof r.component_name === 'string' &&
+    (r.component_name as string).trim().length > 0
+  );
+}
+
+export function isValidBackupAttachment(a: unknown): boolean {
+  if (!a || typeof a !== 'object') return false;
+  const r = a as Record<string, unknown>;
+  if (typeof r.filename !== 'string' || typeof r.base64 !== 'string') return false;
+  // Reject directory traversal attempts
+  if (r.filename.includes('..') || r.filename.includes('/') || r.filename.includes('\\')) {
+    return false;
+  }
+  return true;
+}
+
 // ─── Top-level schema validator ──────────────────────────────────────
 
 /**
@@ -131,6 +154,14 @@ export function validateSchema(obj: Record<string, unknown>): {
     ? (rawData.documents as unknown[]).filter(isValidDocument) as VehicleDocument[]
     : [];
 
+  const maintenanceComponents = Array.isArray(rawData.maintenance_components)
+    ? (rawData.maintenance_components as unknown[]).filter(isValidMaintenanceComponent)
+    : undefined;
+
+  const attachments = Array.isArray(rawData.attachments)
+    ? (rawData.attachments as unknown[]).filter(isValidBackupAttachment)
+    : undefined;
+
   const preferences = (rawData.preferences && typeof rawData.preferences === 'object')
     ? (rawData.preferences as BackupData['data']['preferences'])
     : undefined;
@@ -146,6 +177,8 @@ export function validateSchema(obj: Record<string, unknown>): {
       service_records: serviceRecords,
       expenses,
       documents,
+      maintenance_components: maintenanceComponents as any,
+      attachments: attachments as any,
       preferences,
       checklists,
     },

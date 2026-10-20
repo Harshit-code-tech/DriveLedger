@@ -5,6 +5,7 @@ import {
   calculatePartialEstimate,
   computeMileageStats,
   checkMileageReasonableness,
+  recalculateAllMileage,
 } from '../mileageEngine';
 import { validateFuelEntry } from '../validationEngine';
 import type { FuelEntry } from '@/types/fuel';
@@ -253,6 +254,132 @@ describe('Mileage Engine — Multi-Fuel & Non-Liquid Calculations', () => {
       expect(warning).toBeDefined();
       expect(warning?.severity).toBe('warning');
       expect(warning?.message).toContain('35');
+    });
+  });
+
+  describe('Part A — Mileage Reliability & Deterministic Verification', () => {
+    // ── Table A2 Deterministic Specification ──
+    it('verifies exact Part A2 table: 300 km / 19 L = ~15.79 km/L without counting baseline fill', () => {
+      const entries: FuelEntry[] = [
+        createMockEntry({ odometer: 20000, fuel_amount: 10, is_full_tank: 1 }), // Baseline
+        createMockEntry({ odometer: 20100, fuel_amount: 4, is_full_tank: 0 }),  // Partial
+        createMockEntry({ odometer: 20180, fuel_amount: 5, is_full_tank: 0 }),  // Partial
+        createMockEntry({ odometer: 20300, fuel_amount: 10, is_full_tank: 1 }), // Next Full
+      ];
+
+      // Entry 0 (baseline full tank): no previous reference point -> null
+      expect(calculateMileageForEntry(entries, 0, FuelType.PETROL)).toBeNull();
+
+      // Entry 1 & 2 (partial fills): null for exact tank-to-tank
+      expect(calculateMileageForEntry(entries, 1, FuelType.PETROL)).toBeNull();
+      expect(calculateMileageForEntry(entries, 2, FuelType.PETROL)).toBeNull();
+
+      // Entry 3 (closing full tank):
+      // Distance = 20300 - 20000 = 300 km
+      // Fuel consumed = 4 + 5 + 10 = 19 L (baseline 10L is not counted)
+      // Expected mileage = 300 / 19 = 15.78947... km/L
+      const res = calculateMileageForEntry(entries, 3, FuelType.PETROL);
+      expect(res).not.toBeNull();
+      expect(res?.unit).toBe(MileageUnit.KM_PER_LITRE);
+      expect(res?.value).toBeCloseTo(15.79, 2);
+    });
+
+    it('handles multiple consecutive partial fills correctly across multiple full tanks', () => {
+      const entries: FuelEntry[] = [
+        createMockEntry({ odometer: 10000, fuel_amount: 40, is_full_tank: 1 }), // Full 1
+        createMockEntry({ odometer: 10150, fuel_amount: 10, is_full_tank: 0 }), // Partial 1
+        createMockEntry({ odometer: 10300, fuel_amount: 12, is_full_tank: 0 }), // Partial 2
+        createMockEntry({ odometer: 10450, fuel_amount: 8, is_full_tank: 0 }),  // Partial 3
+        createMockEntry({ odometer: 10600, fuel_amount: 30, is_full_tank: 1 }), // Full 2
+      ];
+
+      // Full 2: distance = 600 km, fuel = 10 + 12 + 8 + 30 = 60 L -> 10.0 km/L
+      const res = calculateMileageForEntry(entries, 4, FuelType.PETROL);
+      expect(res).not.toBeNull();
+      expect(res?.value).toBe(10.0);
+    });
+
+    it('rejects entries with zero or negative fuel quantities', () => {
+      const entriesZero: FuelEntry[] = [
+        createMockEntry({ odometer: 10000, fuel_amount: 40, is_full_tank: 1 }),
+        createMockEntry({ odometer: 10300, fuel_amount: 0, is_full_tank: 1 }),
+      ];
+      expect(calculateMileageForEntry(entriesZero, 1, FuelType.PETROL)).toBeNull();
+
+      const entriesNeg: FuelEntry[] = [
+        createMockEntry({ odometer: 10000, fuel_amount: 40, is_full_tank: 1 }),
+        createMockEntry({ odometer: 10300, fuel_amount: -5, is_full_tank: 1 }),
+      ];
+      expect(calculateMileageForEntry(entriesNeg, 1, FuelType.PETROL)).toBeNull();
+    });
+
+    it('rejects decreasing or duplicate odometer readings', () => {
+      const entriesDecreasing: FuelEntry[] = [
+        createMockEntry({ odometer: 10500, fuel_amount: 40, is_full_tank: 1 }),
+        createMockEntry({ odometer: 10200, fuel_amount: 30, is_full_tank: 1 }),
+      ];
+      expect(calculateMileageForEntry(entriesDecreasing, 1, FuelType.PETROL)).toBeNull();
+
+      const entriesDuplicate: FuelEntry[] = [
+        createMockEntry({ odometer: 10500, fuel_amount: 40, is_full_tank: 1 }),
+        createMockEntry({ odometer: 10500, fuel_amount: 30, is_full_tank: 1 }),
+      ];
+      expect(calculateMileageForEntry(entriesDuplicate, 1, FuelType.PETROL)).toBeNull();
+    });
+
+    it('recalculates all downstream mileages when an old entry is edited or inserted out of order', () => {
+      // Historical entries originally:
+      const initialEntries: FuelEntry[] = [
+        createMockEntry({ id: 'e1', odometer: 10000, fuel_amount: 40, is_full_tank: 1 }),
+        createMockEntry({ id: 'e3', odometer: 10600, fuel_amount: 30, is_full_tank: 1 }),
+      ];
+
+      const initialResults = recalculateAllMileage(initialEntries, FuelType.PETROL);
+      expect(initialResults[1].mileage?.value).toBe(20.0); // 600 / 30 = 20 km/L
+
+      // User backdates a partial fill at 10300 km (10 L) that was previously forgotten:
+      const updatedEntries: FuelEntry[] = [
+        initialEntries[0],
+        createMockEntry({ id: 'e2', odometer: 10300, fuel_amount: 10, is_full_tank: 0 }),
+        initialEntries[1],
+      ];
+
+      const updatedResults = recalculateAllMileage(updatedEntries, FuelType.PETROL);
+      expect(updatedResults[0].mileage).toBeNull(); // baseline
+      expect(updatedResults[1].mileage).toBeNull(); // partial
+      // Closing full tank now consumes 10 + 30 = 40 L over 600 km -> 600 / 40 = 15 km/L
+      expect(updatedResults[2].mileage?.value).toBe(15.0);
+    });
+
+    it('recalculates downstream mileages when an intermediate entry is deleted', () => {
+      const entriesWithMiddle: FuelEntry[] = [
+        createMockEntry({ id: 'e1', odometer: 10000, fuel_amount: 40, is_full_tank: 1 }),
+        createMockEntry({ id: 'e2', odometer: 10300, fuel_amount: 20, is_full_tank: 1 }),
+        createMockEntry({ id: 'e3', odometer: 10600, fuel_amount: 20, is_full_tank: 1 }),
+      ];
+
+      // e2: 300 / 20 = 15 km/L, e3: 300 / 20 = 15 km/L
+      const resBefore = recalculateAllMileage(entriesWithMiddle, FuelType.PETROL);
+      expect(resBefore[1].mileage?.value).toBe(15.0);
+      expect(resBefore[2].mileage?.value).toBe(15.0);
+
+      // Now e2 is deleted: chain becomes e1 -> e3 (distance = 600 km, fuel = 20 L -> 30 km/L)
+      const entriesAfterDelete = [entriesWithMiddle[0], entriesWithMiddle[2]];
+      const resAfter = recalculateAllMileage(entriesAfterDelete, FuelType.PETROL);
+      expect(resAfter[1].mileage?.value).toBe(30.0);
+    });
+
+    it('returns null when there are incomplete intervals and insufficient data', () => {
+      // Only 1 entry
+      const single = [createMockEntry({ odometer: 5000, fuel_amount: 20, is_full_tank: 1 })];
+      expect(calculateMileageForEntry(single, 0, FuelType.PETROL)).toBeNull();
+
+      // Only partial fills with no full tanks
+      const allPartial = [
+        createMockEntry({ odometer: 5000, fuel_amount: 10, is_full_tank: 0 }),
+        createMockEntry({ odometer: 5100, fuel_amount: 10, is_full_tank: 0 }),
+      ];
+      expect(calculateMileageForEntry(allPartial, 1, FuelType.PETROL)).toBeNull();
     });
   });
 });

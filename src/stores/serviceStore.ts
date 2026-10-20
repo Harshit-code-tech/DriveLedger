@@ -12,11 +12,21 @@
  */
 
 import { create } from 'zustand';
-import type { ServiceRecord, CreateServiceRecordInput, UpdateServiceRecordInput } from '@/types/service';
+import type {
+  ServiceRecord,
+  CreateServiceRecordInput,
+  UpdateServiceRecordInput,
+  MaintenanceComponent,
+  CreateMaintenanceComponentInput,
+} from '@/types/service';
 import type { Vehicle } from '@/types/vehicle';
 import * as serviceRepo from '@/database/repositories/serviceRepo';
+import * as maintCompRepo from '@/database/repositories/maintenanceComponentRepo';
+import { getDatabase } from '@/database/connection';
 import { syncWidgetState } from '@/widgets/widgetDataService';
 import { refreshReminders } from '@/services/notificationService';
+
+export * from '@/database/repositories/maintenanceComponentRepo';
 
 interface ServiceState {
   /** Service records for the currently selected vehicle */
@@ -27,12 +37,25 @@ interface ServiceState {
   // ── Actions ──
   /** Load service records for a vehicle */
   loadRecords: (vehicleId: string) => void;
-  /** Create a new service record */
-  addRecord: (input: CreateServiceRecordInput) => ServiceRecord;
-  /** Update an existing service record */
-  editRecord: (id: string, input: UpdateServiceRecordInput) => ServiceRecord | null;
-  /** Delete a service record (soft delete) */
+  /** Create a new service record with optional parts-level components */
+  addRecord: (
+    input: CreateServiceRecordInput,
+    components?: CreateMaintenanceComponentInput[]
+  ) => ServiceRecord;
+  /** Update an existing service record with optional components sync */
+  editRecord: (
+    id: string,
+    input: UpdateServiceRecordInput,
+    components?: CreateMaintenanceComponentInput[]
+  ) => ServiceRecord | null;
+  /** Delete a service record and associated components (soft delete) */
   deleteRecord: (id: string) => void;
+  /** Get components for a service record */
+  getServiceComponents: (serviceRecordId: string) => MaintenanceComponent[];
+  /** Get component histories for a vehicle */
+  getComponentHistories: (
+    vehicleId: string
+  ) => Record<string, maintCompRepo.ComponentHistoryEntry[]>;
 }
 
 export const useServiceStore = create<ServiceState>((set, get) => ({
@@ -44,17 +67,54 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     set({ records, isLoading: false });
   },
 
-  addRecord: (input: CreateServiceRecordInput) => {
-    const record = serviceRepo.createServiceRecord(input);
+  addRecord: (
+    input: CreateServiceRecordInput,
+    components?: CreateMaintenanceComponentInput[]
+  ) => {
+    const db = getDatabase();
+    let record: ServiceRecord;
+
+    db.withTransactionSync(() => {
+      record = serviceRepo.createServiceRecord(input);
+      if (components && components.length > 0) {
+        maintCompRepo.createMaintenanceComponents(
+          components,
+          record.id,
+          input.vehicle_id
+        );
+      }
+    });
+
     const records = serviceRepo.getServiceRecordsByVehicle(input.vehicle_id);
     set({ records });
     syncWidgetState();
     refreshReminders();
-    return record;
+    return record!;
   },
 
-  editRecord: (id: string, input: UpdateServiceRecordInput) => {
-    const updated = serviceRepo.updateServiceRecord(id, input);
+  editRecord: (
+    id: string,
+    input: UpdateServiceRecordInput,
+    components?: CreateMaintenanceComponentInput[]
+  ) => {
+    const db = getDatabase();
+
+    db.withTransactionSync(() => {
+      const record = serviceRepo.updateServiceRecord(id, input);
+      if (record && components !== undefined) {
+        // Sync components: delete previous for this service and recreate new
+        maintCompRepo.deleteMaintenanceComponentsByService(id);
+        if (components.length > 0) {
+          maintCompRepo.createMaintenanceComponents(
+            components,
+            id,
+            record.vehicle_id
+          );
+        }
+      }
+    });
+
+    const updated = serviceRepo.getServiceRecordById(id);
     if (updated) {
       const records = serviceRepo.getServiceRecordsByVehicle(updated.vehicle_id);
       set({ records });
@@ -65,15 +125,28 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
   },
 
   deleteRecord: (id: string) => {
-    // Get the record first so we know its vehicle_id for refresh
     const record = serviceRepo.getServiceRecordById(id);
-    serviceRepo.softDeleteServiceRecord(id);
+    const db = getDatabase();
+
+    db.withTransactionSync(() => {
+      serviceRepo.softDeleteServiceRecord(id);
+      maintCompRepo.deleteMaintenanceComponentsByService(id);
+    });
+
     if (record) {
       const records = serviceRepo.getServiceRecordsByVehicle(record.vehicle_id);
       set({ records });
       syncWidgetState();
       refreshReminders();
     }
+  },
+
+  getServiceComponents: (serviceRecordId: string) => {
+    return maintCompRepo.getMaintenanceComponentsByService(serviceRecordId);
+  },
+
+  getComponentHistories: (vehicleId: string) => {
+    return maintCompRepo.getAllComponentHistories(vehicleId);
   },
 }));
 

@@ -4,13 +4,10 @@
  * Shows vehicle documents (RC, Insurance, PUC, FASTag, Warranty).
  * Highlights documents nearing expiry with color-coded badges.
  *
- * Features:
- * - List of current (non-superseded) documents
- * - Expiry warning badges (expired, expiring soon, valid)
- * - Renew button on expired/expiring documents
- * - Photo thumbnail display
- * - FAB to add new documents
- * - Wired to centralized documentStore
+ * P1 EXTENSIONS:
+ * - Renewal history tab: view superseded documents preserved in the renewal chain
+ * - Clear "Superseded" distinction so active policies are never confused with old ones
+ * - Full offline file access (images and PDFs) for historical claims and audit reference
  */
 
 import { VehicleContextHeader } from '@/components/VehicleContextHeader';
@@ -25,7 +22,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { Alert, FlatList, Image, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ReportExportModal } from '@/components/ReportExportModal';
 
@@ -43,14 +40,18 @@ export default function DocumentsScreen() {
   }, [params.vehicleId]);
 
   const documents = useDocumentStore((s) => s.documents);
+  const allDocuments = useDocumentStore((s) => s.allDocuments);
   const loadDocuments = useDocumentStore((s) => s.loadDocuments);
   const deleteDocument = useDocumentStore((s) => s.deleteDocument);
+
+  // Tab: 'active' | 'history'
+  const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
 
   // Fullscreen image viewer state
   const [viewerUri, setViewerUri] = useState<string | null>(null);
   const [showExportModal, setShowExportModal] = useState<boolean>(false);
 
-  // Reload when screen comes into focus (after adding a document)
+  // Reload when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       if (selectedVehicle) {
@@ -58,6 +59,10 @@ export default function DocumentsScreen() {
       }
     }, [selectedVehicle?.id])
   );
+
+  const supersededDocuments = useMemo(() => {
+    return allDocuments.filter((d) => d.superseded_by !== null);
+  }, [allDocuments]);
 
   const getExpiryBadge = (expiryDate: string | null, type?: string) => {
     if (!expiryDate) return { label: 'No Expiry', color: colors.textTertiary, bgColor: colors.shimmer };
@@ -92,11 +97,11 @@ export default function DocumentsScreen() {
     const label = DOCUMENT_TYPE_LABELS[doc.type as keyof typeof DOCUMENT_TYPE_LABELS] || doc.type;
     Alert.alert(
       `Renew ${label} 🔄`,
-      `Time to freshen up that ${label}! A new record will be created and the current one retired.\n\nWe'll take you to the form - just fill in the new details.`,
+      `Time to freshen up that ${label}! A new record will be created and the current one will be moved to Renewal History.\n\nFill in the new details on the next screen.`,
       [
         { text: 'Maybe Later', style: 'cancel' },
         {
-          text: 'Let\'s Renew! 🎉',
+          text: "Let's Renew! 🎉",
           onPress: () => {
             router.push({
               pathname: '/add-document',
@@ -108,16 +113,6 @@ export default function DocumentsScreen() {
     );
   };
 
-  /**
-   * Open a document file:
-   * - Images: show fullscreen modal
-   * - PDFs: pass the raw file:// URI to expo-sharing.
-   *   SharingModule.kt (native Android) internally calls
-   *   FileProvider.getUriForFile() to wrap it as a content:// URI
-   *   and grants read permission to target apps.
-   *   We must NOT pre-convert with getContentUriAsync because
-   *   expo-sharing explicitly rejects non-file:// URIs.
-   */
   const openDocumentFile = async (uri: string) => {
     const isPDF = Boolean(uri && (uri.toLowerCase().includes('.pdf') || uri.toLowerCase().endsWith('.pdf')));
     if (isPDF) {
@@ -127,7 +122,6 @@ export default function DocumentsScreen() {
 
         let readyToOpen = false;
 
-        // Try Method 1: copyAsync (works for content:// and internal files via ContentResolver)
         try {
           await FileSystem.copyAsync({ from: uri, to: shareUri });
           readyToOpen = true;
@@ -135,7 +129,6 @@ export default function DocumentsScreen() {
           console.warn('copyAsync to cache failed, trying stream fallback:', copyErr);
         }
 
-        // Try Method 2: fetch blob -> base64 -> writeAsStringAsync (bypasses Expo permission gate for unscoped paths)
         if (!readyToOpen) {
           try {
             const res = await fetch(uri);
@@ -161,18 +154,17 @@ export default function DocumentsScreen() {
         if (!readyToOpen) {
           Alert.alert(
             '📄 Document File Inaccessible',
-            'This PDF is no longer accessible on your device (it may have been stored in a temporary location that Android cleared). Please tap Edit on this document and re-upload your PDF.'
+            'This PDF is no longer accessible on your device. Please edit the document and re-upload your PDF.'
           );
           return;
         }
 
-        // On Android: Open DIRECTLY with the default PDF viewer (ACTION_VIEW)
         if (Platform.OS === 'android') {
           try {
             const contentUri = await FileSystem.getContentUriAsync(shareUri);
             await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
               data: contentUri,
-              flags: 1, // Intent.FLAG_GRANT_READ_URI_PERMISSION
+              flags: 1,
               type: 'application/pdf',
             });
             return;
@@ -181,7 +173,6 @@ export default function DocumentsScreen() {
           }
         }
 
-        // Fallback for iOS or if no default viewer handled ACTION_VIEW:
         const isAvailable = await Sharing.isAvailableAsync();
         if (isAvailable) {
           await Sharing.shareAsync(shareUri, {
@@ -191,17 +182,13 @@ export default function DocumentsScreen() {
         } else {
           Alert.alert(
             '📄 No PDF Viewer Available',
-            'Your device cannot open PDFs. Install a PDF viewer like Google Drive or Adobe Acrobat to view it.'
+            'Install a PDF viewer to view this document.'
           );
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : '';
-        // User dismissed chooser / viewer — not an error
         if (msg.includes('cancelled') || msg.includes('canceled') || msg.includes('dismiss')) return;
-        Alert.alert(
-          '🙈 Could Not Open PDF',
-          `Unable to open PDF: ${msg || 'File may be inaccessible'}. Try editing the document and re-uploading the PDF.`
-        );
+        Alert.alert('Could Not Open PDF', msg || 'File may be inaccessible.');
       }
     } else {
       setViewerUri(uri);
@@ -223,14 +210,14 @@ export default function DocumentsScreen() {
         router.push({ pathname: '/add-document', params: { id: item.id } });
       }
     },
-    [openDocumentFile, router]
+    [router]
   );
 
   const handleDelete = useCallback(
     (item: VehicleDocument) => {
       Alert.alert(
         'Delete This? 🗑️',
-        `You're about to delete this ${DOCUMENT_TYPE_LABELS[item.type as keyof typeof DOCUMENT_TYPE_LABELS] || item.type} record. No backsies!`,
+        `You're about to delete this ${DOCUMENT_TYPE_LABELS[item.type as keyof typeof DOCUMENT_TYPE_LABELS] || item.type} record.`,
         [
           { text: 'Keep It', style: 'cancel' },
           {
@@ -259,6 +246,8 @@ export default function DocumentsScreen() {
     );
   }
 
+  const displayedDocs = activeTab === 'active' ? documents : supersededDocuments;
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* ── Vehicle Context ── */}
@@ -269,7 +258,7 @@ export default function DocumentsScreen() {
         <View style={styles.topActionTextGroup}>
           <Text style={[Typography.h3, { color: colors.text }]}>Vehicle Documents</Text>
           <Text style={[Typography.caption, { color: colors.textSecondary }]}>
-            {documents.length} {documents.length === 1 ? 'record' : 'records'} active
+            {documents.length} active · {supersededDocuments.length} renewed
           </Text>
         </View>
 
@@ -286,13 +275,65 @@ export default function DocumentsScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* ── Tab Selector: Active vs. Renewal History ── */}
+      <View style={[styles.tabSelectorRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <TouchableOpacity
+          style={[
+            styles.tabButton,
+            activeTab === 'active' && { backgroundColor: colors.primary },
+          ]}
+          onPress={() => setActiveTab('active')}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              { color: activeTab === 'active' ? colors.textOnPrimary : colors.textSecondary },
+            ]}
+          >
+            Active ({documents.length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.tabButton,
+            activeTab === 'history' && { backgroundColor: colors.primary },
+          ]}
+          onPress={() => setActiveTab('history')}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              { color: activeTab === 'history' ? colors.textOnPrimary : colors.textSecondary },
+            ]}
+          >
+            Renewal History ({supersededDocuments.length})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {activeTab === 'history' && supersededDocuments.length > 0 && (
+        <View style={[styles.historyNotice, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 18 }}>
+            📜 <Text style={{ fontWeight: '700', color: colors.text }}>Archived Policies & Certificates:</Text>{' '}
+            These past records were superseded upon renewal. Kept safe offline for legal, claim, and tax history.
+          </Text>
+        </View>
+      )}
+
       <FlatList
-        data={documents}
+        data={displayedDocs}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <DocumentCard
             item={item}
-            badge={getExpiryBadge(item.expiry_date, item.type)}
+            isSuperseded={activeTab === 'history'}
+            badge={
+              activeTab === 'history'
+                ? { label: 'SUPERSEDED 🔄', color: colors.textSecondary, bgColor: colors.borderLight }
+                : getExpiryBadge(item.expiry_date, item.type)
+            }
             onEdit={handleEdit}
             onView={handleView}
             onDelete={handleDelete}
@@ -303,10 +344,21 @@ export default function DocumentsScreen() {
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={{ fontSize: 48, marginBottom: Spacing.lg }}>📄</Text>
-            <Text style={[Typography.h3, { color: colors.text }]}>No documents yet</Text>
-            <Text style={[Typography.bodySmall, { color: colors.textSecondary, marginTop: Spacing.sm, textAlign: 'center' }]}>
-              Store your RC, Insurance, PUC, and more digitally.
+            <Text style={{ fontSize: 48, marginBottom: Spacing.lg }}>
+              {activeTab === 'active' ? '📄' : '📜'}
+            </Text>
+            <Text style={[Typography.h3, { color: colors.text }]}>
+              {activeTab === 'active' ? 'No active documents yet' : 'No renewal history yet'}
+            </Text>
+            <Text
+              style={[
+                Typography.bodySmall,
+                { color: colors.textSecondary, marginTop: Spacing.sm, textAlign: 'center' },
+              ]}
+            >
+              {activeTab === 'active'
+                ? 'Store your RC, Insurance, PUC, and FASTag digitally.'
+                : 'When you renew insurance or PUC, older versions are saved here automatically.'}
             </Text>
           </View>
         }
@@ -361,6 +413,7 @@ export default function DocumentsScreen() {
 
 interface DocumentCardProps {
   item: VehicleDocument;
+  isSuperseded?: boolean;
   badge: { label: string; color: string; bgColor: string };
   onEdit: (item: VehicleDocument) => void;
   onView: (item: VehicleDocument) => void;
@@ -371,6 +424,7 @@ interface DocumentCardProps {
 
 function DocumentCard({
   item,
+  isSuperseded,
   badge,
   onEdit,
   onView,
@@ -390,7 +444,10 @@ function DocumentCard({
   }, []);
 
   const isExpiredOrExpiring = item.expiry_date && daysUntil(item.expiry_date) <= 30;
-  const isPDF = Boolean(item.file_uri && (item.file_uri.toLowerCase().endsWith('.pdf') || item.file_uri.toLowerCase().includes('.pdf')));
+  const isPDF = Boolean(
+    item.file_uri &&
+      (item.file_uri.toLowerCase().endsWith('.pdf') || item.file_uri.toLowerCase().includes('.pdf'))
+  );
 
   const handleTap = () => {
     const now = Date.now();
@@ -420,7 +477,14 @@ function DocumentCard({
       onPress={handleTap}
       onLongPress={() => onDelete(item)}
       activeOpacity={0.7}
-      style={[styles.docCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      style={[
+        styles.docCard,
+        {
+          backgroundColor: colors.surface,
+          borderColor: isSuperseded ? colors.borderLight : colors.border,
+          opacity: isSuperseded ? 0.85 : 1,
+        },
+      ]}
     >
       <View style={styles.docRow}>
         <Text style={styles.docIcon}>
@@ -440,21 +504,27 @@ function DocumentCard({
               {item.insurer_name}
             </Text>
           )}
-          {item.expiry_date && (
+          {item.issue_date && (
             <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
-              Expires: {formatDisplayDateLong(item.expiry_date)}
+              Issued: {formatDisplayDateLong(item.issue_date)}
+            </Text>
+          )}
+          {item.expiry_date && (
+            <Text style={[Typography.caption, { color: colors.textTertiary }]}>
+              Expired: {formatDisplayDateLong(item.expiry_date)}
             </Text>
           )}
         </View>
         <View style={{ alignItems: 'flex-end', gap: Spacing.xs }}>
           <View style={[styles.badge, { backgroundColor: badge.bgColor }]}>
-            <Text style={[Typography.caption, { color: badge.color }]}>{badge.label}</Text>
+            <Text style={[Typography.caption, { color: badge.color, fontWeight: '700' }]}>{badge.label}</Text>
           </View>
           {item.file_uri && (
             <Text style={{ fontSize: 14 }}>{isPDF ? '📄' : '📷'}</Text>
           )}
         </View>
       </View>
+
       {item.file_uri && !isPDF && (
         <Image source={{ uri: item.file_uri }} style={styles.docPhoto} resizeMode="cover" />
       )}
@@ -462,7 +532,7 @@ function DocumentCard({
         <TouchableOpacity
           onPress={() => onView(item)}
           activeOpacity={0.7}
-          style={[styles.pdfBanner, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          style={[styles.pdfBanner, { backgroundColor: colors.background, borderColor: colors.border }]}
         >
           <Text style={{ fontSize: 20 }}>📄</Text>
           <Text style={[Typography.bodySmall, { color: colors.primary, marginLeft: Spacing.sm, fontWeight: '600' }]}>
@@ -471,12 +541,15 @@ function DocumentCard({
         </TouchableOpacity>
       )}
 
-      {/* ── Renew Button (M-07) ── */}
-      {isExpiredOrExpiring && (
+      {/* ── Renew Button (Active only) ── */}
+      {!isSuperseded && isExpiredOrExpiring && (
         <TouchableOpacity
-          style={[styles.renewButton, {
-            backgroundColor: daysUntil(item.expiry_date!) < 0 ? colors.danger : colors.warning,
-          }]}
+          style={[
+            styles.renewButton,
+            {
+              backgroundColor: daysUntil(item.expiry_date!) < 0 ? colors.danger : colors.warning,
+            },
+          ]}
           onPress={() => onRenew(item)}
           activeOpacity={0.8}
         >
@@ -487,7 +560,7 @@ function DocumentCard({
       )}
 
       <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
-        Tap to edit · Double tap to view · Long press to delete
+        Tap to edit · Double tap to view file · Long press to delete
       </Text>
     </TouchableOpacity>
   );
@@ -512,6 +585,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderRadius: Sizing.radiusFull,
+    borderWidth: 1,
+  },
+  tabSelectorRow: {
+    flexDirection: 'row',
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.xs,
+    borderRadius: Sizing.radiusFull,
+    borderWidth: 1,
+    padding: 3,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Sizing.radiusFull,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  historyNotice: {
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Sizing.radiusMd,
     borderWidth: 1,
   },
   list: { padding: Spacing.lg, gap: Spacing.sm, paddingBottom: 100 },
@@ -563,7 +663,6 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.section * 2,
     paddingHorizontal: Spacing.xxxl,
   },
-  // ── Fullscreen modal ──
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.92)',

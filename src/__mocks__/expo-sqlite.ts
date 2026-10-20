@@ -33,16 +33,22 @@ class MockSQLiteDatabase {
     return stmt.all(...params) as T[];
   }
 
+  isInTransactionSync(): boolean {
+    return this.spCounter > 0;
+  }
+
   withTransactionSync<T>(callback: () => T): T {
     const sp = `sp_${++this.spCounter}`;
     this.rawDb.exec(`SAVEPOINT ${sp};`);
     try {
       const result = callback();
       this.rawDb.exec(`RELEASE SAVEPOINT ${sp};`);
+      this.spCounter = Math.max(0, this.spCounter - 1);
       return result;
     } catch (error) {
       this.rawDb.exec(`ROLLBACK TO SAVEPOINT ${sp};`);
       this.rawDb.exec(`RELEASE SAVEPOINT ${sp};`);
+      this.spCounter = Math.max(0, this.spCounter - 1);
       throw error;
     }
   }
