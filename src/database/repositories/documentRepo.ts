@@ -183,18 +183,32 @@ export function renewDocument(
   oldDocumentId: string,
   newInput: CreateDocumentInput
 ): VehicleDocument {
-  // Create the new document first
-  const newDoc = createDocument(newInput);
-
-  // Link the old document to the new one
   const db = getDatabase();
-  const now = nowISO();
-  db.runSync(
-    'UPDATE documents SET superseded_by = ?, updated_at = ? WHERE id = ?',
-    [newDoc.id, now, oldDocumentId]
-  );
+  let newDoc: VehicleDocument | null = null;
 
-  return newDoc;
+  db.withTransactionSync(() => {
+    // 1. Verify that the document being renewed exists and is not deleted
+    const oldDoc = getDocumentById(oldDocumentId);
+    if (!oldDoc) {
+      throw new Error(`Cannot renew document: document "${oldDocumentId}" does not exist or has been deleted.`);
+    }
+
+    // 2. Create the new document
+    newDoc = createDocument(newInput);
+
+    // 3. Link the old document to the new one
+    const now = nowISO();
+    const result = db.runSync(
+      'UPDATE documents SET superseded_by = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL',
+      [newDoc.id, now, oldDocumentId]
+    );
+
+    if (result.changes === 0) {
+      throw new Error(`Failed to update superseded_by link on document "${oldDocumentId}".`);
+    }
+  });
+
+  return newDoc!;
 }
 
 // ─── DELETE (SOFT) ───────────────────────────────────────────────────

@@ -16,12 +16,12 @@
 
 import { create } from 'zustand';
 import { Platform } from 'react-native';
-import type { FuelEntry, CreateFuelEntryInput } from '@/types/fuel';
+import type { FuelEntry, CreateFuelEntryInput, UpdateFuelEntryInput } from '@/types/fuel';
 import type { Vehicle } from '@/types/vehicle';
 import * as fuelRepo from '@/database/repositories/fuelRepo';
-import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import { syncWidgetState } from '@/widgets/widgetDataService';
 import { storeRegistry } from '@/stores/storeRegistry';
+import { refreshReminders } from '@/services/notificationService';
 import {
   calculateMileageForEntry,
   calculatePartialEstimate,
@@ -60,12 +60,18 @@ interface FuelState {
    *                     fuel-type-specific logic) if omitted.
    */
   loadEntries: (vehicleId: string, fuelType?: FuelType) => void;
-  /** Create a new fuel entry with mileage calculation */
+  /** Create a new fuel entry with mileage calculation (atomic transaction) */
   addFuelEntry: (input: CreateFuelEntryInput, vehicle: Vehicle) => {
     entry: FuelEntry;
     warning: MileageWarning | null;
   };
-  /** Delete a fuel entry and recalculate downstream mileage */
+  /** Update an existing fuel entry and recalculate downstream mileage (atomic transaction) */
+  updateFuelEntry: (
+    entryId: string,
+    input: UpdateFuelEntryInput,
+    vehicle: Vehicle
+  ) => FuelEntry | null;
+  /** Delete a fuel entry and recalculate downstream mileage (atomic transaction) */
   deleteFuelEntry: (entryId: string, vehicle: Vehicle) => void;
 }
 
@@ -109,94 +115,70 @@ export const useFuelStore = create<FuelState>((set) => ({
   },
 
   addFuelEntry: (input: CreateFuelEntryInput, vehicle: Vehicle) => {
-    // 1. Create the entry in the database
-    const entry = fuelRepo.createFuelEntry(input);
-
-    // 2. Calculate mileage for this entry
-    const chronological = fuelRepo.getFuelEntriesByVehicleChronological(vehicle.id);
-    const entryIndex = chronological.findIndex((e) => e.id === entry.id);
-
-    let warning: MileageWarning | null = null;
-
-    if (entryIndex >= 0) {
-      const mileageResult = calculateMileageForEntry(
-        chronological,
-        entryIndex,
-        vehicle.fuel_type as FuelType
-      );
-
-      if (mileageResult) {
-        // 3. Persist mileage to the entry
-        fuelRepo.updateFuelEntryMileage(entry.id, mileageResult.value, mileageResult.unit);
-        entry.calculated_mileage = mileageResult.value;
-        entry.mileage_unit = mileageResult.unit;
-
-        // 4. Check reasonableness
-        warning = checkMileageReasonableness(
-          mileageResult.value,
-          vehicle.vehicle_type as VehicleType,
-          input.fuel_unit as FuelUnit
-        );
-      }
-    }
-
-    // 5. Update vehicle's current_odometer to the HIGHEST odometer across all entries
-    // (not just this entry — user may be logging a past fill at a lower reading)
-    const highestOdometer = chronological.reduce(
-      (max, e) => Math.max(max, e.odometer),
-      0
+    // Atomically create entry, compute mileage, and update vehicle odometer in one transaction
+    const { entry, warning } = fuelRepo.createFuelEntryAtomic(
+      input,
+      vehicle.fuel_type as FuelType,
+      vehicle.vehicle_type as VehicleType
     );
-    vehicleRepo.updateVehicleOdometer(vehicle.id, highestOdometer);
 
-
-    // 6. Refresh state
+    // Refresh store state
     const entries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
-    const chronological2 = fuelRepo.getFuelEntriesByVehicleChronological(vehicle.id);
+    const chronological = fuelRepo.getFuelEntriesByVehicleChronological(vehicle.id);
     const stats = computeMileageStats(entries, vehicle.fuel_type as FuelType);
-    const partialEstimates = computePartialEstimates(chronological2, vehicle.fuel_type as FuelType);
+    const partialEstimates = computePartialEstimates(chronological, vehicle.fuel_type as FuelType);
     set({ entries, stats, partialEstimates });
-    // Widget is Android-only — guard to avoid no-op calls on other platforms.
+
+    storeRegistry.refreshVehicles();
     if (Platform.OS === 'android') syncWidgetState();
+    refreshReminders();
 
     return { entry, warning };
   },
 
-  deleteFuelEntry: (entryId: string, vehicle: Vehicle) => {
-    // 1. Soft delete the entry
-    fuelRepo.softDeleteFuelEntry(entryId);
-
-    // 2. Recalculate all mileage (deletion may affect downstream calculations)
-    const chronological = fuelRepo.getFuelEntriesByVehicleChronological(vehicle.id);
-    const recalculated = recalculateAllMileage(chronological, vehicle.fuel_type as FuelType);
-
-    for (const { entryId: id, mileage } of recalculated) {
-      fuelRepo.updateFuelEntryMileage(
-        id,
-        mileage?.value ?? null,
-        mileage?.unit ?? null
-      );
-    }
-
-    // 3. Update vehicle odometer to the new latest entry's odometer (or null if empty)
-    const latestEntry = chronological.length > 0
-      ? chronological[chronological.length - 1]
-      : null;
-    vehicleRepo.updateVehicleOdometer(
-      vehicle.id,
-      latestEntry ? latestEntry.odometer : (vehicle.current_odometer ?? 0)
+  updateFuelEntry: (
+    entryId: string,
+    input: UpdateFuelEntryInput,
+    vehicle: Vehicle
+  ) => {
+    // Atomically update entry, recalculate mileage chain, and update vehicle odometer
+    const updated = fuelRepo.updateFuelEntryAtomic(
+      entryId,
+      input,
+      vehicle.fuel_type as FuelType
     );
 
-    // 4. Refresh all state — including the vehicle list so odometer updates on Home
+    // Refresh store state
     const entries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
-    const chronological2 = fuelRepo.getFuelEntriesByVehicleChronological(vehicle.id);
+    const chronological = fuelRepo.getFuelEntriesByVehicleChronological(vehicle.id);
     const stats = computeMileageStats(entries, vehicle.fuel_type as FuelType);
-    const partialEstimates = computePartialEstimates(chronological2, vehicle.fuel_type as FuelType);
+    const partialEstimates = computePartialEstimates(chronological, vehicle.fuel_type as FuelType);
     set({ entries, stats, partialEstimates });
 
-    // 5. Trigger vehicleStore reload via registry so odometer updates on Home.
-    //    Uses storeRegistry to avoid a circular import of vehicleStore here.
     storeRegistry.refreshVehicles();
-    // Widget is Android-only — guard to avoid no-op calls on other platforms.
     if (Platform.OS === 'android') syncWidgetState();
+    refreshReminders();
+
+    return updated;
+  },
+
+  deleteFuelEntry: (entryId: string, vehicle: Vehicle) => {
+    // Atomically soft delete, recalculate mileage chain, and update vehicle odometer
+    fuelRepo.deleteFuelEntryAtomic(
+      entryId,
+      vehicle.id,
+      vehicle.fuel_type as FuelType
+    );
+
+    // Refresh store state
+    const entries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
+    const chronological = fuelRepo.getFuelEntriesByVehicleChronological(vehicle.id);
+    const stats = computeMileageStats(entries, vehicle.fuel_type as FuelType);
+    const partialEstimates = computePartialEstimates(chronological, vehicle.fuel_type as FuelType);
+    set({ entries, stats, partialEstimates });
+
+    storeRegistry.refreshVehicles();
+    if (Platform.OS === 'android') syncWidgetState();
+    refreshReminders();
   },
 }));

@@ -274,23 +274,6 @@ async function scheduleDocumentNotifications(
         `Your ${label} for ${vName} expires in ${pluralDays(days)}. Renew before it lapses!`,
         data
       );
-
-      // Daily 9 AM reminder for the remaining days
-      if (days > 0) {
-        await N.scheduleNotificationAsync({
-          content: {
-            title: `📋 ${label} Renewal Reminder`,
-            body: `Your ${label} expires in ${pluralDays(days)}. Don't forget to renew!`,
-            data: { documentId: doc.id, type: 'expiry_reminder' },
-          },
-          trigger: {
-            type: N.SchedulableTriggerInputTypes.DAILY,
-            hour: 9,
-            minute: 0,
-            channelId: CHANNEL_DOCUMENT_EXPIRY,
-          },
-        });
-      }
     } else if (days <= 30) {
       await notifyNow(
         N, CHANNEL_DOCUMENT_EXPIRY,
@@ -379,38 +362,166 @@ async function scheduleMonthlySummary(N: NotificationsModule): Promise<void> {
   });
 }
 
-// ─── Schedule All Reminders ─────────────────────────────────────────
+// ─── Reconciliation & Scheduling ──────────────────────────────────────
+
+interface DesiredDocReminder {
+  documentId: string;
+  vehicleId: string;
+  daysRemaining: number;
+  title: string;
+  body: string;
+}
 
 /**
- * Checks all vehicles' documents and service records, and schedules
- * notifications for anything expired, overdue, or coming due.
+ * Idempotently reconciles scheduled notifications with current database records.
  *
- * Call on app launch and whenever vehicles change (from _layout.tsx).
- *
- * @param vehicleIds - Array of active vehicle IDs to check
+ * 1. Checks permissions safely without throwing.
+ * 2. Fetches currently scheduled notifications from expo-notifications.
+ * 3. Identifies desired daily reminders for active, non-superseded, non-deleted documents expiring in 1..7 days.
+ * 4. Identifies desired monthly driving summary.
+ * 5. Cancels obsolete, renewed, deleted, or duplicate scheduled notifications.
+ * 6. Schedules any missing desired notifications.
+ * 7. Dispatches any immediate (cooldown-guarded) alerts for overdue services, expired docs, or fuel nudges.
  */
-export async function scheduleReminderNotifications(vehicleIds: string[]): Promise<void> {
-  const N = getNotifications();
+export async function reconcileNotifications(injectedN?: NotificationsModule | null): Promise<void> {
+  const N = injectedN ?? getNotifications();
   if (!N) return;
 
-  ensureHandlerConfigured();
-
-  const hasPermission = await requestNotificationPermission();
-  if (!hasPermission) return;
+  if (!injectedN) {
+    ensureHandlerConfigured();
+    const hasPermission = await requestNotificationPermission();
+    if (!hasPermission) return;
+  }
 
   try {
-    // Cancel previously scheduled notifications to avoid duplicates
-    await cancelAllExpiryNotifications();
+    const activeVehicles = vehicleRepo.getActiveVehicles();
 
-    for (const vehicleId of vehicleIds) {
-      await scheduleDocumentNotifications(N, vehicleId);
-      await scheduleServiceNotifications(N, vehicleId);
-      await scheduleFuelNudge(N, vehicleId);
+    // 1. Determine desired scheduled notifications for documents
+    const desiredReminders = new Map<string, DesiredDocReminder>();
+
+    for (const vehicle of activeVehicles) {
+      const docs = documentRepo.getCurrentDocumentsByVehicle(vehicle.id);
+      for (const doc of docs) {
+        if (!doc.expiry_date) continue;
+        const days = daysUntil(doc.expiry_date);
+        // Daily 9 AM renewal reminder for documents expiring in 1..7 days
+        if (days >= 1 && days <= 7) {
+          const label = DOCUMENT_TYPE_LABELS[doc.type as keyof typeof DOCUMENT_TYPE_LABELS] || doc.type;
+          desiredReminders.set(doc.id, {
+            documentId: doc.id,
+            vehicleId: vehicle.id,
+            daysRemaining: days,
+            title: `📋 ${label} Renewal Reminder`,
+            body: `Your ${label} for ${vehicle.nickname} expires in ${pluralDays(days)}. Don't forget to renew!`,
+          });
+        }
+      }
     }
-    await scheduleMonthlySummary(N);
+
+    // 2. Fetch existing scheduled notifications from OS
+    const scheduledList = (await N.getAllScheduledNotificationsAsync()) || [];
+    let monthlySummaryScheduled = false;
+    const satisfiedDocReminders = new Set<string>();
+
+    for (const req of scheduledList) {
+      const data = (req.content?.data || {}) as Record<string, unknown>;
+      const notifType = data.type as string | undefined;
+
+      if (notifType === 'monthly_summary') {
+        if (monthlySummaryScheduled) {
+          try {
+            await N.cancelScheduledNotificationAsync(req.identifier);
+          } catch (e) {
+            console.warn('[DriveLedger] Error cancelling duplicate monthly summary:', e);
+          }
+        } else {
+          monthlySummaryScheduled = true;
+        }
+      } else if (notifType === 'expiry_reminder') {
+        const docId = data.documentId as string | undefined;
+        const desired = docId ? desiredReminders.get(docId) : undefined;
+
+        if (!desired || satisfiedDocReminders.has(docId!)) {
+          // Document was deleted, renewed, moved out of window, or duplicate -> cancel
+          try {
+            await N.cancelScheduledNotificationAsync(req.identifier);
+          } catch (e) {
+            console.warn('[DriveLedger] Error cancelling obsolete reminder:', e);
+          }
+        } else {
+          // Check if daysRemaining matches and title matches
+          if (data.daysRemaining === desired.daysRemaining && req.content?.title === desired.title) {
+            satisfiedDocReminders.add(docId!);
+          } else {
+            // Content or days changed -> cancel old so fresh one gets scheduled below
+            try {
+              await N.cancelScheduledNotificationAsync(req.identifier);
+            } catch (e) {
+              console.warn('[DriveLedger] Error cancelling outdated reminder:', e);
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Schedule missing desired document reminders
+    for (const [docId, desired] of desiredReminders.entries()) {
+      if (satisfiedDocReminders.has(docId)) continue;
+
+      try {
+        await N.scheduleNotificationAsync({
+          content: {
+            title: desired.title,
+            body: desired.body,
+            data: {
+              documentId: desired.documentId,
+              vehicleId: desired.vehicleId,
+              daysRemaining: desired.daysRemaining,
+              type: 'expiry_reminder',
+            },
+          },
+          trigger: {
+            type: N.SchedulableTriggerInputTypes.DAILY,
+            hour: 9,
+            minute: 0,
+            channelId: CHANNEL_DOCUMENT_EXPIRY,
+          },
+        });
+      } catch (err) {
+        console.warn(`[DriveLedger] Failed to schedule reminder for doc ${docId}:`, err);
+      }
+    }
+
+    // 4. Ensure monthly summary is scheduled exactly once
+    if (!monthlySummaryScheduled) {
+      try {
+        await scheduleMonthlySummary(N);
+      } catch (err) {
+        console.warn('[DriveLedger] Failed to schedule monthly summary:', err);
+      }
+    }
+
+    // 5. Fire any immediate notifications (cooldown-guarded) for documents, services, and fuel
+    for (const vehicle of activeVehicles) {
+      await scheduleDocumentNotifications(N, vehicle.id);
+      await scheduleServiceNotifications(N, vehicle.id);
+      await scheduleFuelNudge(N, vehicle.id);
+    }
   } catch (error) {
-    console.warn('[DriveLedger] Failed to schedule notifications:', error);
+    console.warn('[DriveLedger] reconcileNotifications encountered an error:', error);
   }
+}
+
+/**
+ * Checks all vehicles' documents and service records, and reconciles
+ * notifications for anything expired, overdue, or coming due.
+ *
+ * Backwards compatible with existing call sites.
+ *
+ * @param _vehicleIds - Optional array of active vehicle IDs (ignored; queries active vehicles from repo)
+ */
+export async function scheduleReminderNotifications(_vehicleIds?: string[]): Promise<void> {
+  await reconcileNotifications();
 }
 
 // ─── Refresh (called after data changes) ────────────────────────────
@@ -425,12 +536,7 @@ export function refreshReminders(): void {
   if (refreshTimer) clearTimeout(refreshTimer);
   refreshTimer = setTimeout(() => {
     refreshTimer = null;
-    try {
-      const ids = vehicleRepo.getActiveVehicles().map((v) => v.id);
-      void scheduleReminderNotifications(ids);
-    } catch (e) {
-      console.warn('[DriveLedger] refreshReminders failed:', e);
-    }
+    void reconcileNotifications();
   }, 1500);
 }
 

@@ -11,6 +11,7 @@
 import AnimatedSplash from '@/components/AnimatedSplash';
 import { getDatabase } from '@/database/connection';
 import {
+  reconcileNotifications,
   scheduleReminderNotifications,
   setupNotificationChannel,
 } from '@/services/notificationService';
@@ -96,8 +97,9 @@ export default function RootLayout() {
         // Initial sync of Android Home Screen Widget
         syncWidgetState().catch((err) => console.debug('Initial widget sync skipped:', err));
 
-        // Set up notification channel (Android)
+        // Set up notification channel (Android) and reconcile notification schedules
         await setupNotificationChannel();
+        await reconcileNotifications();
       } catch (e) {
         console.warn('App initialization warning:', e);
       } finally {

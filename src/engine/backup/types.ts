@@ -13,6 +13,40 @@ import type { Expense } from '@/types/expense';
 import type { FuelEntry } from '@/types/fuel';
 import type { ServiceRecord } from '@/types/service';
 import type { Vehicle } from '@/types/vehicle';
+import type { Preferences } from '@/stores/preferencesStore';
+
+export const ENCRYPTED_BACKUP_FORMAT = 'driveledger.encrypted-backup';
+export const CURRENT_BACKUP_VERSION = 3;
+export const APP_ID = 'com.driveledger.app';
+
+// ─── Envelopes ───────────────────────────────────────────────────────
+
+/** Modern v3 envelope using PBKDF2-HMAC-SHA256 password derivation + AES-256-GCM */
+export interface PasswordEncryptedBackupEnvelope {
+  format: typeof ENCRYPTED_BACKUP_FORMAT;
+  version: 3;
+  kdf: {
+    algorithm: 'PBKDF2-HMAC-SHA256';
+    iterations: number;
+    salt: string; // Base64 (16 bytes)
+    keyLength: number; // 32
+  };
+  encryption: {
+    algorithm: 'AES-256-GCM';
+    iv: string; // Base64 (12 bytes)
+    tagLength: number; // 16
+  };
+  ciphertext: string; // Base64
+  tag: string; // Base64 (16 bytes)
+  metadata: {
+    app_id: string;
+    app_version: string;
+    created_at: string;
+  };
+}
+
+export type BackupEnvelope = PasswordEncryptedBackupEnvelope;
+export type AnyEncryptedBackupEnvelope = PasswordEncryptedBackupEnvelope;
 
 // ─── Core Data Shape ─────────────────────────────────────────────────
 
@@ -21,14 +55,14 @@ export interface BackupData {
   version: number;
   created_at: string;
   app_version: string;
-  /** HMAC-SHA256 hex of JSON.stringify(data). Absent on raw legacy backups. */
-  signature?: string;
   data: {
     vehicles: Vehicle[];
     fuel_entries: FuelEntry[];
     service_records: ServiceRecord[];
     expenses: Expense[];
     documents: VehicleDocument[];
+    preferences?: Preferences;
+    checklists?: Record<string, string[]>;
   };
 }
 
@@ -66,4 +100,11 @@ export interface ImportFileResult {
   backup?: BackupData;
   /** Human-readable record count summary. */
   counts?: RestoreResult['counts'];
+}
+
+export interface VerifyBackupResult {
+  success: boolean;
+  message: string;
+  backup?: BackupData;
+  requiresPassword?: boolean;
 }

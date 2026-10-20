@@ -16,6 +16,7 @@ import type { ServiceRecord, CreateServiceRecordInput, UpdateServiceRecordInput 
 import type { Vehicle } from '@/types/vehicle';
 import * as serviceRepo from '@/database/repositories/serviceRepo';
 import { syncWidgetState } from '@/widgets/widgetDataService';
+import { refreshReminders } from '@/services/notificationService';
 
 interface ServiceState {
   /** Service records for the currently selected vehicle */
@@ -48,6 +49,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     const records = serviceRepo.getServiceRecordsByVehicle(input.vehicle_id);
     set({ records });
     syncWidgetState();
+    refreshReminders();
     return record;
   },
 
@@ -57,6 +59,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       const records = serviceRepo.getServiceRecordsByVehicle(updated.vehicle_id);
       set({ records });
       syncWidgetState();
+      refreshReminders();
     }
     return updated;
   },
@@ -69,6 +72,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       const records = serviceRepo.getServiceRecordsByVehicle(record.vehicle_id);
       set({ records });
       syncWidgetState();
+      refreshReminders();
     }
   },
 }));

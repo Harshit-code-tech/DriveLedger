@@ -131,6 +131,14 @@ export function validateSchema(obj: Record<string, unknown>): {
     ? (rawData.documents as unknown[]).filter(isValidDocument) as VehicleDocument[]
     : [];
 
+  const preferences = (rawData.preferences && typeof rawData.preferences === 'object')
+    ? (rawData.preferences as BackupData['data']['preferences'])
+    : undefined;
+
+  const checklists = (rawData.checklists && typeof rawData.checklists === 'object')
+    ? (rawData.checklists as BackupData['data']['checklists'])
+    : undefined;
+
   return {
     data: {
       vehicles: rawData.vehicles as Vehicle[],
@@ -138,6 +146,8 @@ export function validateSchema(obj: Record<string, unknown>): {
       service_records: serviceRecords,
       expenses,
       documents,
+      preferences,
+      checklists,
     },
   };
 }

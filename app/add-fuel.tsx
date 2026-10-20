@@ -39,7 +39,6 @@ import {
 import { Sizing, Spacing, Typography } from '@/constants/theme';
 import * as fuelRepo from '@/database/repositories/fuelRepo';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
-import { recalculateAllMileage } from '@/engine/mileageEngine';
 import { hasWarningsOnly, validateFuelEntry } from '@/engine/validationEngine';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { useFuelStore } from '@/stores/fuelStore';
@@ -78,6 +77,7 @@ export default function AddFuelScreen() {
   const selectVehicle = useVehicleStore((s) => s.selectVehicle);
   const loadVehicles = useVehicleStore((s) => s.loadVehicles);
   const addFuelEntry = useFuelStore((s) => s.addFuelEntry);
+  const updateFuelEntry = useFuelStore((s) => s.updateFuelEntry);
   const loadEntries = useFuelStore((s) => s.loadEntries);
 
   useEffect(() => {
@@ -413,42 +413,24 @@ export default function AddFuelScreen() {
   };
 
   const doUpdate = (entryId: string, odoVal: number, amountVal: number, priceVal: number, entryDate: string) => {
-    // Update the entry
-    fuelRepo.updateFuelEntry(entryId, {
-      date: entryDate,
-      odometer: odoVal,
-      fuel_amount: amountVal,
-      fuel_unit: fuelUnit,
-      price_per_unit: priceVal,
-      is_full_tank: isFullTank ? 1 : 0,
-      fuel_station: fuelStation || null,
-      receipt_photo_uri: photoUri || null,
-      notes: notes || null,
-      fuel_system: isHybrid ? fuelSystem : 'primary',
-      battery_start_percent: isEV && batteryStartPercent ? parseFloat(batteryStartPercent) : null,
-      battery_end_percent: isEV && batteryEndPercent ? parseFloat(batteryEndPercent) : null,
-    });
-
-    // Recalculate ALL mileage in the chain (edit may affect downstream)
-    const chronological = fuelRepo.getFuelEntriesByVehicleChronological(selectedVehicle.id);
-    const recalculated = recalculateAllMileage(chronological, selectedVehicle.fuel_type as FuelType);
-    for (const { entryId: id, mileage } of recalculated) {
-      fuelRepo.updateFuelEntryMileage(
-        id,
-        mileage?.value ?? null,
-        mileage?.unit ?? null
-      );
-    }
-
-    // Update vehicle odometer to the highest reading
-    if (chronological.length > 0) {
-      const maxOdometer = Math.max(...chronological.map((e) => e.odometer));
-      vehicleRepo.updateVehicleOdometer(selectedVehicle.id, maxOdometer);
-      loadVehicles();
-    }
-
-    // Reload entries so UI reflects new mileage
-    loadEntries(selectedVehicle.id, selectedVehicle.fuel_type as FuelType);
+    updateFuelEntry(
+      entryId,
+      {
+        date: entryDate,
+        odometer: odoVal,
+        fuel_amount: amountVal,
+        fuel_unit: fuelUnit,
+        price_per_unit: priceVal,
+        is_full_tank: isFullTank ? 1 : 0,
+        fuel_station: fuelStation || null,
+        receipt_photo_uri: photoUri || null,
+        notes: notes || null,
+        fuel_system: isHybrid ? fuelSystem : 'primary',
+        battery_start_percent: isEV && batteryStartPercent ? parseFloat(batteryStartPercent) : null,
+        battery_end_percent: isEV && batteryEndPercent ? parseFloat(batteryEndPercent) : null,
+      },
+      selectedVehicle
+    );
 
     Alert.alert(
       '✅ Entry Updated!',

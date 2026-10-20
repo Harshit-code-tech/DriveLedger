@@ -19,6 +19,14 @@ import { buildSafeUpdate } from '../safeUpdate';
 import { generateUUID } from '@/utils/uuid';
 import { nowISO } from '@/utils/date';
 import type { FuelEntry, CreateFuelEntryInput, UpdateFuelEntryInput } from '@/types/fuel';
+import { updateVehicleOdometer } from './vehicleRepo';
+import {
+  calculateMileageForEntry,
+  recalculateAllMileage,
+  checkMileageReasonableness,
+  type MileageWarning,
+} from '@/engine/mileageEngine';
+import type { FuelType, VehicleType, FuelUnit } from '@/constants/fuelTypes';
 
 // ─── CREATE ──────────────────────────────────────────────────────────
 
@@ -273,4 +281,147 @@ export function restoreFuelEntry(id: string): void {
     'UPDATE fuel_entries SET deleted_at = NULL, updated_at = ? WHERE id = ?',
     [now, id]
   );
+}
+
+// ─── ATOMIC TRANSACTION MUTATIONS (P0.2) ─────────────────────────────
+
+/**
+ * Atomically creates a fuel entry, computes mileage, recalculates affected entries,
+ * and updates the vehicle's current odometer in a single SQLite transaction.
+ *
+ * If any step fails, the entire transaction rolls back.
+ */
+export function createFuelEntryAtomic(
+  input: CreateFuelEntryInput,
+  fuelType: FuelType,
+  vehicleType: VehicleType
+): { entry: FuelEntry; warning: MileageWarning | null } {
+  const db = getDatabase();
+  let createdEntry: FuelEntry | null = null;
+  let warning: MileageWarning | null = null;
+
+  db.withTransactionSync(() => {
+    // 1. Create entry in DB
+    createdEntry = createFuelEntry(input);
+
+    // 2. Fetch chronological entries to calculate mileage
+    const chronological = getFuelEntriesByVehicleChronological(input.vehicle_id);
+    const entryIndex = chronological.findIndex((e) => e.id === createdEntry!.id);
+
+    if (entryIndex >= 0) {
+      const mileageResult = calculateMileageForEntry(chronological, entryIndex, fuelType);
+      if (mileageResult) {
+        updateFuelEntryMileage(createdEntry!.id, mileageResult.value, mileageResult.unit);
+        createdEntry!.calculated_mileage = mileageResult.value;
+        createdEntry!.mileage_unit = mileageResult.unit;
+
+        warning = checkMileageReasonableness(
+          mileageResult.value,
+          vehicleType,
+          input.fuel_unit as FuelUnit
+        );
+      }
+    }
+
+    // 3. Recalculate any downstream entry if backdated
+    if (entryIndex >= 0 && entryIndex < chronological.length - 1) {
+      const recalculated = recalculateAllMileage(chronological, fuelType);
+      for (const { entryId: id, mileage } of recalculated) {
+        if (id !== createdEntry!.id) {
+          updateFuelEntryMileage(id, mileage?.value ?? null, mileage?.unit ?? null);
+        }
+      }
+    }
+
+    // 4. Update vehicle's current_odometer to highest reading
+    const highestOdometer = chronological.reduce(
+      (max, e) => Math.max(max, e.odometer),
+      0
+    );
+    updateVehicleOdometer(input.vehicle_id, highestOdometer);
+  });
+
+  return { entry: createdEntry!, warning };
+}
+
+/**
+ * Atomically updates a fuel entry, recomputes total_cost, recalculates all
+ * affected mileage in the vehicle chain, and updates vehicle odometer.
+ *
+ * If any step fails, the entire transaction rolls back.
+ */
+export function updateFuelEntryAtomic(
+  id: string,
+  input: UpdateFuelEntryInput,
+  fuelType: FuelType
+): FuelEntry | null {
+  const db = getDatabase();
+  let updatedEntry: FuelEntry | null = null;
+
+  db.withTransactionSync(() => {
+    // 1. Update the entry
+    updatedEntry = updateFuelEntry(id, input);
+    if (!updatedEntry) return;
+
+    // 2. Recalculate ALL mileage in the chain
+    const chronological = getFuelEntriesByVehicleChronological(updatedEntry.vehicle_id);
+    const recalculated = recalculateAllMileage(chronological, fuelType);
+
+    for (const { entryId, mileage } of recalculated) {
+      updateFuelEntryMileage(
+        entryId,
+        mileage?.value ?? null,
+        mileage?.unit ?? null
+      );
+    }
+
+    // 3. Update vehicle odometer to the highest reading
+    if (chronological.length > 0) {
+      const highestOdometer = Math.max(...chronological.map((e) => e.odometer));
+      updateVehicleOdometer(updatedEntry.vehicle_id, highestOdometer);
+    }
+  });
+
+  return updatedEntry;
+}
+
+/**
+ * Atomically soft-deletes a fuel entry, recalculates all downstream mileage,
+ * and updates the vehicle's odometer to the latest remaining reading.
+ *
+ * If any step fails, the entire transaction rolls back.
+ */
+export function deleteFuelEntryAtomic(
+  id: string,
+  vehicleId: string,
+  fuelType: FuelType
+): void {
+  const db = getDatabase();
+
+  db.withTransactionSync(() => {
+    // 1. Soft delete the entry
+    softDeleteFuelEntry(id);
+
+    // 2. Recalculate all remaining mileage
+    const chronological = getFuelEntriesByVehicleChronological(vehicleId);
+    const recalculated = recalculateAllMileage(chronological, fuelType);
+
+    for (const { entryId, mileage } of recalculated) {
+      updateFuelEntryMileage(
+        entryId,
+        mileage?.value ?? null,
+        mileage?.unit ?? null
+      );
+    }
+
+    // 3. Update vehicle odometer to latest remaining entry (or 0 if none)
+    const latestEntry = chronological.length > 0
+      ? chronological[chronological.length - 1]
+      : null;
+
+    updateVehicleOdometer(
+      vehicleId,
+      latestEntry ? latestEntry.odometer : 0
+    );
+  });
 }
