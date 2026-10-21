@@ -165,8 +165,8 @@ export function ActiveTripModal({
         {/* ── Vehicle Subtitle ── */}
         <View style={styles.vehicleHeaderRow}>
           <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
-            Trip Computer for{' '}
-            <Text style={{ fontWeight: '800', color: colors.text }}>
+            Recording trip for{' '}
+            <Text style={{ fontWeight: '700', color: colors.text }}>
               {vehicle.nickname}
             </Text>
           </Text>
@@ -175,8 +175,8 @@ export function ActiveTripModal({
         {/* ── Paused / Gap Warning Banner ── */}
         {recordingState === 'paused' ? (
           <View style={[styles.statusBanner, { backgroundColor: colors.warningLight }]}>
-            <Text style={[Typography.bodySmall, { color: colors.warning, fontWeight: '800' }]}>
-              ⏸️ Trip is Paused · Speedometer Inactive
+            <Text style={[Typography.bodySmall, { color: colors.warning, fontWeight: '700' }]}>
+              ⏸️ Trip is Paused
             </Text>
           </View>
         ) : liveMetrics.hasGaps ? (
@@ -277,7 +277,7 @@ export function ActiveTripModal({
           {/* Precision & Privacy Footer */}
           <View style={styles.telemetryFooterInfo}>
             <Text style={[Typography.caption, { color: colors.textTertiary, textAlign: 'center', fontSize: 11 }]}>
-              📍 {liveMetrics.samplesCount} GPS Points Logged · Device-Only · No Data Required
+              📍 {liveMetrics.samplesCount} GPS Points · 100% Offline
             </Text>
           </View>
         </View>
