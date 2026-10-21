@@ -9,6 +9,7 @@
  */
 
 // ─── Full Database Row ───────────────────────────────────────────────
+export type VehicleExpense = Expense;
 export interface Expense {
   /** Primary key — UUID v4 */
   id: string;

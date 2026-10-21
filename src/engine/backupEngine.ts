@@ -30,7 +30,8 @@ import { getDatabase } from '@/database/connection';
 import type { VehicleDocument } from '@/types/document';
 import type { Expense } from '@/types/expense';
 import type { FuelEntry } from '@/types/fuel';
-import type { ServiceRecord, MaintenanceComponent } from '@/types/service';
+import type { ServiceRecord, MaintenanceComponent, MaintenanceProfile } from '@/types/service';
+import type { Trip } from '@/types/trip';
 import type { Vehicle } from '@/types/vehicle';
 import { nowISO } from '@/utils/date';
 import Constants from 'expo-constants';
@@ -88,6 +89,8 @@ export function createBackup(): BackupResult {
     let expenses: Expense[] = [];
     let documents: VehicleDocument[] = [];
     let maintenanceComponents: MaintenanceComponent[] = [];
+    let maintenanceProfiles: MaintenanceProfile[] = [];
+    let trips: Trip[] = [];
 
     db.withTransactionSync(() => {
       vehicles = db.getAllSync<Vehicle>('SELECT * FROM vehicles');
@@ -99,6 +102,16 @@ export function createBackup(): BackupResult {
         maintenanceComponents = db.getAllSync<MaintenanceComponent>('SELECT * FROM maintenance_components');
       } catch {
         maintenanceComponents = [];
+      }
+      try {
+        maintenanceProfiles = db.getAllSync<MaintenanceProfile>('SELECT * FROM maintenance_profiles');
+      } catch {
+        maintenanceProfiles = [];
+      }
+      try {
+        trips = db.getAllSync<Trip>('SELECT * FROM trips');
+      } catch {
+        trips = [];
       }
     });
 
@@ -114,6 +127,8 @@ export function createBackup(): BackupResult {
         expenses,
         documents,
         maintenance_components: maintenanceComponents,
+        maintenance_profiles: maintenanceProfiles,
+        trips,
       },
     };
 
@@ -123,7 +138,9 @@ export function createBackup(): BackupResult {
       serviceRecords.length +
       expenses.length +
       documents.length +
-      maintenanceComponents.length;
+      maintenanceComponents.length +
+      maintenanceProfiles.length +
+      trips.length;
 
     return { success: true, message: `Backup created with ${total} records.`, backup };
   } catch (e) {
@@ -594,6 +611,15 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
     db.withTransactionSync(() => {
       // Clear all tables in foreign-key dependency order
       try {
+        db.execSync('DELETE FROM trip_locations');
+      } catch {}
+      try {
+        db.execSync('DELETE FROM trips');
+      } catch {}
+      try {
+        db.execSync('DELETE FROM maintenance_profiles');
+      } catch {}
+      try {
         db.execSync('DELETE FROM maintenance_components');
       } catch {}
       db.execSync('DELETE FROM documents');
@@ -729,6 +755,65 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
         }
       }
 
+      // 3c. Maintenance profiles
+      if (backup.data.maintenance_profiles) {
+        for (const mp of backup.data.maintenance_profiles) {
+          try {
+            db.runSync(
+              `INSERT INTO maintenance_profiles (id, vehicle_id, component_name, interval_km, interval_months,
+               target_odometer, target_date, notes, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                mp.id,
+                mp.vehicle_id,
+                mp.component_name,
+                mp.interval_km ?? null,
+                mp.interval_months ?? null,
+                mp.target_odometer ?? null,
+                mp.target_date ?? null,
+                mp.notes ?? null,
+                mp.created_at || nowISO(),
+                mp.updated_at || nowISO(),
+                mp.deleted_at ?? null,
+              ]
+            );
+          } catch {}
+        }
+      }
+
+      // 3d. Trips
+      if (backup.data.trips) {
+        for (const t of backup.data.trips) {
+          try {
+            db.runSync(
+              `INSERT INTO trips (id, vehicle_id, trip_type, status, start_time, end_time,
+               start_odometer, end_odometer, distance_km, duration_seconds, purpose, notes,
+               sample_count, quality_warning, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                t.id,
+                t.vehicle_id,
+                t.trip_type,
+                t.status,
+                t.start_time,
+                t.end_time ?? null,
+                t.start_odometer ?? null,
+                t.end_odometer ?? null,
+                t.distance_km ?? 0,
+                t.duration_seconds ?? 0,
+                t.purpose ?? null,
+                t.notes ?? null,
+                t.sample_count ?? 0,
+                t.quality_warning ?? null,
+                t.created_at || nowISO(),
+                t.updated_at || nowISO(),
+                t.deleted_at ?? null,
+              ]
+            );
+          } catch {}
+        }
+      }
+
       // 4. Expenses
       for (const e of backup.data.expenses) {
         db.runSync(
@@ -851,6 +936,8 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
         fuel_entries: backup.data.fuel_entries.length,
         service_records: backup.data.service_records.length,
         maintenance_components: backup.data.maintenance_components?.length ?? 0,
+        maintenance_profiles: backup.data.maintenance_profiles?.length ?? 0,
+        trips: backup.data.trips?.length ?? 0,
         expenses: backup.data.expenses.length,
         documents: backup.data.documents.length,
       },

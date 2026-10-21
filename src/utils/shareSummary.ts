@@ -33,12 +33,19 @@ export interface ShareSummaryInput {
  * @param totalCost - Total ownership cost over the tracked distance
  */
 export function computeCostPerKm(
-  odometers: number[],
+  odometers: (number | null | undefined)[],
   totalCost: number
 ): { kmTracked: number; costPerKm: number | null } {
-  if (odometers.length < 2) return { kmTracked: 0, costPerKm: null };
-  const kmTracked = Math.max(Math.max(...odometers) - Math.min(...odometers), 0);
-  return { kmTracked, costPerKm: kmTracked > 0 ? totalCost / kmTracked : null };
+  const validOdometers = (odometers || []).filter(
+    (o): o is number => typeof o === 'number' && !isNaN(o) && isFinite(o) && o > 0
+  );
+  if (validOdometers.length < 2) return { kmTracked: 0, costPerKm: null };
+  const min = Math.min(...validOdometers);
+  const max = Math.max(...validOdometers);
+  const kmTracked = Math.max(max - min, 0);
+  if (kmTracked <= 0) return { kmTracked: 0, costPerKm: null };
+  const cost = typeof totalCost === 'number' && !isNaN(totalCost) && totalCost >= 0 ? totalCost : 0;
+  return { kmTracked, costPerKm: cost / kmTracked };
 }
 
 /**

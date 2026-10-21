@@ -258,4 +258,44 @@ describe('P0.3 — Reminder & Notification Lifecycle Reconciliation', () => {
     expect(mockScheduledList.filter((n) => n.content.data?.type === 'monthly_summary')).toHaveLength(1);
     expect(mockScheduledList.filter((n) => n.content.data?.documentId === 'orphan-id-123')).toHaveLength(0);
   });
+
+  it('cancels all scheduled notifications when master notification toggle is disabled', async () => {
+    const { usePreferencesStore } = require('@/stores/preferencesStore');
+    await usePreferencesStore.getState().setNotificationsEnabled(false);
+
+    mockScheduledList = [
+      {
+        identifier: 'existing_reminder_1',
+        content: { data: { type: 'monthly_summary' } },
+      },
+    ];
+
+    await reconcileNotifications(mockNotificationsModule);
+
+    expect(mockScheduledList).toHaveLength(0);
+
+    // Restore preference
+    await usePreferencesStore.getState().setNotificationsEnabled(true);
+  });
+
+  it('skips scheduling document reminders when notifyDocumentExpiry is disabled', async () => {
+    const { usePreferencesStore } = require('@/stores/preferencesStore');
+    await usePreferencesStore.getState().setNotifyDocumentExpiry(false);
+
+    documentRepo.createDocument({
+      vehicle_id: testVehicle.id,
+      type: DocumentType.INSURANCE,
+      expiry_date: getDateOffset(3),
+    });
+
+    await reconcileNotifications(mockNotificationsModule);
+
+    const expiryNotifs = mockScheduledList.filter(
+      (n) => n.content.data?.type === 'expiry_reminder'
+    );
+    expect(expiryNotifs).toHaveLength(0);
+
+    // Restore preference
+    await usePreferencesStore.getState().setNotifyDocumentExpiry(true);
+  });
 });

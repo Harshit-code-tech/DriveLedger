@@ -1,4 +1,4 @@
-﻿/**
+/**
  * OptionPicker<T>
  *
  * A generic bottom-sheet modal that presents a list of labelled options
@@ -67,7 +67,7 @@ export function OptionPicker<T extends string>({
                 onPress={() => { onSelect(opt.value); onClose(); }}
                 activeOpacity={0.7}
               >
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, paddingRight: Spacing.sm }}>
                   <Text
                     style={[
                       Typography.body,
@@ -80,7 +80,7 @@ export function OptionPicker<T extends string>({
                     {opt.label}
                   </Text>
                   {opt.symbol && (
-                    <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
+                    <Text style={[Typography.bodySmall, { color: colors.textSecondary, marginTop: 2 }]}>
                       Symbol: {opt.symbol}
                     </Text>
                   )}

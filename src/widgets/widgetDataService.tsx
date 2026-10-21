@@ -2,7 +2,10 @@
 import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { isRunningInExpoGo } from 'expo';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
+
+const isExpoGo = isRunningInExpoGo();
 import * as fuelRepo from '@/database/repositories/fuelRepo';
 import * as serviceRepo from '@/database/repositories/serviceRepo';
 import * as expenseRepo from '@/database/repositories/expenseRepo';
@@ -321,7 +324,12 @@ export async function syncWidgetState(): Promise<void> {
     // Persist for background task handler
     await AsyncStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify(data));
 
-    // Dynamic import prevents crashes in Expo Go / web / iOS
+    // react-native-android-widget is not linked in Expo Go (only available in custom/dev builds).
+    if (isExpoGo) {
+      return;
+    }
+
+    // Dynamic import prevents crashes in web / iOS
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { requestWidgetUpdate } = require('react-native-android-widget');
     await requestWidgetUpdate({

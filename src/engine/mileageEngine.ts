@@ -345,6 +345,66 @@ export function recalculateAllMileage(
 // ─── Statistics ─────────────────────────────────────────────────────
 
 /**
+ * Computes total distance and total fuel consumed across all valid completed full-tank intervals.
+ * Used for mathematically sound, weighted running average mileage (km / L or km / kg).
+ */
+export function computeCompletedIntervalTotals(
+  entries: FuelEntry[],
+  targetSystem?: 'primary' | 'secondary'
+): { distance: number; fuel: number } {
+  const sorted = [...entries].sort((a, b) => a.odometer - b.odometer);
+  let totalDistance = 0;
+  let totalFuel = 0;
+
+  for (let i = 0; i < sorted.length; i++) {
+    const current = sorted[i];
+    if (
+      current.is_full_tank !== 1 ||
+      current.calculated_mileage == null ||
+      current.calculated_mileage <= 0
+    ) {
+      continue;
+    }
+
+    const currentSys =
+      current.fuel_system ?? (current.fuel_unit === FuelUnit.KG ? 'primary' : 'secondary');
+    if (targetSystem && currentSys !== targetSystem) {
+      continue;
+    }
+
+    let prevFullIndex = -1;
+    let accumulatedFuel = 0;
+
+    for (let j = i - 1; j >= 0; j--) {
+      const prev = sorted[j];
+      const prevSys =
+        prev.fuel_system ?? (prev.fuel_unit === FuelUnit.KG ? 'primary' : 'secondary');
+      if (targetSystem && prevSys !== currentSys) {
+        continue;
+      }
+
+      accumulatedFuel += prev.fuel_amount;
+      if (prev.is_full_tank === 1) {
+        prevFullIndex = j;
+        break;
+      }
+    }
+
+    if (prevFullIndex !== -1) {
+      const prevFull = sorted[prevFullIndex];
+      const d = current.odometer - prevFull.odometer;
+      const f = accumulatedFuel + current.fuel_amount - prevFull.fuel_amount;
+      if (d > 0 && f > 0) {
+        totalDistance += d;
+        totalFuel += f;
+      }
+    }
+  }
+
+  return { distance: totalDistance, fuel: totalFuel };
+}
+
+/**
  * Computes all mileage statistics for a vehicle.
  *
  * @param entries - ALL non-deleted fuel entries for the vehicle (any order)
@@ -355,7 +415,7 @@ export function computeMileageStats(entries: FuelEntry[], fuelType?: FuelType): 
 
   // Filter to entries that have a calculated_mileage value
   const withMileage = entries.filter(
-    (e) => e.calculated_mileage !== null && e.mileage_unit !== null
+    (e) => e.calculated_mileage !== null
   );
 
   // Compute blended cost-per-km across all fuel fills
@@ -388,11 +448,17 @@ export function computeMileageStats(entries: FuelEntry[], fuelType?: FuelType): 
   );
 
   const lastEntry = sorted[0];
-  const unit = lastEntry.mileage_unit as MileageUnit;
+  const unit = (lastEntry.mileage_unit ??
+    FUEL_UNIT_TO_MILEAGE_UNIT[lastEntry.fuel_unit] ??
+    MileageUnit.KM_PER_LITRE) as MileageUnit;
 
-  // R6: Running average = arithmetic mean of all calculated_mileage values
+  // R6: Weighted running average across completed intervals if reconstructible, else arithmetic mean
   const allValues = withMileage.map((e) => e.calculated_mileage!);
-  const runningAvg = allValues.reduce((sum, v) => sum + v, 0) / allValues.length;
+  const completedTotals = computeCompletedIntervalTotals(entries);
+  const runningAvg =
+    completedTotals.distance > 0 && completedTotals.fuel > 0
+      ? completedTotals.distance / completedTotals.fuel
+      : allValues.reduce((sum, v) => sum + v, 0) / allValues.length;
 
   // R8: Monthly average = mean of values in the current calendar month
   const now = new Date();
@@ -422,8 +488,13 @@ export function computeMileageStats(entries: FuelEntry[], fuelType?: FuelType): 
     if (primaryEntries.length > 0) {
       const pVals = primaryEntries.map((e) => e.calculated_mileage!);
       const pUnit = primaryEntries[0].mileage_unit as MileageUnit;
+      const pTotals = computeCompletedIntervalTotals(entries, 'primary');
+      const pAvg =
+        pTotals.distance > 0 && pTotals.fuel > 0
+          ? pTotals.distance / pTotals.fuel
+          : pVals.reduce((a, b) => a + b, 0) / pVals.length;
       primarySystemStats = {
-        runningAverage: { value: pVals.reduce((a, b) => a + b, 0) / pVals.length, unit: pUnit },
+        runningAverage: { value: pAvg, unit: pUnit },
         best: { value: Math.max(...pVals), unit: pUnit },
         worst: { value: Math.min(...pVals), unit: pUnit },
       };
@@ -433,8 +504,13 @@ export function computeMileageStats(entries: FuelEntry[], fuelType?: FuelType): 
     if (secondaryEntries.length > 0) {
       const sVals = secondaryEntries.map((e) => e.calculated_mileage!);
       const sUnit = secondaryEntries[0].mileage_unit as MileageUnit;
+      const sTotals = computeCompletedIntervalTotals(entries, 'secondary');
+      const sAvg =
+        sTotals.distance > 0 && sTotals.fuel > 0
+          ? sTotals.distance / sTotals.fuel
+          : sVals.reduce((a, b) => a + b, 0) / sVals.length;
       secondarySystemStats = {
-        runningAverage: { value: sVals.reduce((a, b) => a + b, 0) / sVals.length, unit: sUnit },
+        runningAverage: { value: sAvg, unit: sUnit },
         best: { value: Math.max(...sVals), unit: sUnit },
         worst: { value: Math.min(...sVals), unit: sUnit },
       };

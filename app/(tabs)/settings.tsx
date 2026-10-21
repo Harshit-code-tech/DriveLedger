@@ -24,8 +24,9 @@ import {
 } from '@/engine/backupEngine';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { checkForAppUpdate, showDataSafetyGuide } from '@/services/updateChecker';
+import { sendTestNotification, refreshReminders } from '@/services/notificationService';
 import {
-  CURRENCY_OPTIONS, DISTANCE_OPTIONS, FUEL_VOLUME_OPTIONS, PRESSURE_OPTIONS,
+  CURRENCY_OPTIONS, DISTANCE_OPTIONS, FUEL_VOLUME_OPTIONS, PRESSURE_OPTIONS, DOC_LEAD_DAYS_OPTIONS,
   usePreferencesStore,
   type CurrencyCode, type DistanceUnit, type FuelVolumeUnit, type PressureUnit,
 } from '@/stores/preferencesStore';
@@ -42,6 +43,7 @@ import {
   ScrollView,
   Share,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -76,16 +78,28 @@ export default function SettingsScreen() {
   const fuelVolumeUnit = usePreferencesStore((s) => s.fuelVolumeUnit);
   const pressureUnit = usePreferencesStore((s) => s.pressureUnit);
   const defaultVehicleId = usePreferencesStore((s) => s.defaultVehicleId);
+  const notificationsEnabled = usePreferencesStore((s) => s.notificationsEnabled);
+  const notifyDocumentExpiry = usePreferencesStore((s) => s.notifyDocumentExpiry);
+  const notifyServiceDue = usePreferencesStore((s) => s.notifyServiceDue);
+  const notifyMaintenanceTargets = usePreferencesStore((s) => s.notifyMaintenanceTargets);
+  const docExpiryLeadDays = usePreferencesStore((s) => s.docExpiryLeadDays);
+
   const setCurrency = usePreferencesStore((s) => s.setCurrency);
   const setDistanceUnit = usePreferencesStore((s) => s.setDistanceUnit);
   const setFuelVolumeUnit = usePreferencesStore((s) => s.setFuelVolumeUnit);
   const setPressureUnit = usePreferencesStore((s) => s.setPressureUnit);
   const setDefaultVehicleId = usePreferencesStore((s) => s.setDefaultVehicleId);
+  const setNotificationsEnabled = usePreferencesStore((s) => s.setNotificationsEnabled);
+  const setNotifyDocumentExpiry = usePreferencesStore((s) => s.setNotifyDocumentExpiry);
+  const setNotifyServiceDue = usePreferencesStore((s) => s.setNotifyServiceDue);
+  const setNotifyMaintenanceTargets = usePreferencesStore((s) => s.setNotifyMaintenanceTargets);
+  const setDocExpiryLeadDays = usePreferencesStore((s) => s.setDocExpiryLeadDays);
 
   // Local UI state
   const [archivedVehicles, setArchivedVehicles] = useState<Vehicle[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [isSendingTestNotif, setIsSendingTestNotif] = useState(false);
 
   // Operation Progress Modal (Backup in progress, Restore in progress, Export in progress)
   const [operationModal, setOperationModal] = useState<{
@@ -117,6 +131,7 @@ export default function SettingsScreen() {
   const [pickerFuel, setPickerFuel] = useState(false);
   const [pickerPressure, setPickerPressure] = useState(false);
   const [pickerVehicle, setPickerVehicle] = useState(false);
+  const [pickerDocLeadDays, setPickerDocLeadDays] = useState(false);
 
   // Load vehicles + archived list on every focus
   useFocusEffect(
@@ -427,6 +442,156 @@ export default function SettingsScreen() {
             onPress={() => setPickerVehicle(true)}
           />
 
+          {/* ── Notifications & Reminders ── */}
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Notifications & Reminders</Text>
+
+          <View style={[styles.settingSwitchRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={{ flex: 1, marginRight: Spacing.md }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={{ fontSize: 18 }}>🔔</Text>
+                <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>Enable Reminders</Text>
+              </View>
+              <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, marginLeft: 26 }]}>
+                Local Android push notifications for upcoming dues
+              </Text>
+            </View>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={(val) => {
+                setNotificationsEnabled(val);
+                refreshReminders();
+              }}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          {notificationsEnabled && (
+            <>
+              <View style={[styles.settingSwitchRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={{ flex: 1, marginRight: Spacing.md }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={{ fontSize: 18 }}>📄</Text>
+                    <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>Document Expiry Alerts</Text>
+                  </View>
+                  <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, marginLeft: 26 }]}>
+                    PUC, Insurance & FASTag fine avoidance warnings
+                  </Text>
+                </View>
+                <Switch
+                  value={notifyDocumentExpiry}
+                  onValueChange={(val) => {
+                    setNotifyDocumentExpiry(val);
+                    refreshReminders();
+                  }}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.dropdownSettingRow,
+                  { backgroundColor: colors.surface, borderColor: colors.border },
+                ]}
+                onPress={() => setPickerDocLeadDays(true)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.dropdownSettingLeft}>
+                  <Text style={styles.dropdownSettingEmoji}>📅</Text>
+                  <View style={{ flex: 1, marginRight: Spacing.sm }}>
+                    <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>
+                      Document Notice Window
+                    </Text>
+                    <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
+                      Lead time before renewal warnings begin
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Enclosed Dropdown Trigger */}
+                <View
+                  style={[
+                    styles.enclosedDropdownTrigger,
+                    {
+                      backgroundColor: colors.primaryLight ?? (colors.primary + '18'),
+                      borderColor: colors.primary + '40',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.enclosedDropdownText, { color: colors.primary }]}>
+                    {docExpiryLeadDays} days
+                  </Text>
+                  <Text style={[styles.enclosedDropdownArrow, { color: colors.primary }]}>
+                    ▼
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <View style={[styles.settingSwitchRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={{ flex: 1, marginRight: Spacing.md }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={{ fontSize: 18 }}>🔧</Text>
+                    <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>Service Due Reminders</Text>
+                  </View>
+                  <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, marginLeft: 26 }]}>
+                    Odometer and calendar-based service intervals
+                  </Text>
+                </View>
+                <Switch
+                  value={notifyServiceDue}
+                  onValueChange={(val) => {
+                    setNotifyServiceDue(val);
+                    refreshReminders();
+                  }}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+
+              <View style={[styles.settingSwitchRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={{ flex: 1, marginRight: Spacing.md }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={{ fontSize: 18 }}>🎯</Text>
+                    <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>Maintenance Target Warnings</Text>
+                  </View>
+                  <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, marginLeft: 26 }]}>
+                    User-defined targets (Engine oil, brakes, tyres)
+                  </Text>
+                </View>
+                <Switch
+                  value={notifyMaintenanceTargets}
+                  onValueChange={(val) => {
+                    setNotifyMaintenanceTargets(val);
+                    refreshReminders();
+                  }}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.testNotifButton, { borderColor: colors.primary }]}
+                onPress={async () => {
+                  setIsSendingTestNotif(true);
+                  const sent = await sendTestNotification();
+                  setIsSendingTestNotif(false);
+                  if (sent) {
+                    Alert.alert('Notification Delivered 🔔', 'Test reminder scheduled and delivered to your notification tray.');
+                  } else {
+                    Alert.alert('Permission Needed', 'Please allow notifications in Android Settings for DriveLedger.');
+                  }
+                }}
+                activeOpacity={0.75}
+                disabled={isSendingTestNotif}
+              >
+                <Text style={[Typography.bodySmall, { color: colors.primary, fontWeight: '700' }]}>
+                  {isSendingTestNotif ? 'Checking...' : '🔔 Test & Reconcile Notifications'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+
           {/* ── Active Vehicles ── */}
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             Your Vehicles ({vehicles.length})
@@ -591,6 +756,30 @@ export default function SettingsScreen() {
           </TouchableOpacity>
 
 
+          {/* ── Help & Guidance ── */}
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Help & Guidance</Text>
+          <SettingsRow
+            emoji="✨"
+            title="Replay App Walkthrough"
+            subtitle="Learn about weighted mileage, targets & features"
+            colors={colors}
+            onPress={() => router.push({ pathname: '/onboarding', params: { mode: 'replay' } })}
+          />
+          <SettingsRow
+            emoji="🛡️"
+            title="Update & Data Safety Guide"
+            subtitle="How to update without losing your records"
+            colors={colors}
+            onPress={showDataSafetyGuide}
+          />
+          <SettingsRow
+            emoji="🔄"
+            title="Check for Updates"
+            subtitle="Check GitHub Releases for a new APK version"
+            colors={colors}
+            onPress={handleCheckUpdate}
+          />
+
           {/* ── About ── */}
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>About</Text>
           <SettingsRow
@@ -605,20 +794,6 @@ export default function SettingsScreen() {
                 [{ text: 'Love it! ❤️' }]
               )
             }
-          />
-          <SettingsRow
-            emoji="🔄"
-            title="Check for Updates"
-            subtitle="Check GitHub Releases for a new APK version"
-            colors={colors}
-            onPress={handleCheckUpdate}
-          />
-          <SettingsRow
-            emoji="🛡️"
-            title="Update & Data Safety Guide"
-            subtitle="How to update without losing your records"
-            colors={colors}
-            onPress={showDataSafetyGuide}
           />
 
           <View style={{ height: Spacing.section }} />
@@ -686,6 +861,19 @@ export default function SettingsScreen() {
           }
         }}
         onClose={() => setPickerVehicle(false)}
+        colors={colors}
+      />
+
+      <OptionPicker<string>
+        visible={pickerDocLeadDays}
+        title="Document Notice Window"
+        options={DOC_LEAD_DAYS_OPTIONS}
+        selected={String(docExpiryLeadDays)}
+        onSelect={async (daysStr) => {
+          await setDocExpiryLeadDays(parseInt(daysStr, 10));
+          refreshReminders();
+        }}
+        onClose={() => setPickerDocLeadDays(false)}
         colors={colors}
       />
 
@@ -1137,5 +1325,60 @@ const styles = StyleSheet.create({
   },
   eyeToggleText: {
     fontSize: 18,
+  },
+  settingSwitchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.lg,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+  },
+  testNotifButton: {
+    paddingVertical: Spacing.md,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.md,
+  },
+  dropdownSettingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.lg,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+  },
+  dropdownSettingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  dropdownSettingEmoji: {
+    fontSize: 20,
+    marginRight: Spacing.md,
+    width: 26,
+    textAlign: 'center',
+  },
+  enclosedDropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: Sizing.radiusSm,
+    borderWidth: 1,
+  },
+  enclosedDropdownText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  enclosedDropdownArrow: {
+    fontSize: 10,
+    fontWeight: '800',
   },
 });

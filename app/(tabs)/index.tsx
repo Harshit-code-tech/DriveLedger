@@ -34,6 +34,7 @@ import { estimateFuelLevel, getCurrentMonthTotalSpend, type FuelLevelResult } fr
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -41,6 +42,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SmartInsightsCard } from '@/components/SmartInsightsCard';
+import { ActiveTripModal } from '@/components/ActiveTripModal';
+import { TripReviewModal } from '@/components/TripReviewModal';
+import { ManualTripModal } from '@/components/ManualTripModal';
+import { MaintenanceProfilesModal } from '@/components/MaintenanceProfilesModal';
+import { TripHistoryModal } from '@/components/TripHistoryModal';
+import { useTripStore } from '@/stores/tripStore';
+import { useMaintenanceProfileStore } from '@/stores/maintenanceProfileStore';
 
 interface FuelBarSectionProps {
   title: string;
@@ -162,9 +171,31 @@ export default function HomeScreen() {
   const loadDocuments = useDocumentStore((s) => s.loadDocuments);
 
   const [showChecklistModal, setShowChecklistModal] = useState(false);
+  const [showProfilesModal, setShowProfilesModal] = useState(false);
+  const [showTripHistoryModal, setShowTripHistoryModal] = useState(false);
+  const [showActiveTripModal, setShowActiveTripModal] = useState(false);
+  const [showTripReviewModal, setShowTripReviewModal] = useState(false);
+  const [showManualTripModal, setShowManualTripModal] = useState(false);
+
   const checkedItemsByVehicle = useChecklistStore((s) => s.checkedItemsByVehicle);
   const checkedChecklistItems = (selectedVehicle && checkedItemsByVehicle[selectedVehicle.id]) || EMPTY_CHECKED_LIST;
   const loadChecklist = useChecklistStore((s) => s.loadChecklist);
+
+  // ── P2 Trip & Profile Stores ──
+  const trips = useTripStore((s) => s.trips);
+  const activeTrip = useTripStore((s) => s.activeTrip);
+  const recordingState = useTripStore((s) => s.recordingState);
+  const liveMetrics = useTripStore((s) => s.liveMetrics);
+  const loadTrips = useTripStore((s) => s.loadTrips);
+  const startGpsTrip = useTripStore((s) => s.startGpsTrip);
+  const recoverInterruptedTrips = useTripStore((s) => s.recoverInterruptedTrips);
+
+  const loadProfiles = useMaintenanceProfileStore((s) => s.loadProfiles);
+
+  // Recover any interrupted trips from previous app crashes on mount
+  useEffect(() => {
+    recoverInterruptedTrips();
+  }, []);
 
   // ── Data loading ─────────────────────────────────────────────────────
   // useFocusEffect fires on initial mount AND every time this tab gains
@@ -178,6 +209,8 @@ export default function HomeScreen() {
       loadRecords(selectedVehicle.id);
       loadExpenses(selectedVehicle.id);
       loadDocuments(selectedVehicle.id);
+      loadTrips(selectedVehicle.id);
+      loadProfiles(selectedVehicle.id, selectedVehicle.current_odometer);
       // Note: loadChecklist is intentionally NOT here — AsyncStorage reads
       // are slow (~2-3s) and checklist data only needs to load when the
       // vehicle changes, not on every tab focus event.
@@ -348,7 +381,7 @@ export default function HomeScreen() {
         }
       >
         {/* ── Vehicle Context Header ── */}
-        <VehicleContextHeader />
+        <VehicleContextHeader hideIfSingle />
 
         {/* ── Vehicle Header ── */}
         <View style={styles.vehicleHeader}>
@@ -489,70 +522,85 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
 
-        {/* ── Quick Stats Row (top) ── */}
-        <View style={styles.statsRow}>
-          <View style={[styles.statCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Odometer</Text>
-            <Text style={[Typography.statMedium, { color: colors.text }]}>
-              {selectedVehicle.current_odometer
-                ? formatOdometer(selectedVehicle.current_odometer)
-                : '—'}
-            </Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-              {isEV ? 'Last Charge' : 'Last Fill'}
-            </Text>
-            <Text style={[Typography.statMedium, { color: colors.text }]}>
-              {lastEntry ? formatDisplayDateLong(lastEntry.date) : '—'}
-            </Text>
-          </View>
-        </View>
-
-        {/* ── Quick Stats Row (bottom) ── */}
-        <View style={styles.statsRow}>
-          <View style={[styles.statCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Last Service</Text>
-            <Text style={[Typography.statMedium, { color: colors.text }]} numberOfLines={1}>
-              {lastService ? formatDisplayDateLong(lastService.date) : '—'}
-            </Text>
-            {lastService && (
-              <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2 }]} numberOfLines={1}>
-                {lastService.service_type}
-              </Text>
-            )}
-          </View>
-          <View style={[styles.statCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>This Month</Text>
-            <Text style={[Typography.statMedium, { color: monthlyTotal > 0 ? colors.accent : colors.text }]}>
-              {monthlyTotal > 0 ? formatCurrency(monthlyTotal) : '—'}
-            </Text>
-          </View>
-        </View>
-
-        {/* ── Dual-Dimension Service Status (Mileage vs. Time) ── */}
-        {(serviceDueStatus.urgency !== 'ok' || serviceDueStatus.kmRemaining !== null || serviceDueStatus.daysRemaining !== null) && (() => {
-          const theme = getServiceStatusTheme(serviceDueStatus);
-          return (
-            <View style={[styles.serviceAlert, { backgroundColor: theme.bg, borderColor: theme.border }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <Text style={[Typography.body, { color: theme.text, fontWeight: '700', flex: 1 }]}>
-                  {serviceDueStatus.headline}
-                </Text>
-                {serviceDueStatus.urgency !== 'ok' && (
-                  <View style={{ backgroundColor: theme.text, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 6 }}>
-                    <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700', textTransform: 'uppercase' }}>
-                      {serviceDueStatus.urgency === 'overdue' ? 'Action Required' : 'Upcoming'}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              <Text style={[Typography.caption, { color: theme.text, opacity: 0.95, lineHeight: 17 }]}>
-                {serviceDueStatus.subtext}
+        {/* ── Vehicle Vitals (Odometer, Last Fill, Last Service, Spend) ── */}
+        <View style={[styles.vitalsCard, { backgroundColor: colors.surface, borderColor: colors.borderLight, ...Sizing.cardShadow }]}>
+          <View style={styles.vitalsRow}>
+            <View style={styles.vitalItem}>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Odometer</Text>
+              <Text style={[Typography.statMedium, { color: colors.text, marginTop: 2 }]}>
+                {selectedVehicle.current_odometer
+                  ? formatOdometer(selectedVehicle.current_odometer)
+                  : '—'}
               </Text>
             </View>
-          );
-        })()}
+            <View style={[styles.vitalDivider, { backgroundColor: colors.borderLight }]} />
+            <View style={styles.vitalItem}>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                {isEV ? 'Last Charge' : 'Last Fill'}
+              </Text>
+              <Text style={[Typography.statMedium, { color: colors.text, marginTop: 2 }]} numberOfLines={1}>
+                {lastEntry ? formatDisplayDateLong(lastEntry.date) : '—'}
+              </Text>
+            </View>
+          </View>
+          <View style={[styles.vitalHorizontalDivider, { backgroundColor: colors.borderLight }]} />
+          <View style={styles.vitalsRow}>
+            <View style={styles.vitalItem}>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Last Service</Text>
+              <Text style={[Typography.statMedium, { color: colors.text, marginTop: 2 }]} numberOfLines={1}>
+                {lastService ? formatDisplayDateLong(lastService.date) : '—'}
+              </Text>
+              {lastService && (
+                <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 1 }]} numberOfLines={1}>
+                  {lastService.service_type}
+                </Text>
+              )}
+            </View>
+            <View style={[styles.vitalDivider, { backgroundColor: colors.borderLight }]} />
+            <View style={styles.vitalItem}>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Spend (This Month)</Text>
+              <Text style={[Typography.statMedium, { color: monthlyTotal > 0 ? colors.accent : colors.text, marginTop: 2 }]}>
+                {monthlyTotal > 0 ? formatCurrency(monthlyTotal) : '—'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* ── Dual-Dimension Service Status: Only shown when Overdue ── */}
+        {serviceDueStatus.urgency === 'overdue' && (
+          <View style={[styles.serviceAlertCard, { backgroundColor: colors.dangerLight ?? '#FEE2E2', borderColor: colors.danger }]}>
+            {/* Top Badge Strip: Action Required + Vehicle Context */}
+            <View style={styles.serviceAlertTopRow}>
+              <View style={[styles.serviceAlertPill, { backgroundColor: colors.danger }]}>
+                <Text style={styles.serviceAlertPillText}>⚠️ ACTION REQUIRED</Text>
+              </View>
+              <Text style={[Typography.caption, { color: colors.danger, fontWeight: '700' }]} numberOfLines={1}>
+                {selectedVehicle.nickname} · Regular Service
+              </Text>
+            </View>
+
+            {/* Clear Headline */}
+            <Text style={[Typography.body, { color: colors.danger, fontWeight: '800', marginTop: Spacing.xs }]}>
+              {serviceDueStatus.headline.replace(/^[^\w]+/, '')}
+            </Text>
+
+            {/* Clear Subtext explaining odometer/time breach */}
+            <Text style={[Typography.bodySmall, { color: colors.text, marginTop: 4, lineHeight: 19 }]}>
+              {serviceDueStatus.subtext}
+            </Text>
+
+            {/* Explicit Action Button */}
+            <TouchableOpacity
+              style={[styles.serviceAlertActionBtn, { backgroundColor: colors.danger }]}
+              onPress={() => router.push({ pathname: '/add-service', params: { vehicleId: selectedVehicle.id } })}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.serviceAlertActionBtnText}>
+                Log Service Record →
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* ── Tyre Pressure Recommendation ── */}
         {(selectedVehicle.front_tyre_pressure != null || selectedVehicle.rear_tyre_pressure != null) && (
@@ -580,6 +628,84 @@ export default function HomeScreen() {
             </View>
           </View>
         )}
+
+        {/* ── Active GPS Trip Banner (when trip is recording/paused) ── */}
+        {activeTrip && (
+          <TouchableOpacity
+            style={[
+              styles.activeTripBanner,
+              {
+                backgroundColor: colors.primaryLight,
+                borderColor: colors.primary,
+              },
+            ]}
+            onPress={() => setShowActiveTripModal(true)}
+            activeOpacity={0.85}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+              <Text style={{ fontSize: 24 }}>📍</Text>
+              <View>
+                <Text style={[Typography.body, { color: colors.primary, fontWeight: '700' }]}>
+                  {recordingState === 'paused' ? 'GPS Trip Paused' : 'GPS Trip Recording'}
+                </Text>
+                <Text style={[Typography.caption, { color: colors.primaryDark }]}>
+                  {liveMetrics.distanceKm.toFixed(2)} km · Tap to open driving HUD
+                </Text>
+              </View>
+            </View>
+            <Text style={[Typography.button, { color: colors.primary, fontSize: 14 }]}>
+              Open HUD →
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {/* ── Quick Tools Grid: Spacious, Vertical Hierarchy ── */}
+        <View style={styles.quickToolsGrid}>
+          <TouchableOpacity
+            style={[styles.toolGridCard, { backgroundColor: colors.surface, borderColor: colors.borderLight, ...Sizing.cardShadow }]}
+            onPress={() => setShowTripHistoryModal(true)}
+            activeOpacity={0.75}
+          >
+            <View style={styles.toolCardTop}>
+              <View style={[styles.toolIconWrap, { backgroundColor: colors.primaryLight ?? (colors.primary + '18') }]}>
+                <Text style={{ fontSize: 20 }}>🗺️</Text>
+              </View>
+              <Text style={[styles.toolCardArrow, { color: colors.primary }]}>→</Text>
+            </View>
+            <Text style={[Typography.body, { color: colors.text, fontWeight: '700', marginTop: Spacing.sm }]}>
+              Trips & GPS
+            </Text>
+            <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, lineHeight: 16 }]}>
+              {trips.length > 0 ? `${trips.length} ${trips.length === 1 ? 'trip' : 'trips'} recorded` : 'Log & track driving'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.toolGridCard, { backgroundColor: colors.surface, borderColor: colors.borderLight, ...Sizing.cardShadow }]}
+            onPress={() => setShowProfilesModal(true)}
+            activeOpacity={0.75}
+          >
+            <View style={styles.toolCardTop}>
+              <View style={[styles.toolIconWrap, { backgroundColor: colors.accentLight ?? (colors.accent + '18') }]}>
+                <Text style={{ fontSize: 20 }}>🎯</Text>
+              </View>
+              <Text style={[styles.toolCardArrow, { color: colors.accent }]}>→</Text>
+            </View>
+            <Text style={[Typography.body, { color: colors.text, fontWeight: '700', marginTop: Spacing.sm }]}>
+              Targets
+            </Text>
+            <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, lineHeight: 16 }]}>
+              Custom intervals
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Smart Maintenance & Mileage Insights (Part A) ── */}
+        <SmartInsightsCard
+          vehicle={selectedVehicle}
+          onOpenProfiles={() => setShowProfilesModal(true)}
+          onOpenTrips={() => setShowTripHistoryModal(true)}
+        />
 
         {/* ── Highway Road Trip Readiness Checklist (Feature 4.3) ── */}
         <TouchableOpacity
@@ -726,6 +852,79 @@ export default function HomeScreen() {
           documents={documents}
         />
       )}
+
+      {/* ── Maintenance Profiles & Targets Modal (Part B) ── */}
+      {showProfilesModal && (
+        <MaintenanceProfilesModal
+          visible={showProfilesModal}
+          vehicle={selectedVehicle}
+          onClose={() => setShowProfilesModal(false)}
+        />
+      )}
+
+      {/* ── Trip History Modal (Part C & D) ── */}
+      {showTripHistoryModal && (
+        <TripHistoryModal
+          visible={showTripHistoryModal}
+          vehicle={selectedVehicle}
+          onStartGpsTrip={async () => {
+            setShowTripHistoryModal(false);
+            const res = await startGpsTrip(selectedVehicle.id, selectedVehicle.current_odometer ?? undefined);
+            if (res.success) {
+              setShowActiveTripModal(true);
+            } else {
+              Alert.alert('GPS Recording', res.error || 'Failed to start GPS tracking.');
+            }
+          }}
+          onLogManualTrip={() => {
+            setShowTripHistoryModal(false);
+            setShowManualTripModal(true);
+          }}
+          onClose={() => setShowTripHistoryModal(false)}
+        />
+      )}
+
+      {/* ── Active GPS Trip HUD (Part C) ── */}
+      {showActiveTripModal && (
+        <ActiveTripModal
+          visible={showActiveTripModal}
+          vehicle={selectedVehicle}
+          onFinish={() => {
+            setShowActiveTripModal(false);
+            setShowTripReviewModal(true);
+          }}
+          onClose={() => setShowActiveTripModal(false)}
+        />
+      )}
+
+      {/* ── Trip Review & Save Modal (Part C6) ── */}
+      {showTripReviewModal && (
+        <TripReviewModal
+          visible={showTripReviewModal}
+          vehicle={selectedVehicle}
+          onSaved={() => {
+            setShowTripReviewModal(false);
+            loadTrips(selectedVehicle.id);
+          }}
+          onCancel={() => {
+            setShowTripReviewModal(false);
+            setShowActiveTripModal(true);
+          }}
+        />
+      )}
+
+      {/* ── Manual Trip Modal (Part D1) ── */}
+      {showManualTripModal && (
+        <ManualTripModal
+          visible={showManualTripModal}
+          vehicle={selectedVehicle}
+          onSaved={() => {
+            setShowManualTripModal(false);
+            loadTrips(selectedVehicle.id);
+          }}
+          onClose={() => setShowManualTripModal(false)}
+        />
+      )}
     </View>
   );
 }
@@ -756,7 +955,32 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  // ── Stats Row ──
+  // ── Stats / Vitals Card ──
+  vitalsCard: {
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  vitalsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.xs,
+  },
+  vitalItem: {
+    flex: 1,
+    paddingHorizontal: Spacing.sm,
+  },
+  vitalDivider: {
+    width: 1,
+    height: '70%',
+    marginHorizontal: Spacing.xs,
+  },
+  vitalHorizontalDivider: {
+    height: StyleSheet.hairlineWidth,
+    width: '100%',
+    marginVertical: Spacing.sm,
+  },
   statsRow: {
     flexDirection: 'row',
     gap: Spacing.md,
@@ -801,12 +1025,42 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: Spacing.xs,
   },
-  // ── Service Alert ──
-  serviceAlert: {
+  // ── Service Overdue Alert Card ──
+  serviceAlertCard: {
     borderRadius: Sizing.radiusMd,
-    borderWidth: 1,
+    borderWidth: 1.5,
     padding: Spacing.lg,
     marginBottom: Spacing.lg,
+  },
+  serviceAlertTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  serviceAlertPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  serviceAlertPillText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  serviceAlertActionBtn: {
+    marginTop: Spacing.md,
+    paddingVertical: 10,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Sizing.radiusMd,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  serviceAlertActionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
   // ── Section ──
   section: {
@@ -911,5 +1165,44 @@ const styles = StyleSheet.create({
   miniProgressBar: {
     height: '100%',
     borderRadius: 2.5,
+  },
+  activeTripBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.md,
+    borderRadius: Sizing.radiusLg,
+    borderWidth: 1.5,
+    marginBottom: Spacing.md,
+    ...Sizing.cardShadow,
+  },
+  quickToolsGrid: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  toolGridCard: {
+    flex: 1,
+    borderRadius: Sizing.radiusLg,
+    borderWidth: 1,
+    padding: Spacing.md,
+    minHeight: 104,
+    justifyContent: 'space-between',
+  },
+  toolCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  toolIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toolCardArrow: {
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

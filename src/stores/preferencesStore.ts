@@ -31,6 +31,12 @@ export interface Preferences {
   fuelVolumeUnit: FuelVolumeUnit;
   pressureUnit: PressureUnit;
   defaultVehicleId: string | null;
+  hasCompletedOnboarding: boolean;
+  notificationsEnabled: boolean;
+  notifyDocumentExpiry: boolean;
+  notifyServiceDue: boolean;
+  notifyMaintenanceTargets: boolean;
+  docExpiryLeadDays: number;
 }
 
 // --- Options for UI pickers ---
@@ -60,14 +66,27 @@ export const PRESSURE_OPTIONS: { value: PressureUnit; label: string }[] = [
   { value: 'kPa', label: 'kPa'        },
 ];
 
+export const DOC_LEAD_DAYS_OPTIONS: { value: string; label: string }[] = [
+  { value: '7', label: '7 days before expiry' },
+  { value: '15', label: '15 days before expiry' },
+  { value: '30', label: '30 days before expiry (Recommended)' },
+  { value: '45', label: '45 days before expiry' },
+];
+
 // --- Storage keys ---
 
 const KEYS = {
-  currency:         'pref_currency',
-  distanceUnit:     'pref_distance_unit',
-  fuelVolumeUnit:   'pref_fuel_volume_unit',
-  pressureUnit:     'pref_pressure_unit',
-  defaultVehicleId: 'pref_default_vehicle_id',
+  currency:                 'pref_currency',
+  distanceUnit:             'pref_distance_unit',
+  fuelVolumeUnit:           'pref_fuel_volume_unit',
+  pressureUnit:             'pref_pressure_unit',
+  defaultVehicleId:         'pref_default_vehicle_id',
+  hasCompletedOnboarding:   'pref_has_completed_onboarding',
+  notificationsEnabled:     'pref_notifications_enabled',
+  notifyDocumentExpiry:     'pref_notify_doc_expiry',
+  notifyServiceDue:         'pref_notify_service_due',
+  notifyMaintenanceTargets: 'pref_notify_maint_targets',
+  docExpiryLeadDays:        'pref_doc_expiry_lead_days',
 } as const;
 
 const DEFAULTS: Preferences = {
@@ -76,18 +95,30 @@ const DEFAULTS: Preferences = {
   fuelVolumeUnit: 'litres',
   pressureUnit: 'PSI',
   defaultVehicleId: null,
+  hasCompletedOnboarding: false,
+  notificationsEnabled: true,
+  notifyDocumentExpiry: true,
+  notifyServiceDue: true,
+  notifyMaintenanceTargets: true,
+  docExpiryLeadDays: 30,
 };
 
 // --- Store ---
 
 interface PreferencesState extends Preferences {
   isLoaded: boolean;
-  loadPreferences:    () => Promise<void>;
-  setCurrency:        (v: CurrencyCode)   => Promise<void>;
-  setDistanceUnit:    (v: DistanceUnit)   => Promise<void>;
-  setFuelVolumeUnit:  (v: FuelVolumeUnit) => Promise<void>;
-  setPressureUnit:    (v: PressureUnit)   => Promise<void>;
-  setDefaultVehicleId:(v: string | null)  => Promise<void>;
+  loadPreferences:            () => Promise<void>;
+  setCurrency:                (v: CurrencyCode)   => Promise<void>;
+  setDistanceUnit:            (v: DistanceUnit)   => Promise<void>;
+  setFuelVolumeUnit:          (v: FuelVolumeUnit) => Promise<void>;
+  setPressureUnit:            (v: PressureUnit)   => Promise<void>;
+  setDefaultVehicleId:        (v: string | null)  => Promise<void>;
+  setHasCompletedOnboarding:  (v: boolean)        => Promise<void>;
+  setNotificationsEnabled:    (v: boolean)        => Promise<void>;
+  setNotifyDocumentExpiry:    (v: boolean)        => Promise<void>;
+  setNotifyServiceDue:        (v: boolean)        => Promise<void>;
+  setNotifyMaintenanceTargets:(v: boolean)        => Promise<void>;
+  setDocExpiryLeadDays:       (v: number)         => Promise<void>;
 }
 
 export const usePreferencesStore = create<PreferencesState>((set) => ({
@@ -97,16 +128,43 @@ export const usePreferencesStore = create<PreferencesState>((set) => ({
   loadPreferences: async () => {
     try {
       const pairs = await AsyncStorage.multiGet([
-        KEYS.currency, KEYS.distanceUnit, KEYS.fuelVolumeUnit,
-        KEYS.pressureUnit, KEYS.defaultVehicleId,
+        KEYS.currency,
+        KEYS.distanceUnit,
+        KEYS.fuelVolumeUnit,
+        KEYS.pressureUnit,
+        KEYS.defaultVehicleId,
+        KEYS.hasCompletedOnboarding,
+        KEYS.notificationsEnabled,
+        KEYS.notifyDocumentExpiry,
+        KEYS.notifyServiceDue,
+        KEYS.notifyMaintenanceTargets,
+        KEYS.docExpiryLeadDays,
       ]);
-      const [currency, distanceUnit, fuelVolumeUnit, pressureUnit, defaultVehicleId] = pairs;
+      const [
+        currency,
+        distanceUnit,
+        fuelVolumeUnit,
+        pressureUnit,
+        defaultVehicleId,
+        onboarding,
+        notifEnabled,
+        notifDoc,
+        notifService,
+        notifMaint,
+        docLeadDays,
+      ] = pairs;
       set({
-        currency:         (currency[1]        as CurrencyCode)   ?? DEFAULTS.currency,
-        distanceUnit:     (distanceUnit[1]     as DistanceUnit)   ?? DEFAULTS.distanceUnit,
-        fuelVolumeUnit:   (fuelVolumeUnit[1]   as FuelVolumeUnit) ?? DEFAULTS.fuelVolumeUnit,
-        pressureUnit:     (pressureUnit[1]     as PressureUnit)   ?? DEFAULTS.pressureUnit,
-        defaultVehicleId: defaultVehicleId[1] ?? null,
+        currency:                 (currency[1]        as CurrencyCode)   ?? DEFAULTS.currency,
+        distanceUnit:             (distanceUnit[1]     as DistanceUnit)   ?? DEFAULTS.distanceUnit,
+        fuelVolumeUnit:           (fuelVolumeUnit[1]   as FuelVolumeUnit) ?? DEFAULTS.fuelVolumeUnit,
+        pressureUnit:             (pressureUnit[1]     as PressureUnit)   ?? DEFAULTS.pressureUnit,
+        defaultVehicleId:         defaultVehicleId[1] ?? null,
+        hasCompletedOnboarding:   onboarding[1] === 'true',
+        notificationsEnabled:     notifEnabled[1] !== 'false',
+        notifyDocumentExpiry:     notifDoc[1] !== 'false',
+        notifyServiceDue:         notifService[1] !== 'false',
+        notifyMaintenanceTargets: notifMaint[1] !== 'false',
+        docExpiryLeadDays:        docLeadDays[1] ? parseInt(docLeadDays[1], 10) : DEFAULTS.docExpiryLeadDays,
         isLoaded: true,
       });
     } catch {
@@ -122,6 +180,30 @@ export const usePreferencesStore = create<PreferencesState>((set) => ({
     if (v === null) { await AsyncStorage.removeItem(KEYS.defaultVehicleId); }
     else            { await AsyncStorage.setItem(KEYS.defaultVehicleId, v); }
     set({ defaultVehicleId: v });
+  },
+  setHasCompletedOnboarding: async (v) => {
+    await AsyncStorage.setItem(KEYS.hasCompletedOnboarding, String(v));
+    set({ hasCompletedOnboarding: v });
+  },
+  setNotificationsEnabled: async (v) => {
+    await AsyncStorage.setItem(KEYS.notificationsEnabled, String(v));
+    set({ notificationsEnabled: v });
+  },
+  setNotifyDocumentExpiry: async (v) => {
+    await AsyncStorage.setItem(KEYS.notifyDocumentExpiry, String(v));
+    set({ notifyDocumentExpiry: v });
+  },
+  setNotifyServiceDue: async (v) => {
+    await AsyncStorage.setItem(KEYS.notifyServiceDue, String(v));
+    set({ notifyServiceDue: v });
+  },
+  setNotifyMaintenanceTargets: async (v) => {
+    await AsyncStorage.setItem(KEYS.notifyMaintenanceTargets, String(v));
+    set({ notifyMaintenanceTargets: v });
+  },
+  setDocExpiryLeadDays: async (v) => {
+    await AsyncStorage.setItem(KEYS.docExpiryLeadDays, String(v));
+    set({ docExpiryLeadDays: v });
   },
 }));
 

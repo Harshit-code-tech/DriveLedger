@@ -37,6 +37,12 @@
       "expo-sharing",
       "expo-notifications",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow DriveLedger to record your vehicle trip distance offline."
+        }
+      ],
+      [
         "expo-quick-actions",
         {
           "androidIcons": {

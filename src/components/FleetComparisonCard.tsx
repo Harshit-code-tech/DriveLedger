@@ -24,7 +24,7 @@ import type { VehicleSummary } from '@/hooks/useCrossVehicleStats';
 import type { Vehicle } from '@/types/vehicle';
 
 interface FleetComparisonCardProps {
-  data: VehicleSummary[];
+  data: VehicleSummary[] | null;
   vehicles: Vehicle[];
   colors: any;
 }
@@ -382,8 +382,8 @@ export function FleetComparisonCard({
                         {item.name}
                       </Text>
                       <Text style={[Typography.caption, { color: colors.textTertiary, fontSize: 11 }]}>
-                        {v?.make ? `${v.make} ${v.model || ''}` : v?.registration_number || 'Vehicle'}
-                        {v?.registration_number && v?.make ? ` • ${v.registration_number}` : ''}
+                        {v?.manufacturer ? `${v.manufacturer} ${v.model || ''}` : v?.registration_number || 'Vehicle'}
+                        {v?.registration_number && v?.manufacturer ? ` • ${v.registration_number}` : ''}
                       </Text>
                     </View>
                   </View>
@@ -514,7 +514,7 @@ export function FleetComparisonCard({
                           {item.name}
                         </Text>
                         <Text style={[Typography.caption, { color: colors.textTertiary, fontSize: 11 }]}>
-                          {v?.make ? `${v.make} ${v.model || ''}` : v?.registration_number || 'Vehicle'}
+                          {v?.manufacturer ? `${v.manufacturer} ${v.model || ''}` : v?.registration_number || 'Vehicle'}
                         </Text>
                       </View>
                     </View>

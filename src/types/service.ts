@@ -147,3 +147,45 @@ export interface CreateMaintenanceComponentInput {
 export type UpdateMaintenanceComponentInput = Partial<
   Omit<MaintenanceComponent, 'id' | 'service_record_id' | 'vehicle_id' | 'created_at' | 'updated_at' | 'deleted_at'>
 >;
+
+// ─── Maintenance Profile Types ───────────────────────────────────────
+export interface MaintenanceProfile {
+  id: string;
+  vehicle_id: string;
+  component_name: string;
+  interval_km: number | null;
+  interval_months: number | null;
+  target_odometer: number | null;
+  target_date: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface CreateMaintenanceProfileInput {
+  vehicle_id: string;
+  component_name: string;
+  interval_km?: number | null;
+  interval_months?: number | null;
+  target_odometer?: number | null;
+  target_date?: string | null;
+  notes?: string | null;
+}
+
+export type UpdateMaintenanceProfileInput = Partial<
+  Omit<MaintenanceProfile, 'id' | 'vehicle_id' | 'created_at' | 'updated_at' | 'deleted_at'>
+>;
+
+export interface ProfileDueStatus {
+  profile: MaintenanceProfile;
+  status: 'ok' | 'due_soon' | 'overdue' | 'none';
+  kmRemaining: number | null;
+  daysRemaining: number | null;
+  effectiveTargetKm: number | null;
+  effectiveTargetDate: string | null;
+  lastServiceDate: string | null;
+  lastServiceOdometer: number | null;
+  headline: string;
+  subtext: string;
+}

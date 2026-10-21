@@ -104,6 +104,30 @@ export function isValidBackupAttachment(a: unknown): boolean {
   return true;
 }
 
+export function isValidMaintenanceProfile(p: unknown): boolean {
+  if (!p || typeof p !== 'object') return false;
+  const r = p as Record<string, unknown>;
+  return (
+    typeof r.id === 'string' &&
+    typeof r.vehicle_id === 'string' &&
+    typeof r.component_name === 'string' &&
+    (r.component_name as string).trim().length > 0
+  );
+}
+
+export function isValidTrip(t: unknown): boolean {
+  if (!t || typeof t !== 'object') return false;
+  const r = t as Record<string, unknown>;
+  return (
+    typeof r.id === 'string' &&
+    typeof r.vehicle_id === 'string' &&
+    typeof r.trip_type === 'string' &&
+    ['gps', 'manual'].includes(r.trip_type as string) &&
+    typeof r.status === 'string' &&
+    typeof r.start_time === 'string'
+  );
+}
+
 // ─── Top-level schema validator ──────────────────────────────────────
 
 /**
@@ -158,6 +182,14 @@ export function validateSchema(obj: Record<string, unknown>): {
     ? (rawData.maintenance_components as unknown[]).filter(isValidMaintenanceComponent)
     : undefined;
 
+  const maintenanceProfiles = Array.isArray(rawData.maintenance_profiles)
+    ? (rawData.maintenance_profiles as unknown[]).filter(isValidMaintenanceProfile)
+    : undefined;
+
+  const trips = Array.isArray(rawData.trips)
+    ? (rawData.trips as unknown[]).filter(isValidTrip)
+    : undefined;
+
   const attachments = Array.isArray(rawData.attachments)
     ? (rawData.attachments as unknown[]).filter(isValidBackupAttachment)
     : undefined;
@@ -178,6 +210,8 @@ export function validateSchema(obj: Record<string, unknown>): {
       expenses,
       documents,
       maintenance_components: maintenanceComponents as any,
+      maintenance_profiles: maintenanceProfiles as any,
+      trips: trips as any,
       attachments: attachments as any,
       preferences,
       checklists,

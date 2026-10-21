@@ -10,7 +10,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, useWindowDimensions, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions, TouchableOpacity, ScrollView } from 'react-native';
 import { LineChart, CurveType } from 'react-native-gifted-charts';
 import { Typography, Spacing, Sizing } from '@/constants/theme';
 import { formatMileage } from '@/utils/format';
@@ -89,8 +89,8 @@ export function MileageTrendChart({
       dataPointColor: pointColor,
       textColor: colors.textTertiary,
       textFontSize: 9,
-      dataPointRadius: isSelected ? 6.5 : 4.5,
-      focusedDataPointRadius: 7.5,
+      dataPointRadius: isSelected ? 8 : 6,
+      focusedDataPointRadius: 9.5,
       onPress: () => setSelectedPoint(item),
     };
   });
@@ -219,9 +219,73 @@ export function MileageTrendChart({
             dashGap: 4,
             thickness: 1.6,
           }}
+          focusEnabled
+          showDataPointOnFocus
           isAnimated
           animationDuration={600}
         />
+      </View>
+
+      {/* ── Quick Point Selector (1-Tap Reliable Inspection) ── */}
+      <View style={styles.quickSelectorContainer}>
+        <Text style={[Typography.caption, { color: colors.textTertiary, marginBottom: Spacing.xs, fontSize: 11 }]}>
+          Tap any fill-up to inspect details:
+        </Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.quickPillsTrack}
+        >
+          {data.map((item, idx) => {
+            const isSelected = selectedPoint?.date === item.date && selectedPoint?.value === item.value;
+            const isAbove = item.value >= avg;
+            return (
+              <TouchableOpacity
+                key={`${item.date}-${idx}`}
+                style={[
+                  styles.quickPointPill,
+                  {
+                    backgroundColor: isSelected
+                      ? colors.primary
+                      : isAbove
+                      ? (colors.successLight ?? colors.success + '18')
+                      : (colors.warningLight ?? colors.warning + '18'),
+                    borderColor: isSelected
+                      ? colors.primary
+                      : isAbove
+                      ? colors.success + '60'
+                      : colors.warning + '60',
+                  },
+                ]}
+                onPress={() => setSelectedPoint(item)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.quickPointPillDate,
+                    { color: isSelected ? '#FFFFFF' : colors.text },
+                  ]}
+                >
+                  {item.displayDate}
+                </Text>
+                <Text
+                  style={[
+                    styles.quickPointPillVal,
+                    {
+                      color: isSelected
+                        ? '#FFFFFF'
+                        : isAbove
+                        ? colors.success
+                        : colors.warning,
+                    },
+                  ]}
+                >
+                  {item.value.toFixed(1)}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* ── Legend Row ── */}
@@ -357,5 +421,33 @@ const styles = StyleSheet.create({
     height: 0,
     borderWidth: 1,
     borderStyle: 'dashed',
+  },
+  quickSelectorContainer: {
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  quickPillsTrack: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  quickPointPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Sizing.radiusSm,
+    borderWidth: 1,
+    minHeight: 34,
+  },
+  quickPointPillDate: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  quickPointPillVal: {
+    fontSize: 11,
+    fontWeight: '800',
   },
 });

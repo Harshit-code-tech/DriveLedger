@@ -433,6 +433,7 @@ const styles = StyleSheet.create({
     borderRadius: Sizing.radiusMd,
     padding: Spacing.lg,
     width: '100%',
+    marginBottom: Spacing.lg,
   },
   header: {
     flexDirection: 'row',

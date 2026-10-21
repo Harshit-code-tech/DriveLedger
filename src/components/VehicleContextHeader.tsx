@@ -25,9 +25,14 @@ interface VehicleContextHeaderProps {
    * Shown only when there's exactly 1 vehicle (no chip row needed).
    */
   label?: string;
+  /**
+   * If true, hides the single-vehicle bar completely when there's only 1 vehicle
+   * (avoids duplicate title on screens with their own vehicle header).
+   */
+  hideIfSingle?: boolean;
 }
 
-export function VehicleContextHeader({ label = 'For' }: VehicleContextHeaderProps) {
+export function VehicleContextHeader({ label = 'For', hideIfSingle = false }: VehicleContextHeaderProps) {
   const colors = useThemeColors();
   const vehicles = useVehicleStore((s) => s.vehicles);
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
@@ -35,8 +40,9 @@ export function VehicleContextHeader({ label = 'For' }: VehicleContextHeaderProp
 
   if (!selectedVehicle) return null;
 
-  // Single vehicle — subtle inline label, no visual clutter
+  // Single vehicle — subtle inline label or hidden if requested
   if (vehicles.length <= 1) {
+    if (hideIfSingle) return null;
     return (
       <View style={[styles.singleContainer, { borderBottomColor: colors.border }]}>
         <Text style={[styles.singleLabel, { color: colors.textTertiary }]}>

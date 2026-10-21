@@ -163,6 +163,61 @@ const CREATE_DOCUMENTS_TABLE = `
   );
 `;
 
+const CREATE_MAINTENANCE_PROFILES_TABLE = `
+  CREATE TABLE IF NOT EXISTS maintenance_profiles (
+    id                   TEXT PRIMARY KEY NOT NULL,
+    vehicle_id           TEXT NOT NULL REFERENCES vehicles(id),
+    component_name       TEXT NOT NULL,
+    interval_km          REAL,
+    interval_months      REAL,
+    target_odometer      REAL,
+    target_date          TEXT,
+    notes                TEXT,
+    created_at           TEXT NOT NULL,
+    updated_at           TEXT NOT NULL,
+    deleted_at           TEXT
+  );
+`;
+
+const CREATE_TRIPS_TABLE = `
+  CREATE TABLE IF NOT EXISTS trips (
+    id                   TEXT PRIMARY KEY NOT NULL,
+    vehicle_id           TEXT NOT NULL REFERENCES vehicles(id),
+    trip_type            TEXT NOT NULL CHECK (trip_type IN ('gps', 'manual')),
+    status               TEXT NOT NULL CHECK (status IN ('recording', 'paused', 'completed', 'interrupted', 'discarded')),
+    start_time           TEXT NOT NULL,
+    end_time             TEXT,
+    start_odometer       REAL,
+    end_odometer         REAL,
+    distance_km          REAL NOT NULL DEFAULT 0,
+    duration_seconds     REAL NOT NULL DEFAULT 0,
+    purpose              TEXT,
+    notes                TEXT,
+    sample_count         INTEGER DEFAULT 0,
+    quality_warning      TEXT,
+    created_at           TEXT NOT NULL,
+    updated_at           TEXT NOT NULL,
+    deleted_at           TEXT
+  );
+`;
+
+const CREATE_TRIP_LOCATIONS_TABLE = `
+  CREATE TABLE IF NOT EXISTS trip_locations (
+    id                   TEXT PRIMARY KEY NOT NULL,
+    trip_id              TEXT NOT NULL REFERENCES trips(id),
+    latitude             REAL NOT NULL,
+    longitude            REAL NOT NULL,
+    accuracy             REAL,
+    altitude             REAL,
+    speed                REAL,
+    heading              REAL,
+    timestamp            INTEGER NOT NULL,
+    is_rejected          INTEGER NOT NULL DEFAULT 0,
+    rejection_reason     TEXT,
+    created_at           TEXT NOT NULL
+  );
+`;
+
 // ─── Indexes ─────────────────────────────────────────────────────────
 /**
  * WHY indexes?
@@ -195,6 +250,15 @@ const CREATE_INDEXES = `
 
   CREATE INDEX IF NOT EXISTS idx_maint_components_vehicle_name
     ON maintenance_components(vehicle_id, component_name);
+
+  CREATE INDEX IF NOT EXISTS idx_maint_profiles_vehicle
+    ON maintenance_profiles(vehicle_id);
+
+  CREATE INDEX IF NOT EXISTS idx_trips_vehicle_date
+    ON trips(vehicle_id, start_time);
+
+  CREATE INDEX IF NOT EXISTS idx_trip_locations_trip
+    ON trip_locations(trip_id, timestamp);
 `;
 
 // ─── Public API ──────────────────────────────────────────────────────
@@ -322,6 +386,9 @@ export function createTables(db: SQLite.SQLiteDatabase): void {
   db.execSync(CREATE_MAINTENANCE_COMPONENTS_TABLE);
   db.execSync(CREATE_EXPENSES_TABLE);
   db.execSync(CREATE_DOCUMENTS_TABLE);
+  db.execSync(CREATE_MAINTENANCE_PROFILES_TABLE);
+  db.execSync(CREATE_TRIPS_TABLE);
+  db.execSync(CREATE_TRIP_LOCATIONS_TABLE);
   db.execSync(CREATE_INDEXES);
 
   // ── Migrations ──────────────────────────────────────────────────

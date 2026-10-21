@@ -29,12 +29,14 @@ import { isRunningInExpoGo } from 'expo';
 import * as documentRepo from '@/database/repositories/documentRepo';
 import * as serviceRepo from '@/database/repositories/serviceRepo';
 import * as maintCompRepo from '@/database/repositories/maintenanceComponentRepo';
+import * as maintProfileRepo from '@/database/repositories/maintenanceProfileRepo';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import { getKmUntilService, getServiceDueStatus } from '@/stores/serviceStore';
 import { DOCUMENT_TYPE_LABELS } from '@/constants/documentTypes';
 import { daysUntil } from '@/utils/date';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as fuelRepo from '@/database/repositories/fuelRepo';
+import { getPreferences } from '@/stores/preferencesStore';
 import {
   DEFAULT_COOLDOWN_DAYS,
   FUEL_NUDGE_COOLDOWN_DAYS,
@@ -294,7 +296,8 @@ async function scheduleDocumentNotifications(
  */
 async function scheduleServiceNotifications(
   N: NotificationsModule,
-  vehicleId: string
+  vehicleId: string,
+  includeTargets: boolean = true
 ): Promise<void> {
   const vehicle = vehicleRepo.getVehicleById(vehicleId);
   const latest = serviceRepo.getLatestServiceRecord(vehicleId);
@@ -334,6 +337,25 @@ async function scheduleServiceNotifications(
           compDue.subtext,
           { vehicleId, componentName: compName, type: 'component_due' }
         );
+      }
+    }
+
+    if (includeTargets) {
+      // Check custom vehicle maintenance profiles
+      const profiles = maintProfileRepo.getMaintenanceProfilesByVehicle(vehicleId);
+      for (const profile of profiles) {
+        const historyList = compHistories[profile.component_name.trim()];
+        const lastHistory = historyList && historyList.length > 0 ? historyList[0] : null;
+        const profileDue = maintProfileRepo.computeProfileDueStatus(profile, vehicle, lastHistory);
+        if (profileDue.status === 'overdue' || profileDue.status === 'due_soon') {
+          await notifyNow(
+            N,
+            CHANNEL_SERVICE_DUE,
+            `🎯 ${profileDue.headline}`,
+            profileDue.subtext,
+            { vehicleId, profileId: profile.id, type: 'profile_due' }
+          );
+        }
       }
     }
   } catch (err) {
@@ -414,26 +436,34 @@ export async function reconcileNotifications(injectedN?: NotificationsModule | n
   }
 
   try {
+    const prefs = getPreferences();
+    if (!prefs.notificationsEnabled) {
+      await N.cancelAllScheduledNotificationsAsync();
+      return;
+    }
+
     const activeVehicles = vehicleRepo.getActiveVehicles();
 
     // 1. Determine desired scheduled notifications for documents
     const desiredReminders = new Map<string, DesiredDocReminder>();
 
-    for (const vehicle of activeVehicles) {
-      const docs = documentRepo.getCurrentDocumentsByVehicle(vehicle.id);
-      for (const doc of docs) {
-        if (!doc.expiry_date) continue;
-        const days = daysUntil(doc.expiry_date);
-        // Daily 9 AM renewal reminder for documents expiring in 1..7 days
-        if (days >= 1 && days <= 7) {
-          const label = DOCUMENT_TYPE_LABELS[doc.type as keyof typeof DOCUMENT_TYPE_LABELS] || doc.type;
-          desiredReminders.set(doc.id, {
-            documentId: doc.id,
-            vehicleId: vehicle.id,
-            daysRemaining: days,
-            title: `📋 ${label} Renewal Reminder`,
-            body: `Your ${label} for ${vehicle.nickname} expires in ${pluralDays(days)}. Don't forget to renew!`,
-          });
+    if (prefs.notifyDocumentExpiry) {
+      for (const vehicle of activeVehicles) {
+        const docs = documentRepo.getCurrentDocumentsByVehicle(vehicle.id);
+        for (const doc of docs) {
+          if (!doc.expiry_date) continue;
+          const days = daysUntil(doc.expiry_date);
+          // Daily 9 AM renewal reminder for documents expiring in 1..7 days
+          if (days >= 1 && days <= Math.min(prefs.docExpiryLeadDays, 7)) {
+            const label = DOCUMENT_TYPE_LABELS[doc.type as keyof typeof DOCUMENT_TYPE_LABELS] || doc.type;
+            desiredReminders.set(doc.id, {
+              documentId: doc.id,
+              vehicleId: vehicle.id,
+              daysRemaining: days,
+              title: `📋 ${label} Renewal Reminder`,
+              body: `Your ${label} for ${vehicle.nickname} expires in ${pluralDays(days)}. Don't forget to renew!`,
+            });
+          }
         }
       }
     }
@@ -523,12 +553,44 @@ export async function reconcileNotifications(injectedN?: NotificationsModule | n
 
     // 5. Fire any immediate notifications (cooldown-guarded) for documents, services, and fuel
     for (const vehicle of activeVehicles) {
-      await scheduleDocumentNotifications(N, vehicle.id);
-      await scheduleServiceNotifications(N, vehicle.id);
+      if (prefs.notifyDocumentExpiry) {
+        await scheduleDocumentNotifications(N, vehicle.id);
+      }
+      if (prefs.notifyServiceDue) {
+        await scheduleServiceNotifications(N, vehicle.id, prefs.notifyMaintenanceTargets);
+      }
       await scheduleFuelNudge(N, vehicle.id);
     }
   } catch (error) {
     console.warn('[DriveLedger] reconcileNotifications encountered an error:', error);
+  }
+}
+
+/**
+ * Fires a test notification to verify notification permissions, channels,
+ * and delivery on the user's device.
+ */
+export async function sendTestNotification(): Promise<boolean> {
+  const N = getNotifications();
+  if (!N) return false;
+
+  ensureHandlerConfigured();
+  const hasPermission = await requestNotificationPermission();
+  if (!hasPermission) return false;
+
+  try {
+    await N.scheduleNotificationAsync({
+      content: {
+        title: '🔔 DriveLedger Notifications Active',
+        body: 'Local vehicle reminders are configured and working properly.',
+        data: { type: 'test_notification' },
+      },
+      trigger: null, // deliver immediately
+    });
+    return true;
+  } catch (err) {
+    console.warn('[DriveLedger] Failed to send test notification:', err);
+    return false;
   }
 }
 
