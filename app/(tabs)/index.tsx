@@ -188,6 +188,9 @@ export default function HomeScreen() {
   const liveMetrics = useTripStore((s) => s.liveMetrics);
   const loadTrips = useTripStore((s) => s.loadTrips);
   const startGpsTrip = useTripStore((s) => s.startGpsTrip);
+  const pauseGpsTrip = useTripStore((s) => s.pauseGpsTrip);
+  const resumeGpsTrip = useTripStore((s) => s.resumeGpsTrip);
+  const cancelGpsTrip = useTripStore((s) => s.cancelGpsTrip);
   const recoverInterruptedTrips = useTripStore((s) => s.recoverInterruptedTrips);
 
   const loadProfiles = useMaintenanceProfileStore((s) => s.loadProfiles);
@@ -364,6 +367,49 @@ export default function HomeScreen() {
       return { bg: colors.warningLight, border: colors.warning, text: colors.warning };
     }
     return { bg: colors.successLight, border: colors.success, text: colors.success };
+  };
+
+  // ── GPS Trip & Live Driving HUD Handlers ──
+  const formatTripTime = (totalSeconds: number) => {
+    const hrs = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return hrs > 0 ? `${pad(hrs)}:${pad(mins)}:${pad(secs)}` : `${pad(mins)}:${pad(secs)}`;
+  };
+
+  const currentSpeedKmh = liveMetrics.currentSpeed !== null
+    ? Math.round(liveMetrics.currentSpeed * 3.6)
+    : 0;
+
+  const handleStartGpsTrip = async () => {
+    if (!selectedVehicle) return;
+    const res = await startGpsTrip(selectedVehicle.id, selectedVehicle.current_odometer ?? undefined);
+    if (res.success) {
+      setShowActiveTripModal(true);
+    } else {
+      Alert.alert(
+        'GPS Trip Recording',
+        res.error || 'Failed to start GPS tracking. Please ensure location permissions are granted.'
+      );
+    }
+  };
+
+  const handleDiscardGpsTrip = () => {
+    Alert.alert(
+      'Discard Trip?',
+      'Are you sure you want to stop and discard this recorded trip? All recorded location points will be discarded.',
+      [
+        { text: 'Keep Recording', style: 'cancel' },
+        {
+          text: 'Discard Trip',
+          style: 'destructive',
+          onPress: async () => {
+            await cancelGpsTrip();
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -629,57 +675,238 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── Active GPS Trip Banner (when trip is recording/paused) ── */}
-        {activeTrip && (
-          <TouchableOpacity
+        {/* ── LIVE DRIVING HUD CARD (When Trip is In-Progress or Paused) ── */}
+        {activeTrip ? (
+          <View
             style={[
-              styles.activeTripBanner,
+              styles.activeTripHudCard,
               {
-                backgroundColor: colors.primaryLight,
-                borderColor: colors.primary,
+                backgroundColor: colors.surface,
+                borderColor: recordingState === 'paused' ? colors.warning : colors.primary,
+                ...Sizing.cardShadow,
               },
             ]}
-            onPress={() => setShowActiveTripModal(true)}
-            activeOpacity={0.85}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-              <Text style={{ fontSize: 24 }}>📍</Text>
-              <View>
-                <Text style={[Typography.body, { color: colors.primary, fontWeight: '700' }]}>
-                  {recordingState === 'paused' ? 'GPS Trip Paused' : 'GPS Trip Recording'}
+            {/* Top Status Header */}
+            <View style={styles.hudHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View
+                  style={[
+                    styles.hudLivePulse,
+                    { backgroundColor: recordingState === 'paused' ? colors.warning : colors.danger },
+                  ]}
+                />
+                <Text style={[Typography.bodySmall, { color: colors.text, fontWeight: '800', letterSpacing: 0.5 }]}>
+                  {recordingState === 'paused' ? 'PAUSED DRIVING HUD' : 'LIVE DRIVING HUD'}
                 </Text>
-                <Text style={[Typography.caption, { color: colors.primaryDark }]}>
-                  {liveMetrics.distanceKm.toFixed(2)} km · Tap to open driving HUD
+              </View>
+
+              {/* GPS Signal Quality Badge */}
+              <View
+                style={[
+                  styles.hudGpsBadge,
+                  {
+                    backgroundColor:
+                      liveMetrics.gpsQuality === 'good'
+                        ? colors.successLight
+                        : liveMetrics.gpsQuality === 'fair'
+                        ? colors.warningLight
+                        : colors.dangerLight,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    Typography.caption,
+                    {
+                      color:
+                        liveMetrics.gpsQuality === 'good'
+                          ? colors.success
+                          : liveMetrics.gpsQuality === 'fair'
+                          ? colors.warning
+                          : colors.danger,
+                      fontWeight: '700',
+                    },
+                  ]}
+                >
+                  {liveMetrics.gpsQuality === 'good'
+                    ? `🟢 GPS Good (${Math.round(liveMetrics.currentAccuracy ?? 0)}m)`
+                    : liveMetrics.gpsQuality === 'fair'
+                    ? `🟡 GPS Fair (${Math.round(liveMetrics.currentAccuracy ?? 0)}m)`
+                    : '🔴 Acquiring GPS...'}
                 </Text>
               </View>
             </View>
-            <Text style={[Typography.button, { color: colors.primary, fontSize: 14 }]}>
-              Open HUD →
+
+            {/* Vehicle context subtext */}
+            <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: Spacing.xs }]}>
+              Recording route for <Text style={{ fontWeight: '700', color: colors.text }}>{selectedVehicle.nickname}</Text> · {liveMetrics.samplesCount} GPS points logged
             </Text>
-          </TouchableOpacity>
+
+            {/* Main HUD Metrics Row */}
+            <View style={[styles.hudMetricsContainer, { backgroundColor: colors.background, borderColor: colors.borderLight }]}>
+              {/* Distance */}
+              <View style={styles.hudMetricCol}>
+                <Text style={[Typography.caption, { color: colors.textSecondary }]}>DISTANCE</Text>
+                <Text style={[styles.hudBigNumber, { color: colors.primary }]}>
+                  {liveMetrics.distanceKm.toFixed(2)}
+                </Text>
+                <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700' }]}>KM</Text>
+              </View>
+
+              <View style={[styles.hudMetricDivider, { backgroundColor: colors.borderLight }]} />
+
+              {/* Speed */}
+              <View style={styles.hudMetricCol}>
+                <Text style={[Typography.caption, { color: colors.textSecondary }]}>SPEED</Text>
+                <Text style={[styles.hudMedNumber, { color: colors.text }]}>
+                  {currentSpeedKmh}
+                </Text>
+                <Text style={[Typography.caption, { color: colors.textSecondary }]}>km/h</Text>
+              </View>
+
+              <View style={[styles.hudMetricDivider, { backgroundColor: colors.borderLight }]} />
+
+              {/* Time */}
+              <View style={styles.hudMetricCol}>
+                <Text style={[Typography.caption, { color: colors.textSecondary }]}>ELAPSED</Text>
+                <Text style={[styles.hudMedNumber, { color: colors.text }]}>
+                  {formatTripTime(liveMetrics.elapsedSeconds)}
+                </Text>
+                <Text style={[Typography.caption, { color: colors.textSecondary }]}>time</Text>
+              </View>
+            </View>
+
+            {/* Direct Action Controls Right On The Dashboard */}
+            <View style={styles.hudActionButtonsRow}>
+              {/* Pause / Resume */}
+              {recordingState === 'recording' ? (
+                <TouchableOpacity
+                  style={[styles.hudSecondaryActionBtn, { borderColor: colors.warning, backgroundColor: colors.warningLight }]}
+                  onPress={pauseGpsTrip}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[Typography.button, { color: colors.warning, fontSize: 13 }]}>
+                    ⏸️ Pause
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.hudSecondaryActionBtn, { borderColor: colors.primary, backgroundColor: colors.primaryLight }]}
+                  onPress={resumeGpsTrip}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[Typography.button, { color: colors.primary, fontSize: 13 }]}>
+                    ▶️ Resume
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {/* End & Save Trip */}
+              <TouchableOpacity
+                style={[styles.hudPrimaryActionBtn, { backgroundColor: colors.danger }]}
+                onPress={() => setShowTripReviewModal(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={[Typography.button, { color: '#FFFFFF', fontSize: 14 }]}>
+                  🏁 End & Save Trip
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Secondary links: Expand Fullscreen HUD & Discard */}
+            <View style={styles.hudSecondaryRow}>
+              <TouchableOpacity
+                onPress={() => setShowActiveTripModal(true)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={[Typography.bodySmall, { color: colors.primary, fontWeight: '700' }]}>
+                  📱 Fullscreen Speedometer HUD →
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleDiscardGpsTrip}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={[Typography.caption, { color: colors.danger, fontWeight: '600' }]}>
+                  Discard Trip
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          /* ── GPS TRIP LAUNCHER CARD (When Idle / Ready to Drive) ── */
+          <View
+            style={[
+              styles.gpsLauncherCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.borderLight,
+                ...Sizing.cardShadow,
+              },
+            ]}
+          >
+            <View style={styles.gpsLauncherHeader}>
+              <View style={[styles.toolIconWrap, { backgroundColor: colors.primaryLight ?? (colors.primary + '18') }]}>
+                <Text style={{ fontSize: 20 }}>📍</Text>
+              </View>
+              <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={[Typography.body, { color: colors.text, fontWeight: '800' }]}>
+                    GPS Trip Tracking & Speedometer
+                  </Text>
+                  <View style={[styles.offlineBadge, { backgroundColor: colors.successLight }]}>
+                    <Text style={[Typography.caption, { color: colors.success, fontWeight: '700', fontSize: 10 }]}>
+                      100% OFFLINE
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, lineHeight: 16 }]}>
+                  Record driving distance, live speed, and coordinates. No map API or cellular data needed.
+                </Text>
+              </View>
+            </View>
+
+            {/* Big Primary Start GPS Trip Button */}
+            <TouchableOpacity
+              style={[styles.startGpsPrimaryBtn, { backgroundColor: colors.primary }]}
+              onPress={handleStartGpsTrip}
+              activeOpacity={0.85}
+            >
+              <Text style={{ fontSize: 18, marginRight: 6 }}>📍</Text>
+              <Text style={[Typography.button, { color: colors.primaryText, fontSize: 15 }]}>
+                Start GPS Trip
+              </Text>
+            </TouchableOpacity>
+
+            {/* Quick action row: Manual Trip + Trip History */}
+            <View style={styles.gpsLauncherLinksRow}>
+              <TouchableOpacity
+                style={[styles.gpsLauncherSubBtn, { backgroundColor: colors.background, borderColor: colors.borderLight }]}
+                onPress={() => setShowManualTripModal(true)}
+                activeOpacity={0.75}
+              >
+                <Text style={[Typography.caption, { color: colors.text, fontWeight: '600' }]}>
+                  ✍️ Log Manual Trip
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.gpsLauncherSubBtn, { backgroundColor: colors.background, borderColor: colors.borderLight }]}
+                onPress={() => setShowTripHistoryModal(true)}
+                activeOpacity={0.75}
+              >
+                <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700' }]}>
+                  🗺️ Trip History ({trips.length}) →
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
 
-        {/* ── Quick Tools Grid: Spacious, Vertical Hierarchy ── */}
+        {/* ── Quick Tools Grid: Targets & Highway Checks ── */}
         <View style={styles.quickToolsGrid}>
-          <TouchableOpacity
-            style={[styles.toolGridCard, { backgroundColor: colors.surface, borderColor: colors.borderLight, ...Sizing.cardShadow }]}
-            onPress={() => setShowTripHistoryModal(true)}
-            activeOpacity={0.75}
-          >
-            <View style={styles.toolCardTop}>
-              <View style={[styles.toolIconWrap, { backgroundColor: colors.primaryLight ?? (colors.primary + '18') }]}>
-                <Text style={{ fontSize: 20 }}>🗺️</Text>
-              </View>
-              <Text style={[styles.toolCardArrow, { color: colors.primary }]}>→</Text>
-            </View>
-            <Text style={[Typography.body, { color: colors.text, fontWeight: '700', marginTop: Spacing.sm }]}>
-              Trips & GPS
-            </Text>
-            <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, lineHeight: 16 }]}>
-              {trips.length > 0 ? `${trips.length} ${trips.length === 1 ? 'trip' : 'trips'} recorded` : 'Log & track driving'}
-            </Text>
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={[styles.toolGridCard, { backgroundColor: colors.surface, borderColor: colors.borderLight, ...Sizing.cardShadow }]}
             onPress={() => setShowProfilesModal(true)}
@@ -696,6 +923,25 @@ export default function HomeScreen() {
             </Text>
             <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, lineHeight: 16 }]}>
               Custom intervals
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.toolGridCard, { backgroundColor: colors.surface, borderColor: colors.borderLight, ...Sizing.cardShadow }]}
+            onPress={() => setShowChecklistModal(true)}
+            activeOpacity={0.75}
+          >
+            <View style={styles.toolCardTop}>
+              <View style={[styles.toolIconWrap, { backgroundColor: colors.successLight ?? (colors.success + '18') }]}>
+                <Text style={{ fontSize: 20 }}>🛣️</Text>
+              </View>
+              <Text style={[styles.toolCardArrow, { color: colors.success }]}>→</Text>
+            </View>
+            <Text style={[Typography.body, { color: colors.text, fontWeight: '700', marginTop: Spacing.sm }]}>
+              Highway Checks
+            </Text>
+            <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, lineHeight: 16 }]}>
+              {checklistStats.isComplete ? 'Ready ✅' : `${checklistStats.completed}/${checklistStats.total} inspected`}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1175,6 +1421,123 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     marginBottom: Spacing.md,
     ...Sizing.cardShadow,
+  },
+  // ── Live Driving HUD Card (Dashboard) ──
+  activeTripHudCard: {
+    borderRadius: Sizing.radiusLg,
+    borderWidth: 2,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+  },
+  hudHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  hudLivePulse: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  hudGpsBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  hudMetricsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  hudMetricCol: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hudBigNumber: {
+    fontSize: 28,
+    fontWeight: '800',
+    lineHeight: 32,
+    letterSpacing: -0.5,
+  },
+  hudMedNumber: {
+    fontSize: 22,
+    fontWeight: '700',
+    lineHeight: 26,
+  },
+  hudMetricDivider: {
+    width: 1,
+    height: 36,
+  },
+  hudActionButtonsRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  hudPrimaryActionBtn: {
+    flex: 1.5,
+    paddingVertical: 12,
+    borderRadius: Sizing.radiusMd,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hudSecondaryActionBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hudSecondaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: Spacing.xs,
+  },
+  // ── GPS Launcher Card (Idle State) ──
+  gpsLauncherCard: {
+    borderRadius: Sizing.radiusLg,
+    borderWidth: 1,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+  },
+  gpsLauncherHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: Spacing.md,
+  },
+  offlineBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  startGpsPrimaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 13,
+    borderRadius: Sizing.radiusMd,
+    marginBottom: Spacing.sm,
+  },
+  gpsLauncherLinksRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  gpsLauncherSubBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   quickToolsGrid: {
     flexDirection: 'row',

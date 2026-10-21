@@ -40,7 +40,7 @@ export function MileageTrendChart({
   height = 170,
 }: MileageTrendChartProps) {
   const { width: windowWidth } = useWindowDimensions();
-  const [selectedPoint, setSelectedPoint] = useState<MileagePoint | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   if (!data || data.length < 2) {
     return (
@@ -66,8 +66,10 @@ export function MileageTrendChart({
     if (p.value < worstPoint.value) worstPoint = p;
   }
 
-  // Active point for inspection (defaults to selectedPoint, otherwise latest point if none tapped)
-  const activeInspectorPoint = selectedPoint;
+  // Active point for inspection
+  const activeInspectorPoint = selectedIndex !== null && selectedIndex >= 0 && selectedIndex < data.length
+    ? data[selectedIndex]
+    : null;
 
   // Chart width fitting card padding: windowWidth - (screen margins: 32 + card padding: 32)
   const chartWidth = Math.max(windowWidth - 76, 260);
@@ -79,7 +81,7 @@ export function MileageTrendChart({
   const labelInterval = Math.max(1, Math.ceil(data.length / 5));
   const chartData = data.map((item, index) => {
     const isAboveAvg = item.value >= avg;
-    const isSelected = selectedPoint?.date === item.date && selectedPoint?.value === item.value;
+    const isSelected = selectedIndex === index;
     const pointColor = isSelected ? colors.primary : isAboveAvg ? colors.success : colors.warning;
     const showLabel = data.length <= 6 || index === 0 || index === data.length - 1 || index % labelInterval === 0;
 
@@ -90,8 +92,8 @@ export function MileageTrendChart({
       textColor: colors.textTertiary,
       textFontSize: 9,
       dataPointRadius: isSelected ? 8 : 6,
-      focusedDataPointRadius: 9.5,
-      onPress: () => setSelectedPoint(item),
+      focusedDataPointRadius: 9,
+      onPress: () => setSelectedIndex(index),
     };
   });
 
@@ -132,9 +134,14 @@ export function MileageTrendChart({
 
       {/* ── Active Selection Inspector Card ── */}
       {activeInspectorPoint ? (
-        <View style={[styles.inspectorCard, { backgroundColor: colors.background, borderColor: colors.primary + '60' }]}>
+        <View style={[styles.inspectorCard, { backgroundColor: colors.background, borderColor: colors.primary }]}>
           <View style={styles.inspectorTop}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+              <View style={[styles.pointIndexBadge, { backgroundColor: colors.primary }]}>
+                <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800' }}>
+                  Dot #{selectedIndex! + 1}
+                </Text>
+              </View>
               <Text style={[Typography.bodySmall, { color: colors.text, fontWeight: '700' }]}>
                 📅 {activeInspectorPoint.date}
               </Text>
@@ -147,10 +154,10 @@ export function MileageTrendChart({
               ) : null}
             </View>
             <TouchableOpacity
-              onPress={() => setSelectedPoint(null)}
+              onPress={() => setSelectedIndex(null)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={{ fontSize: 12, color: colors.textTertiary, paddingHorizontal: 4 }}>✕ Close</Text>
+              <Text style={{ fontSize: 12, color: colors.textTertiary, paddingHorizontal: 4 }}>✕ Deselect</Text>
             </TouchableOpacity>
           </View>
 
@@ -180,20 +187,20 @@ export function MileageTrendChart({
       ) : (
         <View style={[styles.hintCard, { backgroundColor: colors.background, borderColor: colors.borderLight }]}>
           <Text style={[Typography.caption, { color: colors.textTertiary, textAlign: 'center' }]}>
-            💡 Tap any point on the curve to inspect pump, variance & date
+            💡 Tap any dot on the trendline curve (or chip below) to inspect details
           </Text>
         </View>
       )}
 
-      {/* ── Line Chart ── */}
+      {/* ── Line Chart with Always-Visible Dots ── */}
       <View style={styles.chartWrapper}>
         <LineChart
           data={chartData}
           width={chartWidth}
           height={height}
           spacing={pointSpacing}
-          initialSpacing={18}
-          endSpacing={18}
+          initialSpacing={20}
+          endSpacing={20}
           curved
           curveType={CurveType.CUBIC}
           color={colors.primary}
@@ -201,7 +208,7 @@ export function MileageTrendChart({
           areaChart
           startFillColor={colors.primary}
           endFillColor={colors.primary}
-          startOpacity={0.28}
+          startOpacity={0.25}
           endOpacity={0.02}
           maxValue={yAxisMax}
           noOfSections={3}
@@ -219,25 +226,44 @@ export function MileageTrendChart({
             dashGap: 4,
             thickness: 1.6,
           }}
+          hideDataPoints={false}
+          dataPointsRadius={6}
+          dataPointsColor={colors.primary}
+          focusedDataPointIndex={selectedIndex ?? undefined}
+          focusedDataPointRadius={9}
           focusEnabled
-          showDataPointOnFocus
-          isAnimated
-          animationDuration={600}
+          showStripOnFocus
+          stripColor={colors.primary + '80'}
+          stripWidth={2}
+          stripStrokeDashArray={[4, 4]}
+          onPress={(_item: any, idx: number) => {
+            setSelectedIndex(idx);
+          }}
+          onFocus={(_item: any, idx: number) => {
+            setSelectedIndex(idx);
+          }}
         />
       </View>
 
-      {/* ── Quick Point Selector (1-Tap Reliable Inspection) ── */}
+      {/* ── Fill-Up Points Track (Explicitly points to dots on curve) ── */}
       <View style={styles.quickSelectorContainer}>
-        <Text style={[Typography.caption, { color: colors.textTertiary, marginBottom: Spacing.xs, fontSize: 11 }]}>
-          Tap any fill-up to inspect details:
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.xs }}>
+          <Text style={[Typography.caption, { color: colors.textSecondary, fontSize: 11, fontWeight: '700' }]}>
+            📍 Fill-Up Dots (Left to right along curve):
+          </Text>
+          {selectedIndex !== null && (
+            <Text style={[Typography.caption, { color: colors.primary, fontSize: 11, fontWeight: '700' }]}>
+              Highlighting Dot #{selectedIndex + 1}
+            </Text>
+          )}
+        </View>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.quickPillsTrack}
         >
           {data.map((item, idx) => {
-            const isSelected = selectedPoint?.date === item.date && selectedPoint?.value === item.value;
+            const isSelected = selectedIndex === idx;
             const isAbove = item.value >= avg;
             return (
               <TouchableOpacity
@@ -257,9 +283,35 @@ export function MileageTrendChart({
                       : colors.warning + '60',
                   },
                 ]}
-                onPress={() => setSelectedPoint(item)}
+                onPress={() => setSelectedIndex(isSelected ? null : idx)}
                 activeOpacity={0.7}
               >
+                {/* Dot index matching the curve from left to right */}
+                <View
+                  style={[
+                    styles.pillDotBadge,
+                    {
+                      backgroundColor: isSelected
+                        ? '#FFFFFF'
+                        : isAbove
+                        ? colors.success
+                        : colors.warning,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      fontSize: 9,
+                      fontWeight: '800',
+                      color: isSelected
+                        ? colors.primary
+                        : '#FFFFFF',
+                    }}
+                  >
+                    #{idx + 1}
+                  </Text>
+                </View>
+
                 <Text
                   style={[
                     styles.quickPointPillDate,
@@ -268,6 +320,7 @@ export function MileageTrendChart({
                 >
                   {item.displayDate}
                 </Text>
+
                 <Text
                   style={[
                     styles.quickPointPillVal,
@@ -362,6 +415,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  pointIndexBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   systemTag: {
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -441,6 +501,13 @@ const styles = StyleSheet.create({
     borderRadius: Sizing.radiusSm,
     borderWidth: 1,
     minHeight: 34,
+  },
+  pillDotBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   quickPointPillDate: {
     fontSize: 11,

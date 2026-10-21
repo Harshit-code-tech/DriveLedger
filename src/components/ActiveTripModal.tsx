@@ -137,10 +137,14 @@ export function ActiveTripModal({
             onPress={onClose}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <Text style={[Typography.button, { color: colors.primary }]}>
-              ⬇️ Minimize
+            <Text style={[Typography.button, { color: colors.primary, fontSize: 14 }]}>
+              ⬇️ Dashboard
             </Text>
           </TouchableOpacity>
+
+          <Text style={[Typography.caption, { color: colors.textSecondary, fontWeight: '800', letterSpacing: 1 }]}>
+            DRIVING HUD & SPEEDOMETER
+          </Text>
 
           <View style={[styles.qualityPill, { backgroundColor: gpsBadge.bg }]}>
             <View
@@ -299,7 +303,7 @@ export function ActiveTripModal({
             </TouchableOpacity>
           )}
 
-          {/* Finish Trip Button */}
+          {/* Finish / End Trip Button */}
           <TouchableOpacity
             style={[
               styles.actionBtn,
@@ -313,7 +317,7 @@ export function ActiveTripModal({
                 { color: colors.primaryText, fontSize: 18 },
               ]}
             >
-              🏁 Finish & Save Trip
+              🏁 End & Save Trip
             </Text>
           </TouchableOpacity>
 

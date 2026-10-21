@@ -324,20 +324,22 @@ export async function syncWidgetState(): Promise<void> {
     // Persist for background task handler
     await AsyncStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify(data));
 
-    // react-native-android-widget is not linked in Expo Go (only available in custom/dev builds).
-    if (isExpoGo) {
-      return;
+    // Request native Android widget bitmap render & update
+    try {
+      // Dynamic import prevents crashes in web / iOS / environments without native module
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { requestWidgetUpdate } = require('react-native-android-widget');
+      if (typeof requestWidgetUpdate === 'function') {
+        await requestWidgetUpdate({
+          widgetName: WIDGET_NAME,
+          renderWidget: () => <VehicleGlanceWidget {...data} />,
+        });
+      }
+    } catch (widgetErr) {
+      console.debug('[DriveLedger] Native widget update skipped:', widgetErr);
     }
-
-    // Dynamic import prevents crashes in web / iOS
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { requestWidgetUpdate } = require('react-native-android-widget');
-    await requestWidgetUpdate({
-      widgetName: WIDGET_NAME,
-      renderWidget: () => <VehicleGlanceWidget {...data} />,
-    });
   } catch (e) {
-    // Non-blocking in Expo Go or if widget is not pinned to home screen
-    console.debug('[DriveLedger] Widget update skipped or not registered:', e);
+    // Non-blocking if widget is not pinned to home screen or snapshot building failed
+    console.debug('[DriveLedger] Widget sync skipped or not registered:', e);
   }
 }
