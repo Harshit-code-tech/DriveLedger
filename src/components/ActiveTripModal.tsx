@@ -1,13 +1,14 @@
 /**
  * Active Trip Recording HUD Modal
  *
- * Dedicated, distraction-free display for in-progress GPS trip recording.
+ * Dedicated, distraction-free digital cockpit display for in-progress GPS trip recording.
  *
  * DESIGN:
- * - High contrast, legible from driver's phone mount
- * - Large numbers (32sp+) for distance and elapsed time
- * - Signal quality pill with accuracy indicator
- * - 56dp+ primary touch targets for Pause / Resume / Finish
+ * - High-contrast automotive cockpit aesthetics
+ * - Hero digital speedometer dial with large 72sp speed readout
+ * - Flanking telematics gauges for Distance and Elapsed Time
+ * - Dedicated 100% Offline privacy pill and GPS precision indicator
+ * - 56dp tactile driver touch controls for Pause / Resume / Finish
  * - Zero map dependencies; 100% offline
  */
 
@@ -130,157 +131,170 @@ export function ActiveTripModal({
           },
         ]}
       >
-        {/* Top Header */}
+        {/* ── Top Bar: Navigation & Status ── */}
         <View style={styles.topBar}>
           <TouchableOpacity
-            style={styles.minimizeBtn}
+            style={[styles.minimizeBtn, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
             onPress={onClose}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.8}
           >
-            <Text style={[Typography.button, { color: colors.primary, fontSize: 14 }]}>
+            <Text style={[Typography.button, { color: colors.primary, fontSize: 13 }]}>
               ⬇️ Dashboard
             </Text>
           </TouchableOpacity>
 
-          <Text style={[Typography.caption, { color: colors.textSecondary, fontWeight: '800', letterSpacing: 1 }]}>
-            DRIVING HUD & SPEEDOMETER
-          </Text>
+          <View style={styles.topBarRightStatus}>
+            {/* GPS Quality Pill */}
+            <View style={[styles.qualityPill, { backgroundColor: gpsBadge.bg }]}>
+              <View style={[styles.indicatorDot, { backgroundColor: gpsBadge.color }]} />
+              <Text style={[Typography.caption, { color: gpsBadge.color, fontWeight: '700', fontSize: 11 }]}>
+                {gpsBadge.label}
+              </Text>
+            </View>
 
-          <View style={[styles.qualityPill, { backgroundColor: gpsBadge.bg }]}>
-            <View
-              style={[styles.indicatorDot, { backgroundColor: gpsBadge.color }]}
-            />
-            <Text
-              style={[
-                Typography.caption,
-                { color: gpsBadge.color, fontWeight: '700' },
-              ]}
-            >
-              {gpsBadge.label}
-            </Text>
+            {/* Offline Badge */}
+            <View style={[styles.offlinePill, { backgroundColor: colors.successLight }]}>
+              <Text style={[Typography.caption, { color: colors.success, fontWeight: '800', fontSize: 10 }]}>
+                🔒 OFFLINE
+              </Text>
+            </View>
           </View>
         </View>
 
-        {/* Vehicle Subtitle */}
-        <View style={styles.vehicleRow}>
+        {/* ── Vehicle Subtitle ── */}
+        <View style={styles.vehicleHeaderRow}>
           <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
-            Recording trip for{' '}
-            <Text style={{ fontWeight: '700', color: colors.text }}>
+            Trip Computer for{' '}
+            <Text style={{ fontWeight: '800', color: colors.text }}>
               {vehicle.nickname}
             </Text>
           </Text>
         </View>
 
-        {/* Recording Status Banner */}
+        {/* ── Paused / Gap Warning Banner ── */}
         {recordingState === 'paused' ? (
-          <View style={[styles.banner, { backgroundColor: colors.warningLight }]}>
-            <Text
-              style={[
-                Typography.bodySmall,
-                { color: colors.warning, fontWeight: '700' },
-              ]}
-            >
-              ⏸️ Trip is Paused
+          <View style={[styles.statusBanner, { backgroundColor: colors.warningLight }]}>
+            <Text style={[Typography.bodySmall, { color: colors.warning, fontWeight: '800' }]}>
+              ⏸️ Trip is Paused · Speedometer Inactive
             </Text>
           </View>
         ) : liveMetrics.hasGaps ? (
-          <View style={[styles.banner, { backgroundColor: colors.warningLight }]}>
-            <Text
-              style={[
-                Typography.caption,
-                { color: colors.warning, fontWeight: '600' },
-              ]}
-            >
+          <View style={[styles.statusBanner, { backgroundColor: colors.warningLight }]}>
+            <Text style={[Typography.caption, { color: colors.warning, fontWeight: '700' }]}>
               ⚠️ Intermittent GPS signal gaps detected
             </Text>
           </View>
         ) : null}
 
-        {/* Big Metrics Display */}
-        <View style={styles.metricsContainer}>
-          {/* Distance */}
+        {/* ── Main Cockpit Display ── */}
+        <View style={styles.cockpitCenter}>
+          {/* Hero Speedometer Gauge Card */}
           <View
             style={[
-              styles.primaryMetricCard,
-              { backgroundColor: colors.card, borderColor: colors.border },
+              styles.speedometerCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: recordingState === 'paused' ? colors.warning + '60' : colors.primary + '50',
+                ...Sizing.cardShadow,
+              },
             ]}
           >
-            <Text style={[Typography.caption, { color: colors.textSecondary }]}>
-              ESTIMATED GPS DISTANCE
-            </Text>
-            <Text style={[styles.bigStat, { color: colors.text }]}>
-              {liveMetrics.distanceKm.toFixed(2)}
-            </Text>
-            <Text style={[Typography.h3, { color: colors.primary }]}>
-              KILOMETRES
-            </Text>
+            <View style={styles.speedometerRing}>
+              <View
+                style={[
+                  styles.speedModeBadge,
+                  {
+                    backgroundColor:
+                      recordingState === 'paused'
+                        ? colors.warningLight
+                        : colors.primaryLight ?? (colors.primary + '20'),
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    fontSize: 10,
+                    fontWeight: '800',
+                    color: recordingState === 'paused' ? colors.warning : colors.primary,
+                    letterSpacing: 1,
+                  }}
+                >
+                  {recordingState === 'paused' ? 'PAUSED' : 'LIVE SPEED'}
+                </Text>
+              </View>
+
+              {/* Large Digital Speed Readout */}
+              <Text style={[styles.speedHeroNumber, { color: colors.text }]}>
+                {speedKmh}
+              </Text>
+
+              <Text style={[styles.speedUnitLabel, { color: colors.primary }]}>
+                KM / H
+              </Text>
+            </View>
           </View>
 
-          {/* Grid: Time & Speed */}
-          <View style={styles.secondaryGrid}>
+          {/* Dual Telematics Gauges: Distance & Time */}
+          <View style={styles.telematicsGaugesRow}>
+            {/* Distance Gauge */}
             <View
               style={[
-                styles.secondaryCard,
-                { backgroundColor: colors.card, borderColor: colors.border },
+                styles.telematicsGaugeCard,
+                { backgroundColor: colors.surface, borderColor: colors.borderLight, ...Sizing.cardShadow },
               ]}
             >
-              <Text
-                style={[Typography.caption, { color: colors.textSecondary }]}
-              >
-                ELAPSED TIME
+              <Text style={[Typography.caption, { color: colors.textSecondary, fontWeight: '700', letterSpacing: 0.5 }]}>
+                DISTANCE
               </Text>
-              <Text style={[styles.mediumStat, { color: colors.text }]}>
+              <Text style={[styles.gaugeStatNumber, { color: colors.text }]}>
+                {liveMetrics.distanceKm.toFixed(2)}
+              </Text>
+              <Text style={[Typography.caption, { color: colors.primary, fontWeight: '800', fontSize: 12 }]}>
+                KILOMETRES
+              </Text>
+            </View>
+
+            {/* Time Gauge */}
+            <View
+              style={[
+                styles.telematicsGaugeCard,
+                { backgroundColor: colors.surface, borderColor: colors.borderLight, ...Sizing.cardShadow },
+              ]}
+            >
+              <Text style={[Typography.caption, { color: colors.textSecondary, fontWeight: '700', letterSpacing: 0.5 }]}>
+                TIME
+              </Text>
+              <Text style={[styles.gaugeStatNumber, { color: colors.text }]}>
                 {formatTime(liveMetrics.elapsedSeconds)}
               </Text>
-            </View>
-
-            <View
-              style={[
-                styles.secondaryCard,
-                { backgroundColor: colors.card, borderColor: colors.border },
-              ]}
-            >
-              <Text
-                style={[Typography.caption, { color: colors.textSecondary }]}
-              >
-                CURRENT SPEED
-              </Text>
-              <Text style={[styles.mediumStat, { color: colors.text }]}>
-                {speedKmh}{' '}
-                <Text style={[Typography.caption, { color: colors.textSecondary }]}>
-                  km/h
-                </Text>
+              <Text style={[Typography.caption, { color: colors.textSecondary, fontWeight: '700', fontSize: 12 }]}>
+                ELAPSED
               </Text>
             </View>
           </View>
 
-          <Text
-            style={[
-              Typography.caption,
-              { color: colors.textTertiary, textAlign: 'center', marginTop: Spacing.sm },
-            ]}
-          >
-            Filtered coordinates logged locally · {liveMetrics.samplesCount} valid points
-          </Text>
+          {/* Precision & Privacy Footer */}
+          <View style={styles.telemetryFooterInfo}>
+            <Text style={[Typography.caption, { color: colors.textTertiary, textAlign: 'center', fontSize: 11 }]}>
+              📍 {liveMetrics.samplesCount} GPS Points Logged · Device-Only · No Data Required
+            </Text>
+          </View>
         </View>
 
-        {/* Action Buttons */}
+        {/* ── Driver Tactile Controls ── */}
         <View style={styles.actionContainer}>
           {/* Pause / Resume Button */}
           {recordingState === 'recording' ? (
             <TouchableOpacity
               style={[
                 styles.actionBtn,
-                { backgroundColor: colors.card, borderColor: colors.warning },
+                { backgroundColor: colors.warningLight, borderColor: colors.warning },
               ]}
               onPress={pauseGpsTrip}
+              activeOpacity={0.8}
             >
-              <Text
-                style={[
-                  Typography.button,
-                  { color: colors.warning, fontSize: 18 },
-                ]}
-              >
+              <Text style={[Typography.button, { color: colors.warning, fontSize: 16 }]}>
                 ⏸️ Pause Trip
               </Text>
             </TouchableOpacity>
@@ -288,42 +302,34 @@ export function ActiveTripModal({
             <TouchableOpacity
               style={[
                 styles.actionBtn,
-                { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+                { backgroundColor: colors.primaryLight ?? (colors.primary + '20'), borderColor: colors.primary },
               ]}
               onPress={resumeGpsTrip}
+              activeOpacity={0.8}
             >
-              <Text
-                style={[
-                  Typography.button,
-                  { color: colors.primary, fontSize: 18 },
-                ]}
-              >
+              <Text style={[Typography.button, { color: colors.primary, fontSize: 16 }]}>
                 ▶️ Resume Trip
               </Text>
             </TouchableOpacity>
           )}
 
-          {/* Finish / End Trip Button */}
+          {/* Finish & Save Trip Button */}
           <TouchableOpacity
             style={[
               styles.actionBtn,
               { backgroundColor: colors.primary, borderColor: colors.primary },
             ]}
             onPress={onFinish}
+            activeOpacity={0.85}
           >
-            <Text
-              style={[
-                Typography.button,
-                { color: colors.primaryText, fontSize: 18 },
-              ]}
-            >
+            <Text style={[Typography.button, { color: colors.primaryText, fontSize: 16 }]}>
               🏁 End & Save Trip
             </Text>
           </TouchableOpacity>
 
           {/* Discard Trip */}
-          <TouchableOpacity style={styles.discardBtn} onPress={handleCancel}>
-            <Text style={[Typography.bodySmall, { color: colors.danger }]}>
+          <TouchableOpacity style={styles.discardBtn} onPress={handleCancel} activeOpacity={0.7}>
+            <Text style={[Typography.bodySmall, { color: colors.danger, fontWeight: '600' }]}>
               Discard This Trip
             </Text>
           </TouchableOpacity>
@@ -343,77 +349,111 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: Spacing.sm,
   },
   minimizeBtn: {
-    paddingVertical: Spacing.xs,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+  },
+  topBarRightStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   qualityPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: Spacing.md,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Sizing.radiusFull,
+  },
+  offlinePill: {
+    paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: Sizing.radiusFull,
   },
   indicatorDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
   },
-  vehicleRow: {
+  vehicleHeaderRow: {
     alignItems: 'center',
     marginTop: Spacing.xs,
   },
-  banner: {
-    paddingVertical: 6,
+  statusBanner: {
+    paddingVertical: 8,
     paddingHorizontal: Spacing.md,
     borderRadius: Sizing.radiusMd,
     alignItems: 'center',
-    marginTop: Spacing.sm,
+    marginTop: Spacing.xs,
   },
-  metricsContainer: {
+  cockpitCenter: {
     flex: 1,
     justifyContent: 'center',
     gap: Spacing.md,
+    paddingVertical: Spacing.sm,
   },
-  primaryMetricCard: {
+  speedometerCard: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing.xxl,
+    paddingVertical: Spacing.xl,
     borderRadius: Sizing.radiusXl,
-    borderWidth: 1,
-    ...Sizing.cardShadow,
+    borderWidth: 2,
   },
-  bigStat: {
-    fontSize: 54,
+  speedometerRing: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  speedModeBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: Sizing.radiusFull,
+    marginBottom: 6,
+  },
+  speedHeroNumber: {
+    fontSize: 76,
+    fontWeight: '900',
+    lineHeight: 84,
+    letterSpacing: -2,
+  },
+  speedUnitLabel: {
+    fontSize: 14,
     fontWeight: '800',
-    lineHeight: 64,
-    letterSpacing: -1,
+    letterSpacing: 2,
+    marginTop: 2,
   },
-  secondaryGrid: {
+  telematicsGaugesRow: {
     flexDirection: 'row',
     gap: Spacing.md,
   },
-  secondaryCard: {
+  telematicsGaugeCard: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: Spacing.lg,
+    justifyContent: 'center',
+    paddingVertical: Spacing.md,
     borderRadius: Sizing.radiusLg,
     borderWidth: 1,
-    ...Sizing.cardShadow,
   },
-  mediumStat: {
-    fontSize: 26,
-    fontWeight: '700',
-    lineHeight: 32,
+  gaugeStatNumber: {
+    fontSize: 28,
+    fontWeight: '800',
+    lineHeight: 34,
+    marginVertical: 2,
+  },
+  telemetryFooterInfo: {
+    alignItems: 'center',
     marginTop: Spacing.xs,
   },
   actionContainer: {
-    gap: Spacing.md,
-    paddingTop: Spacing.md,
+    gap: Spacing.sm,
+    paddingTop: Spacing.xs,
   },
   actionBtn: {
-    height: 56,
+    height: 54,
     borderRadius: Sizing.radiusLg,
     borderWidth: 1.5,
     alignItems: 'center',

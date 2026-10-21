@@ -837,6 +837,7 @@ export default function HomeScreen() {
           </View>
         ) : (
           /* ── GPS TRIP LAUNCHER CARD (When Idle / Ready to Drive) ── */
+          /* ── GPS TRIP LAUNCHER CARD (Cockpit Redesign) ── */
           <View
             style={[
               styles.gpsLauncherCard,
@@ -847,34 +848,68 @@ export default function HomeScreen() {
               },
             ]}
           >
-            <View style={styles.gpsLauncherHeader}>
-              <View style={[styles.toolIconWrap, { backgroundColor: colors.primaryLight ?? (colors.primary + '18') }]}>
-                <Text style={{ fontSize: 20 }}>📍</Text>
+            {/* Top Meta Bar: Cockpit Title + Offline Pill */}
+            <View style={styles.launcherTopMetaRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                <View style={[styles.cockpitStatusDot, { backgroundColor: colors.primary }]} />
+                <Text
+                  style={[Typography.caption, { color: colors.primary, fontWeight: '800', letterSpacing: 0.6 }]}
+                  numberOfLines={1}
+                >
+                  TRIP COMPUTER & SPEEDOMETER
+                </Text>
               </View>
-              <View style={{ flex: 1, marginLeft: Spacing.sm }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text style={[Typography.body, { color: colors.text, fontWeight: '800' }]}>
-                    GPS Trip Tracking & Speedometer
-                  </Text>
-                  <View style={[styles.offlineBadge, { backgroundColor: colors.successLight }]}>
-                    <Text style={[Typography.caption, { color: colors.success, fontWeight: '700', fontSize: 10 }]}>
-                      100% OFFLINE
-                    </Text>
-                  </View>
-                </View>
-                <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, lineHeight: 16 }]}>
-                  Record driving distance, live speed, and coordinates. No map API or cellular data needed.
+              <View style={[styles.offlineBadgePill, { backgroundColor: colors.successLight }]}>
+                <Text style={[Typography.caption, { color: colors.success, fontWeight: '800', fontSize: 10 }]}>
+                  🔒 100% OFFLINE
                 </Text>
               </View>
             </View>
 
-            {/* Big Primary Start GPS Trip Button */}
+            {/* Header: Icon + Title + Description */}
+            <View style={styles.launcherMainHeader}>
+              <View style={[styles.launcherIconBox, { backgroundColor: colors.primaryLight ?? (colors.primary + '18') }]}>
+                <Text style={{ fontSize: 22 }}>🧭</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[Typography.h3, { color: colors.text, fontSize: 16, lineHeight: 22 }]}>
+                  GPS Route & Live Speed
+                </Text>
+                <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, lineHeight: 16 }]}>
+                  Sub-meter distance, live speed & coordinates. Zero internet or map APIs required.
+                </Text>
+              </View>
+            </View>
+
+            {/* Telematics Feature Strip */}
+            <View style={styles.telematicsPillStrip}>
+              <View style={[styles.telematicsPill, { backgroundColor: colors.background, borderColor: colors.borderLight }]}>
+                <Text style={{ fontSize: 12 }}>⚡</Text>
+                <Text style={[Typography.caption, { color: colors.text, fontWeight: '700', fontSize: 11 }]}>
+                  Speedometer
+                </Text>
+              </View>
+              <View style={[styles.telematicsPill, { backgroundColor: colors.background, borderColor: colors.borderLight }]}>
+                <Text style={{ fontSize: 12 }}>📏</Text>
+                <Text style={[Typography.caption, { color: colors.text, fontWeight: '700', fontSize: 11 }]}>
+                  Odometer Sync
+                </Text>
+              </View>
+              <View style={[styles.telematicsPill, { backgroundColor: colors.background, borderColor: colors.borderLight }]}>
+                <Text style={{ fontSize: 12 }}>🛡️</Text>
+                <Text style={[Typography.caption, { color: colors.text, fontWeight: '700', fontSize: 11 }]}>
+                  Device-Only
+                </Text>
+              </View>
+            </View>
+
+            {/* Hero Start GPS Trip Button */}
             <TouchableOpacity
               style={[styles.startGpsPrimaryBtn, { backgroundColor: colors.primary }]}
               onPress={handleStartGpsTrip}
               activeOpacity={0.85}
             >
-              <Text style={{ fontSize: 18, marginRight: 6 }}>📍</Text>
+              <Text style={{ fontSize: 18, marginRight: 8 }}>📍</Text>
               <Text style={[Typography.button, { color: colors.primaryText, fontSize: 15 }]}>
                 Start GPS Trip
               </Text>
@@ -1508,15 +1543,50 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     marginBottom: Spacing.lg,
   },
-  gpsLauncherHeader: {
+  launcherTopMetaRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
+  },
+  cockpitStatusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  offlineBadgePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Sizing.radiusFull,
+  },
+  launcherMainHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
     marginBottom: Spacing.md,
   },
-  offlineBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+  launcherIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  telematicsPillStrip: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: Spacing.md,
+  },
+  telematicsPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    borderRadius: Sizing.radiusSm,
+    borderWidth: 1,
   },
   startGpsPrimaryBtn: {
     flexDirection: 'row',
