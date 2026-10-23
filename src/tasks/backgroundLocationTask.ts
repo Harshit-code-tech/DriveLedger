@@ -27,8 +27,26 @@ import {
   haversineDistance,
   buildQualityWarning,
 } from '@/engine/distanceEngine';
+import { syncGpsWidgetState } from '@/widgets/widgetDataService';
 
 export const BACKGROUND_LOCATION_TASK = 'DRIVELEDGER_BACKGROUND_LOCATION_TASK';
+
+/** Throttle background widget updates to at most once every 15 seconds */
+let lastBgWidgetSync = 0;
+function maybeSyncGpsWidgetFromBackground(): void {
+  const now = Date.now();
+  if (now - lastBgWidgetSync >= 15000) {
+    lastBgWidgetSync = now;
+    void syncGpsWidgetState();
+  }
+}
+
+/** Flag indicating the next location fix must act as an anchor (e.g. initial start or post-pause resume) */
+let needsNewAnchor = true;
+
+export function resetBackgroundLocationAnchor(): void {
+  needsNewAnchor = true;
+}
 
 export interface BackgroundLocationUpdateEvent {
   tripId: string;
@@ -92,24 +110,31 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
   }
 
   // 2. Load existing persisted locations to determine the last accepted fix
+  let lastAccepted: FilteredLocationSample | null = null;
+  if (!needsNewAnchor) {
+    const storedLocations = tripRepo.getTripLocations(activeTrip.id);
+    const acceptedExisting = storedLocations.filter((l) => l.is_rejected === 0);
+    if (acceptedExisting.length > 0) {
+      const lastRow = acceptedExisting[acceptedExisting.length - 1];
+      lastAccepted = {
+        latitude: lastRow.latitude,
+        longitude: lastRow.longitude,
+        altitude: lastRow.altitude ?? undefined,
+        accuracy: lastRow.accuracy ?? undefined,
+        speed: lastRow.speed ?? undefined,
+        heading: lastRow.heading ?? undefined,
+        timestamp: lastRow.timestamp,
+        isAccepted: true,
+        stepDistanceMeters: 0,
+      };
+    }
+  } else {
+    // Starting or resuming from pause: anchor here without accumulating distance
+    needsNewAnchor = false;
+  }
+
   const storedLocations = tripRepo.getTripLocations(activeTrip.id);
   const acceptedExisting = storedLocations.filter((l) => l.is_rejected === 0);
-  let lastAccepted: FilteredLocationSample | null = null;
-
-  if (acceptedExisting.length > 0) {
-    const lastRow = acceptedExisting[acceptedExisting.length - 1];
-    lastAccepted = {
-      latitude: lastRow.latitude,
-      longitude: lastRow.longitude,
-      altitude: lastRow.altitude ?? undefined,
-      accuracy: lastRow.accuracy ?? undefined,
-      speed: lastRow.speed ?? undefined,
-      heading: lastRow.heading ?? undefined,
-      timestamp: lastRow.timestamp,
-      isAccepted: true,
-      stepDistanceMeters: 0,
-    };
-  }
 
   // Parse existing diagnostics or initialize fresh
   let currentDiagnostics: TripDiagnostics = {
@@ -244,6 +269,9 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
       console.warn('[BackgroundLocationTask] Listener error:', err);
     }
   }
+
+  // 6. Periodically synchronize native Android GPS widget
+  maybeSyncGpsWidgetFromBackground();
 }
 
 // Register TaskManager task at top-level module scope
@@ -268,6 +296,7 @@ try {
  * Starts background location tracking with Android Foreground Service notification.
  */
 export async function startBackgroundLocationUpdates(): Promise<boolean> {
+  needsNewAnchor = true;
   try {
     const isAvailable = await Location.isBackgroundLocationAvailableAsync();
     if (!isAvailable) {

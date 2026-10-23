@@ -45,7 +45,8 @@ export async function cycleWidgetVehicle(): Promise<void> {
     const { defaultVehicleId } = getPreferences();
     const currentId = storedId ?? defaultVehicleId ?? vehicles[0].id;
     const idx = vehicles.findIndex((v) => String(v.id) === currentId);
-    const next = vehicles[(idx + 1) % vehicles.length];
+    const safeIdx = idx >= 0 ? idx : 0;
+    const next = vehicles[(safeIdx + 1) % vehicles.length];
     await AsyncStorage.setItem(WIDGET_VEHICLE_KEY, String(next.id));
   } catch (e) {
     console.warn('[DriveLedger] Failed to cycle widget vehicle:', e);
@@ -377,7 +378,12 @@ export async function getGpsWidgetDataSnapshot(): Promise<GpsTripWidgetData> {
       return DEFAULT_GPS_WIDGET_DATA;
     }
 
-    const storedId = await AsyncStorage.getItem(WIDGET_VEHICLE_KEY);
+    let storedId: string | null = null;
+    try {
+      storedId = await AsyncStorage.getItem(WIDGET_VEHICLE_KEY);
+    } catch {
+      // Graceful fallback if storage is uninitialized in headless environments
+    }
     const { defaultVehicleId } = getPreferences();
     const vehicle =
       (storedId ? vehicles.find((v) => String(v.id) === storedId) : null) ??
@@ -385,12 +391,9 @@ export async function getGpsWidgetDataSnapshot(): Promise<GpsTripWidgetData> {
       vehicles[0];
     const vehicleCount = vehicles.length;
 
-    // Check for an ongoing active trip globally or for this vehicle
-    const activeTrip = tripRepo.getActiveTrip();
+    // Check for an ongoing active trip specifically for this selected vehicle
+    const activeTrip = tripRepo.getActiveTrip(vehicle.id);
     if (activeTrip) {
-      const activeVehicle =
-        vehicles.find((v) => v.id === activeTrip.vehicle_id) || vehicle;
-
       let elapsedSeconds = activeTrip.duration_seconds || 0;
       if (activeTrip.status === 'recording' && activeTrip.start_time) {
         const startMs = new Date(activeTrip.start_time).getTime();
@@ -415,12 +418,12 @@ export async function getGpsWidgetDataSnapshot(): Promise<GpsTripWidgetData> {
       }
 
       return {
-        vehicleId: activeVehicle.id,
+        vehicleId: vehicle.id,
         vehicleName:
-          activeVehicle.nickname ||
-          `${activeVehicle.manufacturer ?? ''} ${activeVehicle.model ?? ''}`.trim() ||
+          vehicle.nickname ||
+          `${vehicle.manufacturer ?? ''} ${vehicle.model ?? ''}`.trim() ||
           'Vehicle',
-        regNumber: activeVehicle.registration_number || '',
+        regNumber: vehicle.registration_number || '',
         status: activeTrip.status as 'recording' | 'paused',
         statusText: activeTrip.status.toUpperCase(),
         currentDistanceKm: activeTrip.distance_km || 0,

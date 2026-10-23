@@ -155,19 +155,6 @@ export default function HomeScreen() {
     }
   }, [params.vehicleId]);
 
-  useEffect(() => {
-    if (params.action === 'active_trip') {
-      setShowActiveTripModal(true);
-    } else if (params.action === 'start_trip') {
-      setShowTripHistoryModal(true);
-    } else if (params.action === 'manual_trip') {
-      setShowManualTripModal(true);
-    } else if (params.action === 'recover_trip') {
-      recoverInterruptedTrips();
-      setShowTripReviewModal(true);
-    }
-  }, [params.action]);
-
   const entries = useFuelStore((s) => s.entries);
   const stats = useFuelStore((s) => s.stats);
   const partialEstimates = useFuelStore((s) => s.partialEstimates);
@@ -212,6 +199,33 @@ export default function HomeScreen() {
   useEffect(() => {
     recoverInterruptedTrips();
   }, []);
+
+  // Handle deep link actions (e.g. from Home Screen widgets & launcher shortcuts)
+  useEffect(() => {
+    if (params.action === 'active_trip') {
+      setShowActiveTripModal(true);
+    } else if (params.action === 'start_trip') {
+      const targetVehicleId = params.vehicleId || selectedVehicle?.id;
+      if (recordingState === 'recording' || recordingState === 'paused') {
+        setShowActiveTripModal(true);
+      } else if (targetVehicleId) {
+        startGpsTrip(targetVehicleId).then((res) => {
+          if (res.success) {
+            setShowActiveTripModal(true);
+          } else {
+            setShowTripHistoryModal(true);
+          }
+        });
+      } else {
+        setShowTripHistoryModal(true);
+      }
+    } else if (params.action === 'manual_trip') {
+      setShowManualTripModal(true);
+    } else if (params.action === 'recover_trip') {
+      recoverInterruptedTrips();
+      setShowTripReviewModal(true);
+    }
+  }, [params.action, params.vehicleId, selectedVehicle?.id, recordingState]);
 
   // ── Data loading ─────────────────────────────────────────────────────
   // useFocusEffect fires on initial mount AND every time this tab gains

@@ -181,7 +181,7 @@ To distribute updates to your users:
    "version": "1.1.0",
    "android": {
      "package": "com.driveledger.app",
-     "versionCode": 2
+     "versionCode": 1
    }
    ```
 2. Build the new APK using `npx eas-cli build -p android --profile preview`.

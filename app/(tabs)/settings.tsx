@@ -309,9 +309,12 @@ export default function SettingsScreen() {
   };
 
   const confirmAndRestore = (backup: any) => {
+    const tripCount = backup.data.trips?.length ?? 0;
+    const tripInfo = tripCount > 0 ? `\n🗺️ ${tripCount} trip history record(s)` : '';
+
     Alert.alert(
       '⚠️ Replace All Data?',
-      `This will PERMANENTLY WIPE your current data and restore from the selected backup.\n\nBackup contains:\n🚗 ${backup.data.vehicles.length} vehicle(s)\n⛽ ${backup.data.fuel_entries.length} fuel entries\n🔧 ${backup.data.service_records.length} service records\n💸 ${backup.data.expenses.length} expenses\n📄 ${backup.data.documents.length} documents\n\nThere is NO UNDO. Continue?`,
+      `This will PERMANENTLY WIPE your current data and restore from the selected backup.\n\nBackup contains:\n🚗 ${backup.data.vehicles.length} vehicle(s)\n⛽ ${backup.data.fuel_entries.length} fuel entries\n🔧 ${backup.data.service_records.length} service records\n💸 ${backup.data.expenses.length} expenses\n📄 ${backup.data.documents.length} documents${tripInfo}\n\nThere is NO UNDO. Continue?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -331,9 +334,10 @@ export default function SettingsScreen() {
               setOperationModal(null);
               if (result.success && result.counts) {
                 loadVehicles();
+                const restoredTrips = result.counts.trips ? `\n🗺️ ${result.counts.trips} trip(s)` : '';
                 Alert.alert(
                   '🎉 Data Restored!',
-                  `Everything's back!\n\n🚗 ${result.counts.vehicles} vehicle(s)\n⛽ ${result.counts.fuel_entries} fuel entries\n🔧 ${result.counts.service_records} service records\n💸 ${result.counts.expenses} expenses\n📄 ${result.counts.documents} documents\n\nWelcome back! 😄`
+                  `Everything's back!\n\n🚗 ${result.counts.vehicles} vehicle(s)\n⛽ ${result.counts.fuel_entries} fuel entries\n🔧 ${result.counts.service_records} service records\n💸 ${result.counts.expenses} expenses\n📄 ${result.counts.documents} documents${restoredTrips}\n\nWelcome back! 😄`
                 );
               } else {
                 Alert.alert('😨 Restore Failed', result.message);

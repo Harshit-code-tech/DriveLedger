@@ -377,14 +377,39 @@ export function TripDetailModal({
       )}
 
       {/* ── GPS Timeline Section Title ── */}
+      {/* ── GPS Timeline Section Title & Table Header ── */}
       {isGps && (
-        <View style={styles.sectionHeader}>
-          <Text style={[Typography.bodySmall, { color: colors.textSecondary, fontWeight: '700' }]}>
-            GPS LOCATION SAMPLES &amp; VELOCITY TIMELINE
-          </Text>
-          <Text style={[Typography.caption, { color: colors.textTertiary }]}>
-            {processedPoints.length} point{processedPoints.length === 1 ? '' : 's'} recorded
-          </Text>
+        <View style={{ marginTop: Spacing.md }}>
+          <View style={styles.sectionHeader}>
+            <Text style={[Typography.bodySmall, { color: colors.textSecondary, fontWeight: '700' }]}>
+              RECORDED POINT TIMELINE
+            </Text>
+            <Text style={[Typography.caption, { color: colors.textTertiary }]}>
+              {processedPoints.length} point{processedPoints.length === 1 ? '' : 's'} recorded
+            </Text>
+          </View>
+
+          {processedPoints.length > 0 && (
+            <View
+              style={[
+                styles.tableHeaderRow,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <Text style={[styles.colTime, styles.headerText, { color: colors.textSecondary }]}>
+                Time
+              </Text>
+              <Text style={[styles.colSpeed, styles.headerText, { color: colors.textSecondary }]}>
+                GPS speed
+              </Text>
+              <Text style={[styles.colStep, styles.headerText, { color: colors.textSecondary }]}>
+                Since previous
+              </Text>
+              <Text style={[styles.colCum, styles.headerText, { color: colors.textSecondary }]}>
+                Cumulative
+              </Text>
+            </View>
+          )}
         </View>
       )}
     </View>
@@ -400,69 +425,49 @@ export function TripDetailModal({
         {item.isGapBridge && (
           <View style={[styles.gapBridge, { backgroundColor: colors.warningLight, borderColor: colors.warning }]}>
             <Text style={[Typography.caption, { color: colors.warning, fontWeight: '700', fontSize: 11 }]}>
-              ⚠️ Signal Gap Detected: {item.gapDurationSeconds}s elapsed between GPS fixes (distance bridged via Haversine)
+              ⚠️ Signal Gap Detected: {item.gapDurationSeconds}s elapsed between GPS fixes (distance bridged)
             </Text>
           </View>
         )}
 
         <View
           style={[
-            styles.pointRow,
+            styles.tableRow,
             {
-              backgroundColor: isRejected ? colors.background : colors.card,
-              borderColor: isRejected ? colors.borderLight : colors.border,
+              borderBottomColor: colors.borderLight,
+              backgroundColor: isRejected ? colors.background : 'transparent',
               opacity: isRejected ? 0.6 : 1,
             },
           ]}
         >
-          {/* Index & Time */}
-          <View style={styles.pointIndexCol}>
-            <Text style={[styles.pointIndexText, { color: colors.textTertiary }]}>
-              #{item.index}
-            </Text>
-            <Text style={[Typography.caption, { color: colors.text, fontWeight: '600', fontSize: 11 }]}>
-              {item.timeFormatted}
-            </Text>
-          </View>
+          {/* Time */}
+          <Text style={[styles.colTime, styles.cellText, { color: colors.text, fontWeight: '600' }]}>
+            {item.timeFormatted}
+          </Text>
 
-          {/* Point Metrics */}
-          <View style={styles.pointMetricsCol}>
-            <View style={styles.speedAndAccRow}>
-              {/* GPS Point Speed (Instantaneous Doppler) */}
-              <Text style={[Typography.bodySmall, { color: item.gpsSpeedKmh !== null ? colors.primary : colors.textTertiary, fontWeight: '700' }]}>
-                {item.gpsSpeedKmh !== null ? `${item.gpsSpeedKmh} km/h` : 'Unknown speed'}
-              </Text>
+          {/* GPS Speed */}
+          <Text
+            style={[
+              styles.colSpeed,
+              styles.cellText,
+              {
+                color: item.gpsSpeedKmh !== null && item.gpsSpeedKmh > 0 ? colors.primary : colors.textTertiary,
+                fontWeight: item.gpsSpeedKmh !== null && item.gpsSpeedKmh > 0 ? '700' : '500',
+              },
+            ]}
+          >
+            {item.gpsSpeedKmh !== null ? `${item.gpsSpeedKmh} km/h` : '—'}
+          </Text>
 
-              {/* Accuracy */}
-              <Text style={[Typography.caption, { color: colors.textSecondary, fontSize: 11 }]}>
-                {item.accuracy !== null ? `±${Math.round(item.accuracy)}m` : 'Acc: Unknown'}
-              </Text>
-            </View>
+          {/* Since previous point */}
+          <Text style={[styles.colStep, styles.cellText, { color: colors.textSecondary }]}>
+            {item.index === 1 ? '—' : `${Math.round(item.stepMeters)} m`}
+          </Text>
 
-            {/* Derived Segment Speed vs GPS Point Speed */}
-            <View style={styles.segmentDetailRow}>
-              {item.segmentSpeedKmh !== null && (
-                <Text style={[Typography.caption, { color: colors.textTertiary, fontSize: 10 }]}>
-                  Segment avg: {item.segmentSpeedKmh} km/h
-                </Text>
-              )}
-              {isRejected && item.rejection_reason && (
-                <Text style={[Typography.caption, { color: colors.danger, fontWeight: '600', fontSize: 10 }]}>
-                  Filtered: {item.rejection_reason.replace('_', ' ')}
-                </Text>
-              )}
-            </View>
-          </View>
-
-          {/* Step & Cumulative Distance */}
-          <View style={styles.pointDistanceCol}>
-            <Text style={[Typography.bodySmall, { color: colors.text, fontWeight: '700', textAlign: 'right' }]}>
-              {item.cumulativeKm.toFixed(2)} km
-            </Text>
-            <Text style={[Typography.caption, { color: colors.textTertiary, fontSize: 10, textAlign: 'right' }]}>
-              +{item.stepMeters}m
-            </Text>
-          </View>
+          {/* Cumulative */}
+          <Text style={[styles.colCum, styles.cellText, { color: colors.text, fontWeight: '700' }]}>
+            {item.cumulativeKm.toFixed(2)} km
+          </Text>
         </View>
       </View>
     );
@@ -637,6 +642,45 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
     marginBottom: Spacing.xs,
     paddingBottom: 4,
+  },
+  tableHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: Sizing.radiusSm,
+    borderWidth: 1,
+    marginBottom: 4,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  headerText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  cellText: {
+    fontSize: 12,
+  },
+  colTime: {
+    flex: 1.1,
+    textAlign: 'left',
+  },
+  colSpeed: {
+    flex: 1.0,
+    textAlign: 'center',
+  },
+  colStep: {
+    flex: 1.1,
+    textAlign: 'right',
+  },
+  colCum: {
+    flex: 1.2,
+    textAlign: 'right',
   },
   pointRow: {
     flexDirection: 'row',

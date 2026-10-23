@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "android": {
       "package": "com.driveledger.app",
-      "versionCode": 2,
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#084CB4",
         "foregroundImage": "./assets/images/icon.png",

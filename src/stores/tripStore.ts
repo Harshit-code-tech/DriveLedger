@@ -574,6 +574,9 @@ export const useTripStore = create<TripState>((set, get) => ({
     const thisGeneration = ++currentSessionGeneration;
     const thisTripId = activeTrip.id;
     activeSession.sessionGeneration = thisGeneration;
+    // Clear last accepted sample so the next fix establishes a new anchor point
+    // without accumulating distance traveled while the trip was paused.
+    activeSession.lastAcceptedSample = null;
 
     // Restart timer
     if (timerInterval) clearInterval(timerInterval);
@@ -634,6 +637,7 @@ export const useTripStore = create<TripState>((set, get) => ({
               samplesCount: event.acceptedSamplesCount,
             },
           }));
+          maybeSyncGpsWidget();
         });
         trackingResumed = true;
       }
@@ -715,7 +719,9 @@ export const useTripStore = create<TripState>((set, get) => ({
     const acceptedPoints = storedLocations.filter((l) => l.is_rejected === 0);
 
     let finalDistanceKm = 0;
-    if (acceptedPoints.length >= 2) {
+    if (currentSession.distanceKm > 0) {
+      finalDistanceKm = Math.round(currentSession.distanceKm * 100) / 100;
+    } else if (acceptedPoints.length >= 2) {
       let totalMeters = 0;
       for (let i = 1; i < acceptedPoints.length; i++) {
         totalMeters += haversineDistance(
@@ -726,9 +732,8 @@ export const useTripStore = create<TripState>((set, get) => ({
         );
       }
       finalDistanceKm = Math.round((totalMeters / 1000) * 100) / 100;
-    } else if (acceptedPoints.length === 0 && currentSession.distanceKm > 0) {
-      // In-memory fallback if locations read had an anomaly
-      finalDistanceKm = Math.round(currentSession.distanceKm * 100) / 100;
+    } else if (typeof thisTrip.distance_km === 'number' && thisTrip.distance_km > 0) {
+      finalDistanceKm = thisTrip.distance_km;
     }
 
     const finalDurationSeconds = currentSession.elapsedSeconds;
