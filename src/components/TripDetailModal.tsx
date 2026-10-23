@@ -125,12 +125,30 @@ export function TripDetailModal({
         // Calculate step distance if both points are valid
         if (loc.is_rejected === 0) {
           const anchor = prevAccepted || prevLoc;
-          stepMeters = haversineDistance(
-            anchor.latitude,
-            anchor.longitude,
-            loc.latitude,
-            loc.longitude
-          );
+          // Check if anchor and current point span an intentional pause interval
+          let isPauseBoundary = false;
+          if (diagnostics?.pause_intervals && Array.isArray(diagnostics.pause_intervals)) {
+            for (const interval of diagnostics.pause_intervals) {
+              if (
+                anchor.timestamp <= interval.paused_at &&
+                loc.timestamp >= interval.resumed_at
+              ) {
+                isPauseBoundary = true;
+                break;
+              }
+            }
+          }
+
+          if (isPauseBoundary) {
+            stepMeters = 0;
+          } else {
+            stepMeters = haversineDistance(
+              anchor.latitude,
+              anchor.longitude,
+              loc.latitude,
+              loc.longitude
+            );
+          }
           cumMeters += stepMeters;
           prevAccepted = loc;
 
@@ -524,7 +542,19 @@ export function TripDetailModal({
                 <Text style={styles.emptyIcon}>📍</Text>
                 <Text style={[Typography.bodySmall, { color: colors.textSecondary, textAlign: 'center' }]}>
                   {rawLocations.length === 0
-                    ? 'No GPS coordinate points recorded for this trip.'
+                    ? diagnostics?.total_samples_received === 0
+                      ? 'No GPS location fixes were received from device location services.'
+                      : diagnostics &&
+                        diagnostics.rejected_samples_count > 0 &&
+                        diagnostics.accepted_samples_count === 0
+                      ? `${diagnostics.total_samples_received} GPS fix(es) received, but all were filtered due to ${
+                          diagnostics.rejection_counts?.poor_accuracy && diagnostics.rejection_counts.poor_accuracy > 0
+                            ? 'poor accuracy (>35m)'
+                            : diagnostics.rejection_counts?.stationary_drift && diagnostics.rejection_counts.stationary_drift > 0
+                            ? 'stationary drift (<4m)'
+                            : 'signal filtering'
+                        }.`
+                      : 'No GPS coordinate points recorded for this trip.'
                     : '1 coordinate point recorded (stationary baseline).'}
                 </Text>
               </View>

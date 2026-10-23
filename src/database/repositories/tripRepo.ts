@@ -472,7 +472,7 @@ export function recoverInterruptedTrips(): number {
   const now = nowISO();
 
   const dangling = db.getAllSync<{ id: string; start_time: string; distance_km: number }>(
-    "SELECT id, start_time, distance_km FROM trips WHERE status IN ('recording', 'paused') AND deleted_at IS NULL"
+    "SELECT id, start_time, distance_km FROM trips WHERE status = 'recording' AND deleted_at IS NULL"
   );
 
   for (const d of dangling) {

@@ -208,6 +208,23 @@ describe('Trip Repository', () => {
     expect(tripRepo.getActiveTrip(testVehicle.id)).toBeNull();
   });
 
+  test('recoverInterruptedTrips does NOT mark paused trips as interrupted', () => {
+    const pausedTrip = tripRepo.createActiveTrip({
+      vehicle_id: testVehicle.id,
+      purpose: 'Paused errand',
+    });
+    tripRepo.updateTripStatus(pausedTrip.id, 'paused');
+
+    // Run recovery
+    const recoveredCount = tripRepo.recoverInterruptedTrips();
+    expect(recoveredCount).toBe(0);
+
+    // Should remain paused and still be retrieved via getActiveTrip
+    const stillActive = tripRepo.getActiveTrip(testVehicle.id);
+    expect(stillActive?.id).toBe(pausedTrip.id);
+    expect(stillActive?.status).toBe('paused');
+  });
+
   test('finalizes active trip with diagnostics and reads it back', () => {
     const trip = tripRepo.createActiveTrip({
       vehicle_id: testVehicle.id,

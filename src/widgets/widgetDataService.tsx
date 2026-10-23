@@ -439,58 +439,44 @@ export async function getGpsWidgetDataSnapshot(): Promise<GpsTripWidgetData> {
       };
     }
 
-    // Check if there are any unrecovered interrupted trips
-    try {
-      const db = getDatabase();
-      const interruptedTrip = db.getFirstSync<{
-        id: string;
-        distance_km: number;
-        duration_seconds: number;
-        quality_warning: string | null;
-      }>(
-        "SELECT id, distance_km, duration_seconds, quality_warning FROM trips WHERE vehicle_id = ? AND status = 'interrupted' AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1",
-        [vehicle.id]
-      );
+    // Check latest non-discarded trip for this vehicle
+    const vehicleTrips = tripRepo.getTripsByVehicle(vehicle.id);
+    const latestTrip = vehicleTrips && vehicleTrips.length > 0 ? vehicleTrips[0] : null;
 
-      if (interruptedTrip) {
-        return {
-          vehicleId: vehicle.id,
-          vehicleName:
-            vehicle.nickname ||
-            `${vehicle.manufacturer ?? ''} ${vehicle.model ?? ''}`.trim() ||
-            'Vehicle',
-          regNumber: vehicle.registration_number || '',
-          status: 'interrupted',
-          statusText: 'INTERRUPTED',
-          currentDistanceKm: interruptedTrip.distance_km || 0,
-          currentDurationFormatted: formatWidgetDuration(interruptedTrip.duration_seconds || 0),
-          startTimeFormatted: '—',
-          hasLastTrip: false,
-          lastTripDate: '—',
-          lastTripDistanceKm: 0,
-          lastTripDurationFormatted: '—',
-          gpsQuality: 'none',
-          warningText: interruptedTrip.quality_warning || 'Session interrupted unexpectedly',
-          vehicleCount,
-        };
-      }
-    } catch (dbErr) {
-      console.debug('[DriveLedger] Interrupted trip check skipped:', dbErr);
+    if (latestTrip && latestTrip.status === 'interrupted') {
+      return {
+        vehicleId: vehicle.id,
+        vehicleName:
+          vehicle.nickname ||
+          `${vehicle.manufacturer ?? ''} ${vehicle.model ?? ''}`.trim() ||
+          'Vehicle',
+        regNumber: vehicle.registration_number || '',
+        status: 'interrupted',
+        statusText: 'INTERRUPTED',
+        currentDistanceKm: latestTrip.distance_km || 0,
+        currentDurationFormatted: formatWidgetDuration(latestTrip.duration_seconds || 0),
+        startTimeFormatted: '—',
+        hasLastTrip: false,
+        lastTripDate: '—',
+        lastTripDistanceKm: 0,
+        lastTripDurationFormatted: '—',
+        gpsQuality: 'none',
+        warningText: latestTrip.quality_warning || 'Session interrupted unexpectedly',
+        vehicleCount,
+      };
     }
 
     // Idle state: Query latest completed trip
-    const completedTrips = tripRepo.getTripsByVehicle(vehicle.id);
     let hasLastTrip = false;
     let lastTripDate = '—';
     let lastTripDistanceKm = 0;
     let lastTripDurationFormatted = '—';
 
-    if (completedTrips && completedTrips.length > 0) {
-      const last = completedTrips[0];
+    if (latestTrip && latestTrip.status === 'completed') {
       hasLastTrip = true;
-      lastTripDate = shortDateLabel(last.start_time);
-      lastTripDistanceKm = last.distance_km;
-      lastTripDurationFormatted = formatWidgetDuration(last.duration_seconds);
+      lastTripDate = shortDateLabel(latestTrip.start_time);
+      lastTripDistanceKm = latestTrip.distance_km;
+      lastTripDurationFormatted = formatWidgetDuration(latestTrip.duration_seconds);
     }
 
     return {

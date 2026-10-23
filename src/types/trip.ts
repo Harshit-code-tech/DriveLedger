@@ -92,6 +92,10 @@ export interface TripDiagnostics {
   gap_count: number;
   max_gap_seconds: number;
   has_gap_warning: boolean;
+  anchor_needed?: boolean;
+  paused_at?: number;
+  resumed_at?: number;
+  pause_intervals?: { paused_at: number; resumed_at: number }[];
 }
 
 export interface TripLocation {

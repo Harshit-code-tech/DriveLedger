@@ -20,7 +20,7 @@ import { Platform } from 'react-native';
 import type { Vehicle, CreateVehicleInput, UpdateVehicleInput } from '@/types/vehicle';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import { getPreferences, usePreferencesStore } from '@/stores/preferencesStore';
-import { syncWidgetState } from '@/widgets/widgetDataService';
+import { syncWidgetState, syncGpsWidgetState } from '@/widgets/widgetDataService';
 import { storeRegistry } from '@/stores/storeRegistry';
 
 interface VehicleState {
@@ -86,7 +86,10 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
   selectVehicle: (vehicleId: string) => {
     const vehicle = get().vehicles.find((v) => v.id === vehicleId) ?? null;
     set({ selectedVehicle: vehicle });
-    if (Platform.OS === 'android') syncWidgetState();
+    if (Platform.OS === 'android') {
+      syncWidgetState();
+      syncGpsWidgetState();
+    }
   },
 
   addVehicle: (input: CreateVehicleInput) => {

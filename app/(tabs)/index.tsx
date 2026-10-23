@@ -32,7 +32,7 @@ import { daysUntil, formatDisplayDateLong } from '@/utils/date';
 import { formatCurrency, formatMileage, formatOdometer } from '@/utils/format';
 import { estimateFuelLevel, getCurrentMonthTotalSpend, type FuelLevelResult } from '@/utils/statsHelpers';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   RefreshControl,
@@ -200,13 +200,32 @@ export default function HomeScreen() {
     recoverInterruptedTrips();
   }, []);
 
+  const lastProcessedActionKey = useRef<string | null>(null);
+
   // Handle deep link actions (e.g. from Home Screen widgets & launcher shortcuts)
   useEffect(() => {
-    if (params.action === 'active_trip') {
+    if (!params.action) {
+      lastProcessedActionKey.current = null;
+      return;
+    }
+
+    const actionKey = `${params.action}_${params.vehicleId || ''}`;
+    if (lastProcessedActionKey.current === actionKey) {
+      return;
+    }
+    lastProcessedActionKey.current = actionKey;
+
+    const currentAction = params.action;
+    const targetVehicleId = params.vehicleId || selectedVehicle?.id;
+
+    // Immediately consume and clear params from URL so finished trips or re-renders never loop
+    router.setParams({ action: undefined, vehicleId: undefined });
+
+    if (currentAction === 'active_trip') {
       setShowActiveTripModal(true);
-    } else if (params.action === 'start_trip') {
-      const targetVehicleId = params.vehicleId || selectedVehicle?.id;
-      if (recordingState === 'recording' || recordingState === 'paused') {
+    } else if (currentAction === 'start_trip') {
+      const currentRecState = useTripStore.getState().recordingState;
+      if (currentRecState === 'recording' || currentRecState === 'paused') {
         setShowActiveTripModal(true);
       } else if (targetVehicleId) {
         startGpsTrip(targetVehicleId).then((res) => {
@@ -219,13 +238,13 @@ export default function HomeScreen() {
       } else {
         setShowTripHistoryModal(true);
       }
-    } else if (params.action === 'manual_trip') {
+    } else if (currentAction === 'manual_trip') {
       setShowManualTripModal(true);
-    } else if (params.action === 'recover_trip') {
+    } else if (currentAction === 'recover_trip') {
       recoverInterruptedTrips();
       setShowTripReviewModal(true);
     }
-  }, [params.action, params.vehicleId, selectedVehicle?.id, recordingState]);
+  }, [params.action, params.vehicleId, selectedVehicle?.id]);
 
   // ── Data loading ─────────────────────────────────────────────────────
   // useFocusEffect fires on initial mount AND every time this tab gains

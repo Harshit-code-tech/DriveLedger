@@ -187,7 +187,7 @@ export function GpsTripWidget(props: GpsTripWidgetData) {
 
         {/* Right: Status Badge & optional vehicle switcher */}
         <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 5 }}>
-          {d.status === 'idle' && (d.vehicleCount ?? 0) > 1 && (
+          {d.status !== 'recording' && (d.vehicleCount ?? 0) > 1 && (
             <FlexWidget
               style={{
                 backgroundColor: COLORS.surfaceMid,

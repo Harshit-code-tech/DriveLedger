@@ -111,7 +111,18 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
 
   // 2. Load existing persisted locations to determine the last accepted fix
   let lastAccepted: FilteredLocationSample | null = null;
-  if (!needsNewAnchor) {
+  let isAnchorNeeded = needsNewAnchor;
+
+  if (activeTrip.diagnostics) {
+    try {
+      const parsedDiag = JSON.parse(activeTrip.diagnostics);
+      if (parsedDiag && parsedDiag.anchor_needed === true) {
+        isAnchorNeeded = true;
+      }
+    } catch {}
+  }
+
+  if (!isAnchorNeeded) {
     const storedLocations = tripRepo.getTripLocations(activeTrip.id);
     const acceptedExisting = storedLocations.filter((l) => l.is_rejected === 0);
     if (acceptedExisting.length > 0) {
@@ -237,6 +248,8 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
     rejectedCount: currentDiagnostics.rejected_samples_count,
     rejectionCounts: currentDiagnostics.rejection_counts,
   });
+
+  currentDiagnostics.anchor_needed = false;
 
   try {
     tripRepo.updateTrip(activeTrip.id, {

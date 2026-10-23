@@ -558,7 +558,35 @@ export const useTripStore = create<TripState>((set, get) => ({
       }
     }
 
-    tripRepo.updateTripStatus(activeTrip.id, 'paused');
+    let updatedDiagnostics = activeTrip.diagnostics;
+    try {
+      const diagObj: TripDiagnostics = activeTrip.diagnostics
+        ? JSON.parse(activeTrip.diagnostics)
+        : {
+            rejection_counts: {
+              invalid_coordinates: 0,
+              poor_accuracy: 0,
+              unknown_accuracy: 0,
+              stale_or_duplicate_timestamp: 0,
+              stationary_drift: 0,
+              implausible_speed: 0,
+            },
+            total_samples_received: activeSession.totalSamplesReceived,
+            accepted_samples_count: activeSession.acceptedSamplesCount,
+            rejected_samples_count: activeSession.rejectedSamplesCount,
+            gap_count: activeSession.gapCount,
+            max_gap_seconds: activeSession.maxGapSeconds,
+            has_gap_warning: activeSession.hasGaps,
+          };
+      diagObj.anchor_needed = true;
+      diagObj.paused_at = Date.now();
+      updatedDiagnostics = JSON.stringify(diagObj);
+    } catch {}
+
+    tripRepo.updateTrip(activeTrip.id, {
+      status: 'paused',
+      diagnostics: updatedDiagnostics,
+    });
     set({ recordingState: 'paused' });
     void syncGpsWidgetState();
   },
@@ -568,7 +596,45 @@ export const useTripStore = create<TripState>((set, get) => ({
     // Idempotent guard
     if (recordingState !== 'paused' || !activeTrip || !activeSession) return;
 
-    tripRepo.updateTripStatus(activeTrip.id, 'recording');
+    const nowMs = Date.now();
+    let updatedDiagnostics = activeTrip.diagnostics;
+    try {
+      const diagObj: TripDiagnostics = activeTrip.diagnostics
+        ? JSON.parse(activeTrip.diagnostics)
+        : {
+            rejection_counts: {
+              invalid_coordinates: 0,
+              poor_accuracy: 0,
+              unknown_accuracy: 0,
+              stale_or_duplicate_timestamp: 0,
+              stationary_drift: 0,
+              implausible_speed: 0,
+            },
+            total_samples_received: activeSession.totalSamplesReceived,
+            accepted_samples_count: activeSession.acceptedSamplesCount,
+            rejected_samples_count: activeSession.rejectedSamplesCount,
+            gap_count: activeSession.gapCount,
+            max_gap_seconds: activeSession.maxGapSeconds,
+            has_gap_warning: activeSession.hasGaps,
+          };
+      diagObj.anchor_needed = true;
+      diagObj.resumed_at = nowMs;
+      if (!Array.isArray(diagObj.pause_intervals)) {
+        diagObj.pause_intervals = [];
+      }
+      if (diagObj.paused_at) {
+        diagObj.pause_intervals.push({
+          paused_at: diagObj.paused_at,
+          resumed_at: nowMs,
+        });
+      }
+      updatedDiagnostics = JSON.stringify(diagObj);
+    } catch {}
+
+    tripRepo.updateTrip(activeTrip.id, {
+      status: 'recording',
+      diagnostics: updatedDiagnostics,
+    });
     set({ recordingState: 'recording' });
 
     const thisGeneration = ++currentSessionGeneration;
