@@ -21,10 +21,20 @@ import {
   VehicleGlanceWidgetData,
   DEFAULT_WIDGET_DATA,
 } from './VehicleGlanceWidget';
+import {
+  GpsTripWidget,
+  GpsTripWidgetData,
+  DEFAULT_GPS_WIDGET_DATA,
+} from './GpsTripWidget';
+import * as tripRepo from '@/database/repositories/tripRepo';
+import { getDatabase } from '@/database/connection';
 
 const WIDGET_STORAGE_KEY = 'driveledger_widget_data_v2';
 export const WIDGET_NAME = 'VehicleGlanceWidget';
 export const WIDGET_VEHICLE_KEY = 'driveledger_widget_vehicle_id';
+
+export const GPS_WIDGET_NAME = 'GpsTripWidget';
+export const GPS_WIDGET_STORAGE_KEY = 'driveledger_gps_widget_data_v1';
 
 /** Cycles the widget to the next active vehicle and persists the choice. */
 export async function cycleWidgetVehicle(): Promise<void> {
@@ -343,3 +353,201 @@ export async function syncWidgetState(): Promise<void> {
     console.debug('[DriveLedger] Widget sync skipped or not registered:', e);
   }
 }
+
+// ─── GPS Trip Widget Helpers ──────────────────────────────────────────────────
+
+function formatWidgetDuration(seconds: number): string {
+  if (!seconds || seconds <= 0) return '0m';
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (hrs > 0) return `${hrs}h ${mins}m`;
+  return `${mins}m`;
+}
+
+/**
+ * Builds a snapshot for GpsTripWidget reflecting the true shared trip lifecycle.
+ * - Recording / Paused: live metrics from SQLite or active session
+ * - Interrupted: clear notification to recover
+ * - Idle: last completed trip summary or ready prompt
+ */
+export async function getGpsWidgetDataSnapshot(): Promise<GpsTripWidgetData> {
+  try {
+    const vehicles = vehicleRepo.getActiveVehicles();
+    if (!vehicles || vehicles.length === 0) {
+      return DEFAULT_GPS_WIDGET_DATA;
+    }
+
+    const storedId = await AsyncStorage.getItem(WIDGET_VEHICLE_KEY);
+    const { defaultVehicleId } = getPreferences();
+    const vehicle =
+      (storedId ? vehicles.find((v) => String(v.id) === storedId) : null) ??
+      vehicles.find((v) => v.id === defaultVehicleId) ??
+      vehicles[0];
+    const vehicleCount = vehicles.length;
+
+    // Check for an ongoing active trip globally or for this vehicle
+    const activeTrip = tripRepo.getActiveTrip();
+    if (activeTrip) {
+      const activeVehicle =
+        vehicles.find((v) => v.id === activeTrip.vehicle_id) || vehicle;
+
+      let elapsedSeconds = activeTrip.duration_seconds || 0;
+      if (activeTrip.status === 'recording' && activeTrip.start_time) {
+        const startMs = new Date(activeTrip.start_time).getTime();
+        if (!isNaN(startMs)) {
+          elapsedSeconds = Math.max(
+            elapsedSeconds,
+            Math.floor((Date.now() - startMs) / 1000)
+          );
+        }
+      }
+
+      let startTimeFormatted = '—';
+      if (activeTrip.start_time) {
+        try {
+          const d = new Date(activeTrip.start_time);
+          startTimeFormatted = d.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          });
+        } catch {}
+      }
+
+      return {
+        vehicleId: activeVehicle.id,
+        vehicleName:
+          activeVehicle.nickname ||
+          `${activeVehicle.manufacturer ?? ''} ${activeVehicle.model ?? ''}`.trim() ||
+          'Vehicle',
+        regNumber: activeVehicle.registration_number || '',
+        status: activeTrip.status as 'recording' | 'paused',
+        statusText: activeTrip.status.toUpperCase(),
+        currentDistanceKm: activeTrip.distance_km || 0,
+        currentDurationFormatted: formatWidgetDuration(elapsedSeconds),
+        startTimeFormatted,
+        hasLastTrip: false,
+        lastTripDate: '—',
+        lastTripDistanceKm: 0,
+        lastTripDurationFormatted: '—',
+        gpsQuality: 'good',
+        warningText: activeTrip.quality_warning,
+        vehicleCount,
+      };
+    }
+
+    // Check if there are any unrecovered interrupted trips
+    try {
+      const db = getDatabase();
+      const interruptedTrip = db.getFirstSync<{
+        id: string;
+        distance_km: number;
+        duration_seconds: number;
+        quality_warning: string | null;
+      }>(
+        "SELECT id, distance_km, duration_seconds, quality_warning FROM trips WHERE vehicle_id = ? AND status = 'interrupted' AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1",
+        [vehicle.id]
+      );
+
+      if (interruptedTrip) {
+        return {
+          vehicleId: vehicle.id,
+          vehicleName:
+            vehicle.nickname ||
+            `${vehicle.manufacturer ?? ''} ${vehicle.model ?? ''}`.trim() ||
+            'Vehicle',
+          regNumber: vehicle.registration_number || '',
+          status: 'interrupted',
+          statusText: 'INTERRUPTED',
+          currentDistanceKm: interruptedTrip.distance_km || 0,
+          currentDurationFormatted: formatWidgetDuration(interruptedTrip.duration_seconds || 0),
+          startTimeFormatted: '—',
+          hasLastTrip: false,
+          lastTripDate: '—',
+          lastTripDistanceKm: 0,
+          lastTripDurationFormatted: '—',
+          gpsQuality: 'none',
+          warningText: interruptedTrip.quality_warning || 'Session interrupted unexpectedly',
+          vehicleCount,
+        };
+      }
+    } catch (dbErr) {
+      console.debug('[DriveLedger] Interrupted trip check skipped:', dbErr);
+    }
+
+    // Idle state: Query latest completed trip
+    const completedTrips = tripRepo.getTripsByVehicle(vehicle.id);
+    let hasLastTrip = false;
+    let lastTripDate = '—';
+    let lastTripDistanceKm = 0;
+    let lastTripDurationFormatted = '—';
+
+    if (completedTrips && completedTrips.length > 0) {
+      const last = completedTrips[0];
+      hasLastTrip = true;
+      lastTripDate = shortDateLabel(last.start_time);
+      lastTripDistanceKm = last.distance_km;
+      lastTripDurationFormatted = formatWidgetDuration(last.duration_seconds);
+    }
+
+    return {
+      vehicleId: vehicle.id,
+      vehicleName:
+        vehicle.nickname ||
+        `${vehicle.manufacturer ?? ''} ${vehicle.model ?? ''}`.trim() ||
+        'Vehicle',
+      regNumber: vehicle.registration_number || '',
+      status: 'idle',
+      statusText: 'READY',
+      currentDistanceKm: 0,
+      currentDurationFormatted: '0m',
+      startTimeFormatted: '—',
+      hasLastTrip,
+      lastTripDate,
+      lastTripDistanceKm,
+      lastTripDurationFormatted,
+      gpsQuality: 'none',
+      warningText: null,
+      vehicleCount,
+    };
+  } catch (err) {
+    console.warn('[DriveLedger] Failed to build GPS widget snapshot:', err);
+    return DEFAULT_GPS_WIDGET_DATA;
+  }
+}
+
+export async function getCachedGpsWidgetData(): Promise<GpsTripWidgetData | null> {
+  try {
+    const raw = await AsyncStorage.getItem(GPS_WIDGET_STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as GpsTripWidgetData;
+  } catch {}
+  return null;
+}
+
+/**
+ * Pushes updated GPS trip state to the dedicated GpsTripWidget.
+ */
+export async function syncGpsWidgetState(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+
+  try {
+    const data = await getGpsWidgetDataSnapshot();
+    await AsyncStorage.setItem(GPS_WIDGET_STORAGE_KEY, JSON.stringify(data));
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { requestWidgetUpdate } = require('react-native-android-widget');
+      if (typeof requestWidgetUpdate === 'function') {
+        await requestWidgetUpdate({
+          widgetName: GPS_WIDGET_NAME,
+          renderWidget: () => <GpsTripWidget {...data} />,
+        });
+      }
+    } catch (widgetErr) {
+      console.debug('[DriveLedger] Native GPS widget update skipped:', widgetErr);
+    }
+  } catch (e) {
+    console.debug('[DriveLedger] GPS Widget sync skipped or not registered:', e);
+  }
+}
+

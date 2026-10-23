@@ -51,7 +51,7 @@ export type AnyEncryptedBackupEnvelope = PasswordEncryptedBackupEnvelope;
 // ─── Core Data Shape ─────────────────────────────────────────────────
 
 import type { MaintenanceComponent, MaintenanceProfile } from '@/types/service';
-import type { Trip } from '@/types/trip';
+import type { Trip, TripLocation } from '@/types/trip';
 
 export interface BackupAttachment {
   filename: string;
@@ -73,6 +73,7 @@ export interface BackupData {
     maintenance_components?: MaintenanceComponent[];
     maintenance_profiles?: MaintenanceProfile[];
     trips?: Trip[];
+    trip_locations?: TripLocation[];
     attachments?: BackupAttachment[];
     preferences?: Preferences;
     checklists?: Record<string, string[]>;
@@ -97,6 +98,7 @@ export interface RestoreResult {
     maintenance_components?: number;
     maintenance_profiles?: number;
     trips?: number;
+    trip_locations?: number;
     expenses: number;
     documents: number;
     attachments?: number;

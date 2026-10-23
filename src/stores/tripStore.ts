@@ -42,6 +42,7 @@ import {
   isBackgroundLocationUpdatesActive,
   addBackgroundLocationListener,
 } from '@/tasks/backgroundLocationTask';
+import { syncGpsWidgetState } from '@/widgets/widgetDataService';
 
 interface ActiveTripSession {
   sessionGeneration: number;
@@ -129,6 +130,15 @@ function determineGpsQuality(accuracy: number | null | undefined): 'good' | 'fai
   return 'good';
 }
 
+let lastWidgetSyncTimestamp = 0;
+function maybeSyncGpsWidget(): void {
+  const now = Date.now();
+  if (now - lastWidgetSyncTimestamp >= 30000) {
+    lastWidgetSyncTimestamp = now;
+    void syncGpsWidgetState();
+  }
+}
+
 function handleLocationCallback(
   loc: Location.LocationObject,
   session: ActiveTripSession,
@@ -198,6 +208,8 @@ function handleLocationCallback(
       samplesCount: session.acceptedSamplesCount,
     },
   }));
+
+  maybeSyncGpsWidget();
 }
 
 export const useTripStore = create<TripState>((set, get) => ({
@@ -257,6 +269,9 @@ export const useTripStore = create<TripState>((set, get) => ({
   recoverInterruptedTrips: () => {
     try {
       const count = tripRepo.recoverInterruptedTrips();
+      if (count > 0) {
+        void syncGpsWidgetState();
+      }
       return count;
     } catch {
       return 0;
@@ -497,6 +512,7 @@ export const useTripStore = create<TripState>((set, get) => ({
         console.warn('[tripStore] Background tracking start non-fatal error:', bgErr);
       }
 
+      void syncGpsWidgetState();
       return { success: true };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to start GPS trip';
@@ -544,6 +560,7 @@ export const useTripStore = create<TripState>((set, get) => ({
 
     tripRepo.updateTripStatus(activeTrip.id, 'paused');
     set({ recordingState: 'paused' });
+    void syncGpsWidgetState();
   },
 
   resumeGpsTrip: async () => {
@@ -653,6 +670,7 @@ export const useTripStore = create<TripState>((set, get) => ({
         set({ error: msg });
       }
     }
+    void syncGpsWidgetState();
   },
 
   finishGpsTrip: async (options?: FinishTripOptions) => {
@@ -779,6 +797,7 @@ export const useTripStore = create<TripState>((set, get) => ({
       },
     });
 
+    void syncGpsWidgetState();
     return finalizedTrip;
   },
 
@@ -829,6 +848,7 @@ export const useTripStore = create<TripState>((set, get) => ({
         samplesCount: 0,
       },
     });
+    void syncGpsWidgetState();
   },
 
   addManualTrip: (input: CreateManualTripInput) => {

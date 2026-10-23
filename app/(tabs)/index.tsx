@@ -144,7 +144,7 @@ export default function HomeScreen() {
   const colors = useThemeColors();
   const router = useRouter();
 
-  const params = useLocalSearchParams<{ vehicleId?: string }>();
+  const params = useLocalSearchParams<{ vehicleId?: string; action?: string }>();
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
   const selectVehicle = useVehicleStore((s) => s.selectVehicle);
   const loadVehicles = useVehicleStore((s) => s.loadVehicles);
@@ -154,6 +154,19 @@ export default function HomeScreen() {
       selectVehicle(params.vehicleId);
     }
   }, [params.vehicleId]);
+
+  useEffect(() => {
+    if (params.action === 'active_trip') {
+      setShowActiveTripModal(true);
+    } else if (params.action === 'start_trip') {
+      setShowTripHistoryModal(true);
+    } else if (params.action === 'manual_trip') {
+      setShowManualTripModal(true);
+    } else if (params.action === 'recover_trip') {
+      recoverInterruptedTrips();
+      setShowTripReviewModal(true);
+    }
+  }, [params.action]);
 
   const entries = useFuelStore((s) => s.entries);
   const stats = useFuelStore((s) => s.stats);

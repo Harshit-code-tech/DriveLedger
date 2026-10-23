@@ -115,6 +115,8 @@ export function isValidMaintenanceProfile(p: unknown): boolean {
   );
 }
 
+import type { Trip, TripLocation } from '@/types/trip';
+
 export function isValidTrip(t: unknown): boolean {
   if (!t || typeof t !== 'object') return false;
   const r = t as Record<string, unknown>;
@@ -125,6 +127,28 @@ export function isValidTrip(t: unknown): boolean {
     ['gps', 'manual'].includes(r.trip_type as string) &&
     typeof r.status === 'string' &&
     typeof r.start_time === 'string'
+  );
+}
+
+export function isValidTripLocation(l: unknown): boolean {
+  if (!l || typeof l !== 'object') return false;
+  const r = l as Record<string, unknown>;
+  return (
+    typeof r.id === 'string' &&
+    r.id.length > 0 &&
+    typeof r.trip_id === 'string' &&
+    r.trip_id.length > 0 &&
+    typeof r.latitude === 'number' &&
+    Number.isFinite(r.latitude) &&
+    r.latitude >= -90 &&
+    r.latitude <= 90 &&
+    typeof r.longitude === 'number' &&
+    Number.isFinite(r.longitude) &&
+    r.longitude >= -180 &&
+    r.longitude <= 180 &&
+    typeof r.timestamp === 'number' &&
+    Number.isFinite(r.timestamp) &&
+    r.timestamp > 0
   );
 }
 
@@ -186,8 +210,21 @@ export function validateSchema(obj: Record<string, unknown>): {
     ? (rawData.maintenance_profiles as unknown[]).filter(isValidMaintenanceProfile)
     : undefined;
 
-  const trips = Array.isArray(rawData.trips)
-    ? (rawData.trips as unknown[]).filter(isValidTrip)
+  const trips: Trip[] | undefined = Array.isArray(rawData.trips)
+    ? (rawData.trips as unknown[]).filter(isValidTrip) as Trip[]
+    : undefined;
+
+  const validTripIds = new Set((trips || []).map((t) => t.id));
+
+  const tripLocations: TripLocation[] | undefined = Array.isArray(rawData.trip_locations)
+    ? (rawData.trip_locations as unknown[]).filter((loc) => {
+        if (!isValidTripLocation(loc)) return false;
+        // Referential integrity check: only keep locations whose trip_id is in the valid trips list
+        if (!validTripIds.has((loc as Record<string, unknown>).trip_id as string)) {
+          return false;
+        }
+        return true;
+      }) as TripLocation[]
     : undefined;
 
   const attachments = Array.isArray(rawData.attachments)
@@ -211,7 +248,8 @@ export function validateSchema(obj: Record<string, unknown>): {
       documents,
       maintenance_components: maintenanceComponents as any,
       maintenance_profiles: maintenanceProfiles as any,
-      trips: trips as any,
+      trips,
+      trip_locations: tripLocations,
       attachments: attachments as any,
       preferences,
       checklists,

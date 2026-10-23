@@ -31,7 +31,7 @@ import type { VehicleDocument } from '@/types/document';
 import type { Expense } from '@/types/expense';
 import type { FuelEntry } from '@/types/fuel';
 import type { ServiceRecord, MaintenanceComponent, MaintenanceProfile } from '@/types/service';
-import type { Trip } from '@/types/trip';
+import type { Trip, TripLocation } from '@/types/trip';
 import type { Vehicle } from '@/types/vehicle';
 import { nowISO } from '@/utils/date';
 import Constants from 'expo-constants';
@@ -91,6 +91,7 @@ export function createBackup(): BackupResult {
     let maintenanceComponents: MaintenanceComponent[] = [];
     let maintenanceProfiles: MaintenanceProfile[] = [];
     let trips: Trip[] = [];
+    let tripLocations: TripLocation[] = [];
 
     db.withTransactionSync(() => {
       vehicles = db.getAllSync<Vehicle>('SELECT * FROM vehicles');
@@ -113,6 +114,13 @@ export function createBackup(): BackupResult {
       } catch {
         trips = [];
       }
+      try {
+        tripLocations = db.getAllSync<TripLocation>(
+          'SELECT tl.* FROM trip_locations tl INNER JOIN trips t ON tl.trip_id = t.id ORDER BY tl.trip_id, tl.timestamp ASC'
+        );
+      } catch {
+        tripLocations = [];
+      }
     });
 
     const backup: BackupData = {
@@ -129,6 +137,7 @@ export function createBackup(): BackupResult {
         maintenance_components: maintenanceComponents,
         maintenance_profiles: maintenanceProfiles,
         trips,
+        trip_locations: tripLocations,
       },
     };
 
@@ -140,7 +149,8 @@ export function createBackup(): BackupResult {
       documents.length +
       maintenanceComponents.length +
       maintenanceProfiles.length +
-      trips.length;
+      trips.length +
+      tripLocations.length;
 
     return { success: true, message: `Backup created with ${total} records.`, backup };
   } catch (e) {
@@ -788,8 +798,8 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
             db.runSync(
               `INSERT INTO trips (id, vehicle_id, trip_type, status, start_time, end_time,
                start_odometer, end_odometer, distance_km, duration_seconds, purpose, notes,
-               sample_count, quality_warning, created_at, updated_at, deleted_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               sample_count, quality_warning, diagnostics, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
               [
                 t.id,
                 t.vehicle_id,
@@ -805,9 +815,38 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
                 t.notes ?? null,
                 t.sample_count ?? 0,
                 t.quality_warning ?? null,
+                t.diagnostics ?? null,
                 t.created_at || nowISO(),
                 t.updated_at || nowISO(),
                 t.deleted_at ?? null,
+              ]
+            );
+          } catch {}
+        }
+      }
+
+      // 3e. Trip locations
+      if (backup.data.trip_locations && backup.data.trip_locations.length > 0) {
+        for (const loc of backup.data.trip_locations) {
+          try {
+            db.runSync(
+              `INSERT INTO trip_locations (
+                id, trip_id, latitude, longitude, accuracy, altitude,
+                speed, heading, timestamp, is_rejected, rejection_reason, created_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                loc.id,
+                loc.trip_id,
+                loc.latitude,
+                loc.longitude,
+                loc.accuracy ?? null,
+                loc.altitude ?? null,
+                loc.speed ?? null,
+                loc.heading ?? null,
+                loc.timestamp,
+                typeof loc.is_rejected === 'number' ? loc.is_rejected : (loc.is_rejected ? 1 : 0),
+                loc.rejection_reason ?? null,
+                loc.created_at || nowISO(),
               ]
             );
           } catch {}
@@ -938,6 +977,7 @@ export function restoreFromValidated(backup: BackupData): RestoreResult {
         maintenance_components: backup.data.maintenance_components?.length ?? 0,
         maintenance_profiles: backup.data.maintenance_profiles?.length ?? 0,
         trips: backup.data.trips?.length ?? 0,
+        trip_locations: backup.data.trip_locations?.length ?? 0,
         expenses: backup.data.expenses.length,
         documents: backup.data.documents.length,
       },

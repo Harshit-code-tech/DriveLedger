@@ -109,6 +109,18 @@
               "resizeMode": "horizontal|vertical",
               "previewImage": "./assets/images/widgets/widget-preview.png",
               "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "GpsTripWidget",
+              "label": "DriveLedger GPS Tracker",
+              "description": "Live GPS trip status, distance & quick controls",
+              "minWidth": "180dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 3,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "previewImage": "./assets/images/widgets/widget-preview.png",
+              "updatePeriodMillis": 900000
             }
           ]
         }

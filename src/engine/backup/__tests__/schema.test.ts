@@ -15,6 +15,8 @@ import {
   isValidServiceRecord,
   isValidExpense,
   isValidDocument,
+  isValidTrip,
+  isValidTripLocation,
   validateSchema,
 } from '../schema';
 
@@ -190,5 +192,118 @@ describe('validateSchema', () => {
     expect(result!.data.service_records).toEqual([]);
     expect(result!.data.expenses).toEqual([]);
     expect(result!.data.documents).toEqual([]);
+    expect(result!.data.trips).toBeUndefined();
+    expect(result!.data.trip_locations).toBeUndefined();
+  });
+
+  it('validates and includes trips and trip_locations when present', () => {
+    const trip = {
+      id: 't1',
+      vehicle_id: 'v1',
+      trip_type: 'gps',
+      status: 'completed',
+      start_time: '2026-03-01T10:00:00.000Z',
+    };
+    const loc = {
+      id: 'loc1',
+      trip_id: 't1',
+      latitude: 12.9716,
+      longitude: 77.5946,
+      timestamp: 1709287200000,
+    };
+    const result = validateSchema({
+      ...CANONICAL,
+      data: {
+        ...CANONICAL.data,
+        trips: [trip],
+        trip_locations: [loc],
+      },
+    } as any);
+
+    expect(result).not.toBeNull();
+    expect(result!.data.trips).toHaveLength(1);
+    expect(result!.data.trip_locations).toHaveLength(1);
+    expect(result!.data.trip_locations![0].id).toBe('loc1');
+  });
+
+  it('filters out orphan trip_locations whose trip_id is not in trips', () => {
+    const trip = {
+      id: 't1',
+      vehicle_id: 'v1',
+      trip_type: 'gps',
+      status: 'completed',
+      start_time: '2026-03-01T10:00:00.000Z',
+    };
+    const validLoc = {
+      id: 'loc1',
+      trip_id: 't1',
+      latitude: 12.9716,
+      longitude: 77.5946,
+      timestamp: 1709287200000,
+    };
+    const orphanLoc = {
+      id: 'loc2',
+      trip_id: 'non_existent_trip',
+      latitude: 12.9716,
+      longitude: 77.5946,
+      timestamp: 1709287201000,
+    };
+    const result = validateSchema({
+      ...CANONICAL,
+      data: {
+        ...CANONICAL.data,
+        trips: [trip],
+        trip_locations: [validLoc, orphanLoc],
+      },
+    } as any);
+
+    expect(result).not.toBeNull();
+    expect(result!.data.trip_locations).toHaveLength(1);
+    expect(result!.data.trip_locations![0].id).toBe('loc1');
+  });
+});
+
+// ─── isValidTripLocation ─────────────────────────────────────────────
+
+describe('isValidTripLocation', () => {
+  const VALID_LOC = {
+    id: 'loc-1',
+    trip_id: 'trip-1',
+    latitude: 19.076,
+    longitude: 72.8777,
+    accuracy: 4.5,
+    altitude: 15.2,
+    speed: 12.3,
+    heading: 90.0,
+    timestamp: 1774000000000,
+  };
+
+  it('accepts a complete valid trip location', () => {
+    expect(isValidTripLocation(VALID_LOC)).toBe(true);
+  });
+
+  it('rejects null or non-object', () => {
+    expect(isValidTripLocation(null)).toBe(false);
+    expect(isValidTripLocation('not an object')).toBe(false);
+  });
+
+  it('rejects empty id or trip_id', () => {
+    expect(isValidTripLocation({ ...VALID_LOC, id: '' })).toBe(false);
+    expect(isValidTripLocation({ ...VALID_LOC, trip_id: '' })).toBe(false);
+  });
+
+  it('rejects invalid coordinates', () => {
+    expect(isValidTripLocation({ ...VALID_LOC, latitude: 91 })).toBe(false);
+    expect(isValidTripLocation({ ...VALID_LOC, latitude: -91 })).toBe(false);
+    expect(isValidTripLocation({ ...VALID_LOC, longitude: 181 })).toBe(false);
+    expect(isValidTripLocation({ ...VALID_LOC, longitude: -181 })).toBe(false);
+    expect(isValidTripLocation({ ...VALID_LOC, latitude: NaN })).toBe(false);
+    expect(isValidTripLocation({ ...VALID_LOC, longitude: Infinity })).toBe(false);
+  });
+
+  it('rejects invalid or non-positive timestamp', () => {
+    expect(isValidTripLocation({ ...VALID_LOC, timestamp: 0 })).toBe(false);
+    expect(isValidTripLocation({ ...VALID_LOC, timestamp: -1 })).toBe(false);
+    expect(isValidTripLocation({ ...VALID_LOC, timestamp: NaN })).toBe(false);
   });
 });
