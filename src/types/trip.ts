@@ -160,6 +160,7 @@ export interface CreateManualTripInput {
 }
 
 export interface FinishTripOptions {
+  distance_km?: number;
   notes?: string;
   purpose?: string;
   endOdometer?: number | null;

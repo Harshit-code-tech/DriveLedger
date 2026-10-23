@@ -12,6 +12,13 @@ import {
   getGpsWidgetDataSnapshot,
   getCachedGpsWidgetData,
 } from './widgetDataService';
+import {
+  startGpsTripCoordinator,
+  pauseGpsTripCoordinator,
+  resumeGpsTripCoordinator,
+  finishGpsTripCoordinator,
+  cycleNextVehicleCoordinator,
+} from '@/services/tripCoordinatorService';
 
 /**
  * Android Background Headless Widget Task Handler
@@ -23,22 +30,53 @@ import {
  * - User clicks an interactive element (WIDGET_CLICK)
  */
 export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
-  const { widgetAction, widgetInfo, renderWidget, clickAction } = props;
+  const { widgetAction, widgetInfo, renderWidget, clickAction, clickActionData } = props;
 
   // ── Handler for Dedicated GpsTripWidget ──
   if (widgetInfo?.widgetName === GPS_WIDGET_NAME) {
     switch (widgetAction) {
-      case 'WIDGET_CLICK':
-        if (clickAction === 'SWITCH_VEHICLE') {
-          await cycleWidgetVehicle();
-          try {
-            const data = await getGpsWidgetDataSnapshot();
-            renderWidget(<GpsTripWidget {...(data ?? DEFAULT_GPS_WIDGET_DATA)} />);
-          } catch (err) {
-            console.warn('[DriveLedger] Error re-rendering GPS widget after switch:', err);
+      case 'WIDGET_CLICK': {
+        const interactionId = typeof clickActionData?.interactionId === 'string'
+          ? clickActionData.interactionId
+          : undefined;
+
+        try {
+          if (clickAction === 'START_TRIP') {
+            const vehicleId = typeof clickActionData?.vehicleId === 'string'
+              ? clickActionData.vehicleId
+              : undefined;
+            await startGpsTripCoordinator(vehicleId, interactionId);
+          } else if (clickAction === 'PAUSE_TRIP') {
+            const tripId = typeof clickActionData?.tripId === 'string'
+              ? clickActionData.tripId
+              : undefined;
+            await pauseGpsTripCoordinator(tripId, interactionId);
+          } else if (clickAction === 'RESUME_TRIP') {
+            const tripId = typeof clickActionData?.tripId === 'string'
+              ? clickActionData.tripId
+              : undefined;
+            await resumeGpsTripCoordinator(tripId, interactionId);
+          } else if (clickAction === 'FINISH_TRIP') {
+            const tripId = typeof clickActionData?.tripId === 'string'
+              ? clickActionData.tripId
+              : undefined;
+            await finishGpsTripCoordinator(tripId, undefined, interactionId);
+          } else if (clickAction === 'SWITCH_NEXT_VEHICLE' || clickAction === 'SWITCH_VEHICLE') {
+            await cycleNextVehicleCoordinator(interactionId);
           }
+        } catch (err) {
+          console.warn('[DriveLedger] Error executing widget action:', clickAction, err);
+        }
+
+        // Render the resulting snapshot immediately following action execution
+        try {
+          const data = await getGpsWidgetDataSnapshot();
+          renderWidget(<GpsTripWidget {...(data ?? DEFAULT_GPS_WIDGET_DATA)} />);
+        } catch (renderErr) {
+          console.warn('[DriveLedger] Error re-rendering GPS widget after action:', renderErr);
         }
         break;
+      }
 
       case 'WIDGET_ADDED':
       case 'WIDGET_UPDATE':
@@ -116,4 +154,3 @@ export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
       break;
   }
 }
-

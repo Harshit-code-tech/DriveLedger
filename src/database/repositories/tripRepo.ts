@@ -484,7 +484,7 @@ export function recoverInterruptedTrips(): number {
     let calculatedDistKm = d.distance_km || 0;
     let approxDuration = 0;
 
-    if (storedLocs.length >= 2) {
+    if (calculatedDistKm === 0 && storedLocs.length >= 2) {
       let totalMeters = 0;
       for (let i = 1; i < storedLocs.length; i++) {
         totalMeters += haversineDistance(
@@ -495,6 +495,9 @@ export function recoverInterruptedTrips(): number {
         );
       }
       calculatedDistKm = Math.round((totalMeters / 1000) * 100) / 100;
+    }
+
+    if (storedLocs.length >= 2) {
       const startMs = storedLocs[0].timestamp;
       const endMs = storedLocs[storedLocs.length - 1].timestamp;
       if (endMs > startMs) {

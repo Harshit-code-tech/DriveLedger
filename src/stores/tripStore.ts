@@ -43,6 +43,7 @@ import {
   addBackgroundLocationListener,
 } from '@/tasks/backgroundLocationTask';
 import { syncGpsWidgetState } from '@/widgets/widgetDataService';
+import { calculateDurableTripDistance } from '@/services/tripCoordinatorService';
 
 interface ActiveTripSession {
   sessionGeneration: number;
@@ -780,26 +781,27 @@ export const useTripStore = create<TripState>((set, get) => ({
       }
     }
 
-    // Derive final distance from persisted accepted points in SQLite
+    // Derive final distance from persisted accepted points in SQLite, respecting pause intervals
     const storedLocations = tripRepo.getTripLocations(thisTrip.id);
     const acceptedPoints = storedLocations.filter((l) => l.is_rejected === 0);
+
+    let pauseIntervals: Array<{ paused_at: number; resumed_at: number }> = [];
+    if (thisTrip.diagnostics) {
+      try {
+        const parsed = JSON.parse(thisTrip.diagnostics);
+        if (parsed && Array.isArray(parsed.pause_intervals)) {
+          pauseIntervals = parsed.pause_intervals;
+        }
+      } catch {}
+    }
 
     let finalDistanceKm = 0;
     if (currentSession.distanceKm > 0) {
       finalDistanceKm = Math.round(currentSession.distanceKm * 100) / 100;
-    } else if (acceptedPoints.length >= 2) {
-      let totalMeters = 0;
-      for (let i = 1; i < acceptedPoints.length; i++) {
-        totalMeters += haversineDistance(
-          acceptedPoints[i - 1].latitude,
-          acceptedPoints[i - 1].longitude,
-          acceptedPoints[i].latitude,
-          acceptedPoints[i].longitude
-        );
-      }
-      finalDistanceKm = Math.round((totalMeters / 1000) * 100) / 100;
     } else if (typeof thisTrip.distance_km === 'number' && thisTrip.distance_km > 0) {
       finalDistanceKm = thisTrip.distance_km;
+    } else if (acceptedPoints.length >= 2) {
+      finalDistanceKm = calculateDurableTripDistance(acceptedPoints, pauseIntervals);
     }
 
     const finalDurationSeconds = currentSession.elapsedSeconds;
@@ -952,6 +954,11 @@ export const useTripStore = create<TripState>((set, get) => ({
 
   clearError: () => set({ error: null }),
 }));
+
+// Register with storeRegistry to allow background tasks to refresh trip store
+storeRegistry.registerRefreshTrips((vehicleId: string) => {
+  useTripStore.getState().loadTrips(vehicleId);
+});
 
 /**
  * Testing-only helper to cleanly reset module-level tracking references

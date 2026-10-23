@@ -33,6 +33,7 @@ type VoidFn = () => void;
 
 class StoreRegistry {
   private _refreshVehicles: VoidFn | null = null;
+  private _refreshTrips: ((vehicleId: string) => void) | null = null;
 
   /**
    * Called once by vehicleStore to register its loadVehicles action.
@@ -49,6 +50,20 @@ class StoreRegistry {
    */
   refreshVehicles(): void {
     this._refreshVehicles?.();
+  }
+
+  /**
+   * Called by useTripStore to register its loadTrips action.
+   */
+  registerRefreshTrips(fn: (vehicleId: string) => void): void {
+    this._refreshTrips = fn;
+  }
+
+  /**
+   * Triggers a trip reload for the active vehicle when trips change in background.
+   */
+  refreshTrips(vehicleId: string): void {
+    this._refreshTrips?.(vehicleId);
   }
 }
 
