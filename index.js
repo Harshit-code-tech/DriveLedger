@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import './src/tasks/backgroundLocationTask';
 import 'expo-router/entry';
 
 // Register Android Home Screen Widget task handler

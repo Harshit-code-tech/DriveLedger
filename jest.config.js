@@ -16,6 +16,7 @@ module.exports = {
     '^react-native$': '<rootDir>/src/__mocks__/react-native.ts',
     '^expo$': '<rootDir>/src/__mocks__/expo.ts',
     '^expo-location$': '<rootDir>/src/__mocks__/expo-location.ts',
+    '^expo-task-manager$': '<rootDir>/src/__mocks__/expo-task-manager.ts',
     '^react-native-android-widget$': '<rootDir>/src/__mocks__/react-native-android-widget.ts',
   },
   transform: {

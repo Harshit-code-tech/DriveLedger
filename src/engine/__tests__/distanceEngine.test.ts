@@ -146,4 +146,82 @@ describe('DistanceEngine — Noise & Drift Filtering', () => {
     expect(res3.rejected).toBe(false);
     expect(res3.deltaKm).toBeGreaterThan(0.08);
   });
+
+  test('treats missing, null, NaN, or non-positive accuracy as unknown_accuracy (not 0 error)', () => {
+    // Single sample evaluation
+    const fixNullAcc: RawLocationSample = {
+      latitude: 28.6310,
+      longitude: 77.2160,
+      accuracy: null,
+      timestamp: baseTime,
+    };
+    const resNull = processLocationSample(fixNullAcc, null);
+    expect(resNull.rejected).toBe(true);
+    expect(resNull.reason).toBe('unknown_accuracy');
+
+    const fixUndefinedAcc: RawLocationSample = {
+      latitude: 28.6310,
+      longitude: 77.2160,
+      timestamp: baseTime,
+    };
+    const resUndef = processLocationSample(fixUndefinedAcc, null);
+    expect(resUndef.rejected).toBe(true);
+    expect(resUndef.reason).toBe('unknown_accuracy');
+
+    const fixZeroAcc: RawLocationSample = {
+      latitude: 28.6310,
+      longitude: 77.2160,
+      accuracy: 0,
+      timestamp: baseTime,
+    };
+    const resZero = processLocationSample(fixZeroAcc, null);
+    expect(resZero.rejected).toBe(true);
+    expect(resZero.reason).toBe('unknown_accuracy');
+
+    // Batch evaluation
+    const samples: RawLocationSample[] = [
+      { latitude: 28.6310, longitude: 77.2160, accuracy: 10, timestamp: baseTime },
+      { latitude: 28.6320, longitude: 77.2170, accuracy: null, timestamp: baseTime + 5000 },
+      { latitude: 28.6330, longitude: 77.2180, accuracy: -5, timestamp: baseTime + 10000 },
+      { latitude: 28.6340, longitude: 77.2190, accuracy: 15, timestamp: baseTime + 15000 },
+    ];
+    const result = filterAndCalculateTripDistance(samples);
+    expect(result.rejectionCounts.unknown_accuracy).toBe(2);
+    expect(result.acceptedSamplesCount).toBe(2);
+  });
+
+  test('flags gap warning even if the point after a gap is rejected', () => {
+    const anchor: RawLocationSample = {
+      latitude: 28.6310,
+      longitude: 77.2160,
+      accuracy: 10,
+      timestamp: baseTime,
+    };
+
+    // Point arrives 200 seconds later (> 120s), but has poor accuracy (50m)
+    const noisyAfterGap: RawLocationSample = {
+      latitude: 28.6350,
+      longitude: 77.2200,
+      accuracy: 50, // Poor accuracy
+      timestamp: baseTime + 200000,
+    };
+
+    const res = processLocationSample(noisyAfterGap, anchor);
+    expect(res.rejected).toBe(true);
+    expect(res.reason).toBe('poor_accuracy');
+    expect(res.gapDetected).toBe(true);
+    expect(res.gapDurationSeconds).toBe(200);
+
+    // Drift point arriving 180 seconds later
+    const driftAfterGap: RawLocationSample = {
+      latitude: 28.63101,
+      longitude: 77.21601,
+      accuracy: 10,
+      timestamp: baseTime + 180000,
+    };
+    const resDrift = processLocationSample(driftAfterGap, anchor);
+    expect(resDrift.rejected).toBe(true);
+    expect(resDrift.reason).toBe('stationary_drift');
+    expect(resDrift.gapDetected).toBe(true);
+  });
 });

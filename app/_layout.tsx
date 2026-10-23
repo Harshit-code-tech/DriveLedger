@@ -8,6 +8,7 @@
  * - Vehicle data loading
  * - The Stack navigator that wraps the tab layout
  */
+import '@/tasks/backgroundLocationTask';
 import AnimatedSplash from '@/components/AnimatedSplash';
 import { getDatabase } from '@/database/connection';
 import {

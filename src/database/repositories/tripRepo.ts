@@ -14,6 +14,7 @@ import { getDatabase } from '../connection';
 import { buildSafeUpdate } from '../safeUpdate';
 import { generateUUID } from '@/utils/uuid';
 import { nowISO } from '@/utils/date';
+import { haversineDistance } from '@/engine/distanceEngine';
 import type {
   Trip,
   TripLocation,
@@ -21,6 +22,7 @@ import type {
   CreateManualTripInput,
   UpdateTripInput,
   FilteredLocationSample,
+  TripDiagnostics,
 } from '@/types/trip';
 
 // ─── CREATE ──────────────────────────────────────────────────────────
@@ -48,6 +50,7 @@ export function createTrip(input: CreateTripInput): Trip {
     notes: input.notes?.trim() || null,
     sample_count: 0,
     quality_warning: null,
+    diagnostics: input.diagnostics ?? null,
     created_at: now,
     updated_at: now,
     deleted_at: null,
@@ -57,9 +60,9 @@ export function createTrip(input: CreateTripInput): Trip {
     `INSERT INTO trips (
       id, vehicle_id, trip_type, status, start_time, end_time,
       start_odometer, end_odometer, distance_km, duration_seconds,
-      purpose, notes, sample_count, quality_warning,
+      purpose, notes, sample_count, quality_warning, diagnostics,
       created_at, updated_at, deleted_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       trip.id,
       trip.vehicle_id,
@@ -75,6 +78,7 @@ export function createTrip(input: CreateTripInput): Trip {
       trip.notes,
       trip.sample_count,
       trip.quality_warning,
+      trip.diagnostics ?? null,
       trip.created_at,
       trip.updated_at,
       trip.deleted_at,
@@ -125,6 +129,7 @@ export function createManualTrip(input: CreateManualTripInput): Trip {
     notes: input.notes?.trim() || null,
     sample_count: 0,
     quality_warning: null,
+    diagnostics: null,
     created_at: now,
     updated_at: now,
     deleted_at: null,
@@ -134,9 +139,9 @@ export function createManualTrip(input: CreateManualTripInput): Trip {
     `INSERT INTO trips (
       id, vehicle_id, trip_type, status, start_time, end_time,
       start_odometer, end_odometer, distance_km, duration_seconds,
-      purpose, notes, sample_count, quality_warning,
+      purpose, notes, sample_count, quality_warning, diagnostics,
       created_at, updated_at, deleted_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       trip.id,
       trip.vehicle_id,
@@ -152,6 +157,7 @@ export function createManualTrip(input: CreateManualTripInput): Trip {
       trip.notes,
       trip.sample_count,
       trip.quality_warning,
+      null,
       trip.created_at,
       trip.updated_at,
       trip.deleted_at,
@@ -218,6 +224,7 @@ export function updateTrip(id: string, input: UpdateTripInput): Trip | null {
     'notes',
     'sample_count',
     'quality_warning',
+    'diagnostics',
   ]);
 
   const { fields, values } = buildSafeUpdate(
@@ -272,6 +279,7 @@ export interface FinalizeTripOptions {
   end_odometer?: number | null;
   has_quality_warnings?: boolean;
   quality_notes?: string | null;
+  diagnostics?: string | TripDiagnostics | null;
 }
 
 /**
@@ -293,6 +301,7 @@ export function finalizeTrip(
   let notes: string | undefined;
   let purpose: string | undefined;
   let endOdo: number | null | undefined;
+  let diagnostics: string | null | undefined;
 
   if (typeof arg2 === 'object') {
     distanceKm = arg2.distance_km;
@@ -301,6 +310,11 @@ export function finalizeTrip(
     notes = arg2.notes ?? undefined;
     purpose = arg2.purpose ?? undefined;
     endOdo = arg2.end_odometer;
+    if (arg2.diagnostics !== undefined) {
+      diagnostics = typeof arg2.diagnostics === 'object' && arg2.diagnostics !== null
+        ? JSON.stringify(arg2.diagnostics)
+        : arg2.diagnostics;
+    }
   } else {
     distanceKm = arg2;
     durationSeconds = arg3 ?? 0;
@@ -334,6 +348,10 @@ export function finalizeTrip(
   if (endOdo !== undefined) {
     updates.push('end_odometer = ?');
     params.push(endOdo);
+  }
+  if (diagnostics !== undefined) {
+    updates.push('diagnostics = ?');
+    params.push(diagnostics);
   }
 
   params.push(id);
@@ -453,22 +471,39 @@ export function recoverInterruptedTrips(): number {
   const db = getDatabase();
   const now = nowISO();
 
-  const dangling = db.getAllSync<{ id: string; start_time: string }>(
-    "SELECT id, start_time FROM trips WHERE status IN ('recording', 'paused') AND deleted_at IS NULL"
+  const dangling = db.getAllSync<{ id: string; start_time: string; distance_km: number }>(
+    "SELECT id, start_time, distance_km FROM trips WHERE status IN ('recording', 'paused') AND deleted_at IS NULL"
   );
 
   for (const d of dangling) {
-    // Check if there are any location points to calculate duration
-    const lastLoc = db.getFirstSync<{ timestamp: number }>(
-      'SELECT timestamp FROM trip_locations WHERE trip_id = ? ORDER BY timestamp DESC LIMIT 1',
+    const storedLocs = db.getAllSync<{ latitude: number; longitude: number; timestamp: number }>(
+      'SELECT latitude, longitude, timestamp FROM trip_locations WHERE trip_id = ? AND is_rejected = 0 ORDER BY timestamp ASC',
       [d.id]
     );
 
+    let calculatedDistKm = d.distance_km || 0;
     let approxDuration = 0;
-    if (lastLoc?.timestamp) {
+
+    if (storedLocs.length >= 2) {
+      let totalMeters = 0;
+      for (let i = 1; i < storedLocs.length; i++) {
+        totalMeters += haversineDistance(
+          storedLocs[i - 1].latitude,
+          storedLocs[i - 1].longitude,
+          storedLocs[i].latitude,
+          storedLocs[i].longitude
+        );
+      }
+      calculatedDistKm = Math.round((totalMeters / 1000) * 100) / 100;
+      const startMs = storedLocs[0].timestamp;
+      const endMs = storedLocs[storedLocs.length - 1].timestamp;
+      if (endMs > startMs) {
+        approxDuration = Math.round((endMs - startMs) / 1000);
+      }
+    } else if (storedLocs.length === 1) {
       const startMs = new Date(d.start_time).getTime();
-      if (!isNaN(startMs) && lastLoc.timestamp > startMs) {
-        approxDuration = Math.round((lastLoc.timestamp - startMs) / 1000);
+      if (!isNaN(startMs) && storedLocs[0].timestamp > startMs) {
+        approxDuration = Math.round((storedLocs[0].timestamp - startMs) / 1000);
       }
     }
 
@@ -476,11 +511,13 @@ export function recoverInterruptedTrips(): number {
       `UPDATE trips
        SET status = 'interrupted',
            end_time = ?,
+           distance_km = ?,
            duration_seconds = MAX(duration_seconds, ?),
+           sample_count = ?,
            quality_warning = 'Trip recording was interrupted before completion (app closed or restarted).',
            updated_at = ?
        WHERE id = ?`,
-      [now, approxDuration, now, d.id]
+      [now, calculatedDistKm, approxDuration, storedLocs.length, now, d.id]
     );
   }
 

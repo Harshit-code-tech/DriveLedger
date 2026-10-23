@@ -161,12 +161,33 @@ describe('Trip Repository', () => {
     expect(updatedTrip?.sample_count).toBe(2);
   });
 
-  test('recoverInterruptedTrips recovers abandoned/crashed trips on restart', () => {
+  test('recoverInterruptedTrips recovers abandoned/crashed trips on restart with calculated distance from stored locations', () => {
     // Simulate an app crash during recording
     const danglingTrip = tripRepo.createActiveTrip({
       vehicle_id: testVehicle.id,
       purpose: 'Unfinished drive',
     });
+
+    // Add location samples to the trip before crash
+    const samples: FilteredLocationSample[] = [
+      {
+        latitude: 28.631,
+        longitude: 77.216,
+        accuracy: 10,
+        timestamp: 1700000000000,
+        isAccepted: true,
+        stepDistanceMeters: 0,
+      },
+      {
+        latitude: 28.640,
+        longitude: 77.225, // ~1.3 km away
+        accuracy: 10,
+        timestamp: 1700000120000,
+        isAccepted: true,
+        stepDistanceMeters: 1300,
+      },
+    ];
+    tripRepo.saveTripLocationsBatch(danglingTrip.id, samples);
 
     // Verify it is currently in recording status
     expect(tripRepo.getActiveTrip(testVehicle.id)?.id).toBe(danglingTrip.id);
@@ -175,12 +196,59 @@ describe('Trip Repository', () => {
     const recoveredCount = tripRepo.recoverInterruptedTrips();
     expect(recoveredCount).toBe(1);
 
-    // Should now be marked 'interrupted' with explanatory quality warning
+    // Should now be marked 'interrupted' with explanatory quality warning and preserved distance
     const recovered = tripRepo.getTripById(danglingTrip.id);
     expect(recovered?.status).toBe('interrupted');
     expect(recovered?.quality_warning).toContain('interrupted');
+    expect(recovered?.distance_km).toBeGreaterThan(1.0);
+    expect(recovered?.duration_seconds).toBe(120);
+    expect(recovered?.sample_count).toBe(2);
 
     // No longer blocks new trips as an active trip
     expect(tripRepo.getActiveTrip(testVehicle.id)).toBeNull();
+  });
+
+  test('finalizes active trip with diagnostics and reads it back', () => {
+    const trip = tripRepo.createActiveTrip({
+      vehicle_id: testVehicle.id,
+    });
+
+    const finalized = tripRepo.finalizeTrip(trip.id, {
+      distance_km: 15.2,
+      duration_minutes: 20,
+      diagnostics: {
+        rejection_counts: {
+          invalid_coordinates: 0,
+          poor_accuracy: 2,
+          unknown_accuracy: 1,
+          stale_or_duplicate_timestamp: 0,
+          stationary_drift: 3,
+          implausible_speed: 0,
+        },
+        total_samples_received: 30,
+        accepted_samples_count: 24,
+        rejected_samples_count: 6,
+        gap_count: 0,
+        max_gap_seconds: 0,
+        has_gap_warning: false,
+      },
+    });
+
+    expect(finalized?.status).toBe('completed');
+    expect(finalized?.diagnostics).toBeDefined();
+    const parsed = JSON.parse(finalized!.diagnostics!);
+    expect(parsed.total_samples_received).toBe(30);
+    expect(parsed.rejection_counts.unknown_accuracy).toBe(1);
+    expect(parsed.rejection_counts.stationary_drift).toBe(3);
+  });
+
+  test('getActiveTrip returns active trip globally regardless of vehicle when called without vehicleId', () => {
+    const trip = tripRepo.createActiveTrip({
+      vehicle_id: testVehicle.id,
+    });
+
+    const globalActive = tripRepo.getActiveTrip();
+    expect(globalActive?.id).toBe(trip.id);
+    expect(globalActive?.vehicle_id).toBe(testVehicle.id);
   });
 });

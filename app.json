@@ -39,7 +39,10 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow DriveLedger to record your vehicle trip distance offline."
+          "locationWhenInUsePermission": "Allow DriveLedger to record your vehicle trip distance offline.",
+          "locationAlwaysAndWhenInUsePermission": "Allow DriveLedger to record your vehicle trip route and distance in the background while your screen is locked or another app is open.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       [

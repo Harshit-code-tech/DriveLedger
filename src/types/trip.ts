@@ -54,6 +54,9 @@ export interface Trip {
   /** Data-quality or sensor anomaly warning if GPS was filtered or interrupted */
   quality_warning: string | null;
 
+  /** Serialized JSON string of aggregate GPS diagnostics */
+  diagnostics?: string | null;
+
   /** ISO 8601 timestamp */
   created_at: string;
 
@@ -62,6 +65,33 @@ export interface Trip {
 
   /** ISO 8601 timestamp — soft delete marker */
   deleted_at: string | null;
+}
+
+export type RejectionReason =
+  | 'invalid_coordinates'
+  | 'poor_accuracy'
+  | 'unknown_accuracy'
+  | 'stale_or_duplicate_timestamp'
+  | 'stationary_drift'
+  | 'implausible_speed';
+
+export interface RejectionCounts {
+  invalid_coordinates: number;
+  poor_accuracy: number;
+  unknown_accuracy: number;
+  stale_or_duplicate_timestamp: number;
+  stationary_drift: number;
+  implausible_speed: number;
+}
+
+export interface TripDiagnostics {
+  rejection_counts: RejectionCounts;
+  total_samples_received: number;
+  accepted_samples_count: number;
+  rejected_samples_count: number;
+  gap_count: number;
+  max_gap_seconds: number;
+  has_gap_warning: boolean;
 }
 
 export interface TripLocation {
@@ -95,7 +125,7 @@ export interface TripLocation {
   /** 1 if sample was rejected by distance filter, 0 if accepted */
   is_rejected: number;
 
-  /** Reason for rejection (e.g., 'poor_accuracy', 'stationary_drift', 'implausible_speed') */
+  /** Reason for rejection (e.g., 'poor_accuracy', 'unknown_accuracy', 'stationary_drift') */
   rejection_reason: string | null;
 
   /** ISO 8601 timestamp */
@@ -111,6 +141,7 @@ export interface CreateTripInput {
   start_odometer?: number | null;
   purpose?: string | null;
   notes?: string | null;
+  diagnostics?: string | null;
 }
 
 export interface CreateManualTripInput {
@@ -121,6 +152,14 @@ export interface CreateManualTripInput {
   duration_minutes?: number;
   purpose?: string | null;
   notes?: string | null;
+  updateVehicleOdometer?: boolean;
+}
+
+export interface FinishTripOptions {
+  notes?: string;
+  purpose?: string;
+  endOdometer?: number | null;
+  updateVehicleOdometer?: boolean;
 }
 
 export type UpdateTripInput = Partial<
@@ -141,7 +180,7 @@ export interface RawLocationSample {
 
 export interface FilteredLocationSample extends RawLocationSample {
   isAccepted: boolean;
-  rejectionReason?: 'invalid_coordinates' | 'poor_accuracy' | 'stale_or_duplicate_timestamp' | 'stationary_drift' | 'implausible_speed';
+  rejectionReason?: RejectionReason;
   stepDistanceMeters: number;
 }
 
@@ -150,13 +189,7 @@ export interface TripDistanceCalculationResult {
   totalDistanceKm: number;
   acceptedSamplesCount: number;
   rejectedSamplesCount: number;
-  rejectionCounts: {
-    invalid_coordinates: number;
-    poor_accuracy: number;
-    stale_or_duplicate_timestamp: number;
-    stationary_drift: number;
-    implausible_speed: number;
-  };
+  rejectionCounts: RejectionCounts;
   hasGapWarning: boolean;
   qualityWarning: string | null;
 }

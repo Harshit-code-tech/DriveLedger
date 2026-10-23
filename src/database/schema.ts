@@ -195,6 +195,7 @@ const CREATE_TRIPS_TABLE = `
     notes                TEXT,
     sample_count         INTEGER DEFAULT 0,
     quality_warning      TEXT,
+    diagnostics          TEXT,
     created_at           TEXT NOT NULL,
     updated_at           TEXT NOT NULL,
     deleted_at           TEXT
@@ -447,6 +448,15 @@ export function createTables(db: SQLite.SQLiteDatabase): void {
   try {
     db.execSync(
       `ALTER TABLE expenses ADD COLUMN receipt_photo_uri TEXT`
+    );
+  } catch {
+    // Column already exists
+  }
+
+  // v1.5 — GPS rejection diagnostics & signal-gap data
+  try {
+    db.execSync(
+      `ALTER TABLE trips ADD COLUMN diagnostics TEXT`
     );
   } catch {
     // Column already exists

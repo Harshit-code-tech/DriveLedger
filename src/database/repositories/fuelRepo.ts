@@ -19,7 +19,7 @@ import { buildSafeUpdate } from '../safeUpdate';
 import { generateUUID } from '@/utils/uuid';
 import { nowISO } from '@/utils/date';
 import type { FuelEntry, CreateFuelEntryInput, UpdateFuelEntryInput } from '@/types/fuel';
-import { updateVehicleOdometer } from './vehicleRepo';
+import { updateVehicleOdometer, getVehicleById } from './vehicleRepo';
 import {
   calculateMileageForEntry,
   recalculateAllMileage,
@@ -333,12 +333,19 @@ export function createFuelEntryAtomic(
       }
     }
 
-    // 4. Update vehicle's current_odometer to highest reading
-    const highestOdometer = chronological.reduce(
+    // 4. Update vehicle's current_odometer safely
+    // Never roll back a higher canonical odometer if the vehicle already has one
+    // (e.g., from a newer confirmed trip reading)
+    const vehicle = getVehicleById(input.vehicle_id);
+    const existingVehicleOdo = vehicle?.current_odometer ?? null;
+    const highestFuelOdometer = chronological.reduce(
       (max, e) => Math.max(max, e.odometer),
       0
     );
-    updateVehicleOdometer(input.vehicle_id, highestOdometer);
+    const targetOdo = existingVehicleOdo !== null
+      ? Math.max(existingVehicleOdo, highestFuelOdometer)
+      : highestFuelOdometer;
+    updateVehicleOdometer(input.vehicle_id, targetOdo);
   });
 
   return { entry: createdEntry!, warning };
@@ -375,10 +382,26 @@ export function updateFuelEntryAtomic(
       );
     }
 
-    // 3. Update vehicle odometer to the highest reading
+    // 3. Update vehicle odometer safely to the highest confirmed reading
     if (chronological.length > 0) {
-      const highestOdometer = Math.max(...chronological.map((e) => e.odometer));
-      updateVehicleOdometer(updatedEntry.vehicle_id, highestOdometer);
+      const highestFuelOdometer = Math.max(...chronological.map((e) => e.odometer));
+      const row = db.getFirstSync<{ max_odometer: number | null }>(
+        `SELECT MAX(end_odometer) AS max_odometer FROM trips
+         WHERE vehicle_id = ? AND deleted_at IS NULL AND status = 'completed' AND end_odometer IS NOT NULL`,
+        [updatedEntry.vehicle_id]
+      );
+      const maxTripOdo = row?.max_odometer ?? null;
+      const vehicle = getVehicleById(updatedEntry.vehicle_id);
+      const existingVehicleOdo = vehicle?.current_odometer ?? null;
+
+      let targetOdo = highestFuelOdometer;
+      if (maxTripOdo !== null) {
+        targetOdo = Math.max(targetOdo, maxTripOdo);
+      }
+      if (existingVehicleOdo !== null && existingVehicleOdo > targetOdo) {
+        targetOdo = existingVehicleOdo;
+      }
+      updateVehicleOdometer(updatedEntry.vehicle_id, targetOdo);
     }
   });
 
@@ -388,6 +411,7 @@ export function updateFuelEntryAtomic(
 /**
  * Atomically soft-deletes a fuel entry, recalculates all downstream mileage,
  * and updates the vehicle's odometer to the latest remaining reading.
+ * Preserves newer confirmed trip readings so deletion does not erase trip mileage.
  *
  * If any step fails, the entire transaction rolls back.
  */
@@ -399,6 +423,10 @@ export function deleteFuelEntryAtomic(
   const db = getDatabase();
 
   db.withTransactionSync(() => {
+    const entryToDelete = getFuelEntryById(id);
+    const vehicle = getVehicleById(vehicleId);
+    const existingVehicleOdo = vehicle?.current_odometer ?? null;
+
     // 1. Soft delete the entry
     softDeleteFuelEntry(id);
 
@@ -414,14 +442,28 @@ export function deleteFuelEntryAtomic(
       );
     }
 
-    // 3. Update vehicle odometer to latest remaining entry (or 0 if none)
-    const latestEntry = chronological.length > 0
-      ? chronological[chronological.length - 1]
-      : null;
-
-    updateVehicleOdometer(
-      vehicleId,
-      latestEntry ? latestEntry.odometer : 0
+    // 3. Safely determine remaining highest odometer across fuel entries and completed trips
+    const row = db.getFirstSync<{ max_odometer: number | null }>(
+      `SELECT MAX(odo) AS max_odometer FROM (
+         SELECT odometer AS odo FROM fuel_entries WHERE vehicle_id = ? AND deleted_at IS NULL
+         UNION ALL
+         SELECT end_odometer AS odo FROM trips WHERE vehicle_id = ? AND deleted_at IS NULL AND status = 'completed' AND end_odometer IS NOT NULL
+       )`,
+      [vehicleId, vehicleId]
     );
+    const highestRemaining = row?.max_odometer ?? null;
+
+    let targetOdo: number;
+    if (
+      entryToDelete &&
+      existingVehicleOdo !== null &&
+      entryToDelete.odometer < existingVehicleOdo
+    ) {
+      targetOdo = existingVehicleOdo;
+    } else {
+      targetOdo = highestRemaining ?? 0;
+    }
+
+    updateVehicleOdometer(vehicleId, targetOdo);
   });
 }

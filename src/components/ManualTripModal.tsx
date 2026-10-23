@@ -6,7 +6,8 @@
  * FEATURES:
  * - Start / End odometer inputs
  * - Real-time distance calculation (end - start)
- * - Strict validation: end >= start
+ * - Strict validation: end >= start via odometerReconciliation engine
+ * - Canonical vehicle odometer reconciliation toggle with historical protection
  * - Purpose tags & notes
  * - 100% offline
  */
@@ -19,6 +20,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -30,6 +32,10 @@ import { useThemeColors } from '@/hooks/useThemeColors';
 import { useTripStore } from '@/stores/tripStore';
 import type { Vehicle } from '@/types/vehicle';
 import { todayISO } from '@/utils/date';
+import {
+  validateManualTripOdometers,
+  canUpdateCanonicalOdometer,
+} from '@/engine/odometerReconciliation';
 
 interface ManualTripModalProps {
   visible: boolean;
@@ -55,20 +61,25 @@ export function ManualTripModal({
     vehicle.current_odometer ? String(vehicle.current_odometer) : ''
   );
   const [endOdo, setEndOdo] = useState('');
+  const [shouldUpdateVehicleOdo, setShouldUpdateVehicleOdo] = useState(true);
   const [durationMin, setDurationMin] = useState('');
   const [purpose, setPurpose] = useState('Personal');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Auto-computed distance
+  // Auto-computed distance using pure engine validator
   const calculatedDistance = useMemo(() => {
     const s = parseFloat(startOdo);
     const e = parseFloat(endOdo);
-    if (!isNaN(s) && !isNaN(e) && e >= s) {
-      return Math.round((e - s) * 10) / 10;
-    }
-    return null;
+    const validation = validateManualTripOdometers(s, e);
+    return validation.isValid ? validation.distanceKm : null;
   }, [startOdo, endOdo]);
+
+  const parsedEndOdo = endOdo.trim() ? parseFloat(endOdo.trim()) : undefined;
+  const isHistorical =
+    parsedEndOdo !== undefined &&
+    typeof vehicle.current_odometer === 'number' &&
+    parsedEndOdo < vehicle.current_odometer;
 
   if (!visible) return null;
 
@@ -76,19 +87,9 @@ export function ManualTripModal({
     const s = parseFloat(startOdo.trim());
     const e = parseFloat(endOdo.trim());
 
-    if (isNaN(s) || s < 0) {
-      Alert.alert('Invalid Start Odometer', 'Please enter a valid starting odometer reading.');
-      return;
-    }
-    if (isNaN(e) || e < 0) {
-      Alert.alert('Invalid End Odometer', 'Please enter a valid ending odometer reading.');
-      return;
-    }
-    if (e < s) {
-      Alert.alert(
-        'Validation Error',
-        `End odometer (${e}) cannot be less than start odometer (${s}).`
-      );
+    const validation = validateManualTripOdometers(s, e);
+    if (!validation.isValid) {
+      Alert.alert('Validation Error', validation.error || 'Please enter valid odometer readings.');
       return;
     }
 
@@ -101,6 +102,12 @@ export function ManualTripModal({
       }
     }
 
+    const canonicalCheck = canUpdateCanonicalOdometer({
+      proposedOdometer: e,
+      currentCanonicalOdometer: vehicle.current_odometer,
+      isExplicitlyConfirmed: shouldUpdateVehicleOdo,
+    });
+
     try {
       setIsSubmitting(true);
       addManualTrip({
@@ -111,6 +118,7 @@ export function ManualTripModal({
         duration_minutes: parsedDuration,
         purpose: purpose.trim() || undefined,
         notes: notes.trim() || undefined,
+        updateVehicleOdometer: canonicalCheck.canUpdate,
       });
 
       setIsSubmitting(false);
@@ -229,6 +237,38 @@ export function ManualTripModal({
               value={endOdo}
               onChangeText={setEndOdo}
             />
+
+            {/* Canonical Odometer Update Toggle */}
+            <View
+              style={[
+                styles.switchCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  marginTop: Spacing.md,
+                },
+              ]}
+            >
+              <View style={{ flex: 1, marginRight: Spacing.md }}>
+                <Text style={[Typography.bodySmall, { color: colors.text, fontWeight: '600' }]}>
+                  Update Vehicle Odometer
+                </Text>
+                <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
+                  Set canonical vehicle odometer to {parsedEndOdo !== undefined ? `${parsedEndOdo} km` : 'ending reading'}
+                </Text>
+                {isHistorical && (
+                  <Text style={[Typography.caption, { color: colors.warning, marginTop: 4, fontWeight: '600' }]}>
+                    Historical reading cannot roll back current vehicle odometer ({vehicle.current_odometer} km).
+                  </Text>
+                )}
+              </View>
+              <Switch
+                value={shouldUpdateVehicleOdo && !isHistorical}
+                onValueChange={setShouldUpdateVehicleOdo}
+                disabled={isHistorical || parsedEndOdo === undefined}
+                trackColor={{ false: colors.border, true: colors.primary }}
+              />
+            </View>
 
             {/* Duration */}
             <Text
@@ -391,6 +431,14 @@ const styles = StyleSheet.create({
   },
   formSection: {
     marginBottom: Spacing.xl,
+  },
+  switchCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.md,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
   },
   input: {
     height: 48,

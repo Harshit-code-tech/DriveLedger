@@ -2,11 +2,12 @@
  * Trip Review & Finish Modal
  *
  * Screen presented upon concluding an active GPS trip.
- * Allows user to verify recorded distance, enter odometer reconciliation,
- * assign a purpose/notes, and persist to SQLite.
+ * Allows user to verify recorded distance, review GPS estimated endpoint,
+ * resolve any baseline conflicts, enter confirmed dashboard odometer reading,
+ * assign a purpose/notes, and explicitly choose whether to update the canonical vehicle odometer.
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -14,6 +15,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -25,6 +27,11 @@ import { useThemeColors } from '@/hooks/useThemeColors';
 import { useTripStore } from '@/stores/tripStore';
 import type { Vehicle } from '@/types/vehicle';
 import { formatDisplayDateLong } from '@/utils/date';
+import {
+  calculateEstimatedEndOdometer,
+  detectBaselineConflict,
+  canUpdateCanonicalOdometer,
+} from '@/engine/odometerReconciliation';
 
 interface TripReviewModalProps {
   visible: boolean;
@@ -48,12 +55,25 @@ export function TripReviewModal({
   const liveMetrics = useTripStore((s) => s.liveMetrics);
   const finishGpsTrip = useTripStore((s) => s.finishGpsTrip);
 
+  const estimatedEndOdo = useMemo(() => {
+    if (!activeTrip) return null;
+    return calculateEstimatedEndOdometer(activeTrip.start_odometer, liveMetrics.distanceKm);
+  }, [activeTrip?.start_odometer, liveMetrics.distanceKm]);
+
+  const baselineConflict = useMemo(() => {
+    if (!activeTrip) return { hasConflict: false, expectedEstimatedEndOdo: null };
+    return detectBaselineConflict(
+      activeTrip.start_odometer,
+      vehicle.current_odometer,
+      liveMetrics.distanceKm
+    );
+  }, [activeTrip?.start_odometer, vehicle.current_odometer, liveMetrics.distanceKm]);
+
   const [purpose, setPurpose] = useState(activeTrip?.purpose || 'Personal');
   const [endOdometer, setEndOdometer] = useState(
-    vehicle.current_odometer
-      ? String(Math.round(vehicle.current_odometer + liveMetrics.distanceKm))
-      : ''
+    estimatedEndOdo !== null ? String(estimatedEndOdo) : ''
   );
+  const [shouldUpdateVehicleOdo, setShouldUpdateVehicleOdo] = useState(true);
   const [notes, setNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -61,32 +81,48 @@ export function TripReviewModal({
 
   const durationMinutes = Math.round(liveMetrics.elapsedSeconds / 60);
 
+  const parsedEndOdo = endOdometer.trim() ? parseFloat(endOdometer.trim()) : undefined;
+  const isHistorical =
+    parsedEndOdo !== undefined &&
+    typeof vehicle.current_odometer === 'number' &&
+    parsedEndOdo < vehicle.current_odometer;
+
   const handleSave = async () => {
     if (isSaving) return;
 
     // Validate odometer if provided
-    let parsedEndOdo: number | undefined;
+    let validEndOdo: number | undefined;
     if (endOdometer.trim()) {
-      parsedEndOdo = parseFloat(endOdometer.trim());
-      if (isNaN(parsedEndOdo) || parsedEndOdo < 0) {
+      validEndOdo = parseFloat(endOdometer.trim());
+      if (isNaN(validEndOdo) || validEndOdo < 0) {
         Alert.alert('Invalid Odometer', 'Please enter a valid non-negative odometer reading.');
         return;
       }
-      if (activeTrip.start_odometer && parsedEndOdo < activeTrip.start_odometer) {
+      if (
+        typeof activeTrip.start_odometer === 'number' &&
+        validEndOdo < activeTrip.start_odometer
+      ) {
         Alert.alert(
           'Odometer Warning',
-          `End odometer (${parsedEndOdo}) cannot be lower than start odometer (${activeTrip.start_odometer}).`
+          `End odometer (${validEndOdo}) cannot be lower than start baseline (${activeTrip.start_odometer}).`
         );
         return;
       }
     }
+
+    const canonicalCheck = canUpdateCanonicalOdometer({
+      proposedOdometer: validEndOdo,
+      currentCanonicalOdometer: vehicle.current_odometer,
+      isExplicitlyConfirmed: shouldUpdateVehicleOdo,
+    });
 
     try {
       setIsSaving(true);
       const finalized = await finishGpsTrip({
         notes: notes.trim() || undefined,
         purpose: purpose.trim() || undefined,
-        endOdometer: parsedEndOdo,
+        endOdometer: validEndOdo,
+        updateVehicleOdometer: canonicalCheck.canUpdate,
       });
 
       if (finalized) {
@@ -134,21 +170,36 @@ export function TripReviewModal({
             </Text>
           </View>
 
-          {/* Warning Banner if GPS quality had issues */}
+          {/* Baseline Conflict Banner */}
+          {baselineConflict.hasConflict && (
+            <View
+              style={[
+                styles.banner,
+                { backgroundColor: colors.warningLight, borderColor: colors.warning },
+              ]}
+            >
+              <Text style={[Typography.caption, { color: colors.warning, fontWeight: '700' }]}>
+                ⚠️ Baseline Odometer Conflict Detected
+              </Text>
+              <Text style={[Typography.caption, { color: colors.text, marginTop: 4 }]}>
+                {baselineConflict.reason}
+              </Text>
+              <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
+                Please check and enter your physical dashboard odometer reading before saving.
+              </Text>
+            </View>
+          )}
+
+          {/* Signal Gap Warning */}
           {liveMetrics.hasGaps && (
             <View
               style={[
-                styles.warningBanner,
-                { backgroundColor: colors.warningLight },
+                styles.banner,
+                { backgroundColor: colors.warningLight, borderColor: colors.warning },
               ]}
             >
-              <Text
-                style={[
-                  Typography.caption,
-                  { color: colors.warning, fontWeight: '700' },
-                ]}
-              >
-                ⚠️ Note: Signal loss or coordinate gaps were detected during this trip. Distance is an approximation.
+              <Text style={[Typography.caption, { color: colors.warning, fontWeight: '700' }]}>
+                ⚠️ Signal loss or coordinate gaps detected during this trip. Distance is an approximation.
               </Text>
             </View>
           )}
@@ -162,7 +213,7 @@ export function TripReviewModal({
               ]}
             >
               <Text style={[Typography.caption, { color: colors.textSecondary }]}>
-                ESTIMATED DISTANCE
+                GPS DISTANCE
               </Text>
               <Text style={[styles.statValue, { color: colors.primary }]}>
                 {liveMetrics.distanceKm.toFixed(2)}
@@ -192,11 +243,105 @@ export function TripReviewModal({
 
           {/* Form Fields */}
           <View style={styles.formSection}>
-            {/* Purpose */}
+            {/* Odometer Reconciliation */}
             <Text
               style={[
                 Typography.caption,
                 { color: colors.textSecondary, marginBottom: Spacing.xs },
+              ]}
+            >
+              ODOMETER RECONCILIATION
+            </Text>
+
+            <View
+              style={[
+                styles.baselineCard,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
+              <View style={styles.baselineRow}>
+                <Text style={[Typography.caption, { color: colors.textSecondary }]}>
+                  Trip Start Baseline:
+                </Text>
+                <Text style={[Typography.bodySmall, { color: colors.text, fontWeight: '600' }]}>
+                  {activeTrip.start_odometer !== null ? `${activeTrip.start_odometer} km` : 'None recorded'}
+                </Text>
+              </View>
+              <View style={[styles.baselineRow, { marginTop: 6 }]}>
+                <Text style={[Typography.caption, { color: colors.textSecondary }]}>
+                  GPS Estimated Endpoint:
+                </Text>
+                <Text style={[Typography.bodySmall, { color: colors.primary, fontWeight: '700' }]}>
+                  {estimatedEndOdo !== null ? `${estimatedEndOdo} km` : '—'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Dashboard Odometer Input */}
+            <Text
+              style={[
+                Typography.caption,
+                { color: colors.textSecondary, marginTop: Spacing.md, marginBottom: Spacing.xs },
+              ]}
+            >
+              CONFIRMED DASHBOARD ODOMETER (KM)
+            </Text>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  color: colors.text,
+                },
+              ]}
+              keyboardType="numeric"
+              placeholder={estimatedEndOdo !== null ? String(estimatedEndOdo) : 'e.g. 42350'}
+              placeholderTextColor={colors.textTertiary}
+              value={endOdometer}
+              onChangeText={setEndOdometer}
+            />
+            <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 4 }]}>
+              Editing this reading confirms your dashboard value and never alters your recorded GPS distance ({liveMetrics.distanceKm.toFixed(2)} km).
+            </Text>
+
+            {/* Canonical Odometer Update Toggle */}
+            <View
+              style={[
+                styles.switchCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  marginTop: Spacing.md,
+                },
+              ]}
+            >
+              <View style={{ flex: 1, marginRight: Spacing.md }}>
+                <Text style={[Typography.bodySmall, { color: colors.text, fontWeight: '600' }]}>
+                  Update Vehicle Odometer
+                </Text>
+                <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
+                  Set canonical vehicle odometer to {parsedEndOdo !== undefined ? `${parsedEndOdo} km` : 'this reading'}
+                </Text>
+                {isHistorical && (
+                  <Text style={[Typography.caption, { color: colors.warning, marginTop: 4, fontWeight: '600' }]}>
+                    Historical reading cannot roll back current vehicle odometer ({vehicle.current_odometer} km).
+                  </Text>
+                )}
+              </View>
+              <Switch
+                value={shouldUpdateVehicleOdo && !isHistorical}
+                onValueChange={setShouldUpdateVehicleOdo}
+                disabled={isHistorical || parsedEndOdo === undefined}
+                trackColor={{ false: colors.border, true: colors.primary }}
+              />
+            </View>
+
+            {/* Purpose */}
+            <Text
+              style={[
+                Typography.caption,
+                { color: colors.textSecondary, marginTop: Spacing.lg, marginBottom: Spacing.xs },
               ]}
             >
               TRIP PURPOSE
@@ -237,31 +382,6 @@ export function TripReviewModal({
                 );
               })}
             </View>
-
-            {/* End Odometer */}
-            <Text
-              style={[
-                Typography.caption,
-                { color: colors.textSecondary, marginTop: Spacing.md, marginBottom: Spacing.xs },
-              ]}
-            >
-              END ODOMETER READING (OPTIONAL)
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                  color: colors.text,
-                },
-              ]}
-              keyboardType="numeric"
-              placeholder="e.g. 42350"
-              placeholderTextColor={colors.textTertiary}
-              value={endOdometer}
-              onChangeText={setEndOdometer}
-            />
 
             {/* Notes */}
             <Text
@@ -322,9 +442,10 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: Spacing.md,
   },
-  warningBanner: {
+  banner: {
     padding: Spacing.md,
     borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
     marginBottom: Spacing.md,
   },
   statsRow: {
@@ -347,6 +468,24 @@ const styles = StyleSheet.create({
   },
   formSection: {
     marginBottom: Spacing.xl,
+  },
+  baselineCard: {
+    padding: Spacing.md,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+  },
+  baselineRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  switchCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.md,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
   },
   chipsRow: {
     flexDirection: 'row',

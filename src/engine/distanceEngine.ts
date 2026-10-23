@@ -39,6 +39,19 @@ function degreesToRadians(deg: number): number {
 }
 
 /**
+ * Validates whether reported horizontal accuracy is a valid, positive, finite number.
+ * Missing, null, undefined, non-finite, or <= 0 accuracy values are treated as unknown/invalid.
+ */
+export function isValidAccuracy(accuracy: number | null | undefined): accuracy is number {
+  return (
+    typeof accuracy === 'number' &&
+    !isNaN(accuracy) &&
+    isFinite(accuracy) &&
+    accuracy > 0
+  );
+}
+
+/**
  * Calculates the great-circle distance between two geographic coordinates
  * using the Haversine formula. Returns distance in meters.
  */
@@ -92,6 +105,28 @@ export function isValidCoordinate(sample: RawLocationSample): boolean {
 // ─── Filter & Accumulation Engine ────────────────────────────────────
 
 /**
+ * Builds an explanatory data-quality warning based on observed live or filtered events.
+ */
+export function buildQualityWarning(diagnostics: {
+  hasGapWarning: boolean;
+  totalReceived: number;
+  rejectedCount: number;
+  rejectionCounts?: Partial<TripDistanceCalculationResult['rejectionCounts']>;
+}): string | null {
+  const { hasGapWarning, totalReceived, rejectedCount } = diagnostics;
+  const rejectionRatio = totalReceived > 0 ? rejectedCount / totalReceived : 0;
+
+  if (hasGapWarning && rejectionRatio > 0.25) {
+    return 'Significant GPS signal loss and noisy samples were detected during this trip. Estimated straight-line route may differ from actual road distance.';
+  } else if (hasGapWarning) {
+    return 'A temporary GPS signal interruption occurred during this trip. The estimated route bridges the gap and may underestimate road distance.';
+  } else if (rejectionRatio > 0.35 && totalReceived > 10) {
+    return 'Many GPS samples were filtered due to weak satellite reception or stationary jitter.';
+  }
+  return null;
+}
+
+/**
  * Processes a sequence of raw GPS samples chronologically, applies validation
  * and noise filters, and calculates total distance traveled.
  *
@@ -109,6 +144,7 @@ export function filterAndCalculateTripDistance(
     rejectionCounts: {
       invalid_coordinates: 0,
       poor_accuracy: 0,
+      unknown_accuracy: 0,
       stale_or_duplicate_timestamp: 0,
       stationary_drift: 0,
       implausible_speed: 0,
@@ -128,6 +164,14 @@ export function filterAndCalculateTripDistance(
   for (let i = 0; i < samples.length; i++) {
     const current = samples[i];
 
+    // Check gap from lastAccepted if available (independent of current sample acceptance)
+    if (lastAccepted && typeof current?.timestamp === 'number') {
+      const deltaFromLast = (current.timestamp - lastAccepted.timestamp) / 1000;
+      if (deltaFromLast > SIGNAL_GAP_SECONDS) {
+        gapDetected = true;
+      }
+    }
+
     // 1. Coordinate validity check
     if (!isValidCoordinate(current)) {
       result.rejectedSamplesCount++;
@@ -135,9 +179,14 @@ export function filterAndCalculateTripDistance(
       continue;
     }
 
-    // 2. Horizontal accuracy check
-    const accuracy = current.accuracy ?? 0;
-    if (accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
+    // 2. Horizontal accuracy check: unknown vs poor
+    if (!isValidAccuracy(current.accuracy)) {
+      result.rejectedSamplesCount++;
+      result.rejectionCounts.unknown_accuracy++;
+      continue;
+    }
+
+    if (current.accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
       result.rejectedSamplesCount++;
       result.rejectionCounts.poor_accuracy++;
       continue;
@@ -167,11 +216,9 @@ export function filterAndCalculateTripDistance(
     );
 
     // 5. Stationary drift filter
-    // If movement is below threshold, treat as jitter while vehicle is stopped
     if (stepDistance < DRIFT_DISTANCE_THRESHOLD_METERS) {
       result.rejectedSamplesCount++;
       result.rejectionCounts.stationary_drift++;
-      // Still update timestamp anchor if we remained stopped for a while
       continue;
     }
 
@@ -183,11 +230,6 @@ export function filterAndCalculateTripDistance(
       continue;
     }
 
-    // 7. Gap detection (e.g. signal loss during tunnel)
-    if (timeDeltaSeconds > SIGNAL_GAP_SECONDS) {
-      gapDetected = true;
-    }
-
     // Sample accepted!
     totalDistanceMeters += stepDistance;
     lastAccepted = current;
@@ -197,21 +239,12 @@ export function filterAndCalculateTripDistance(
   result.totalDistanceMeters = Math.round(totalDistanceMeters * 10) / 10;
   result.totalDistanceKm = Math.round((totalDistanceMeters / 1000) * 100) / 100;
   result.hasGapWarning = gapDetected;
-
-  // Build transparent data-quality warning if necessary
-  const totalReceived = samples.length;
-  const rejectionRatio = totalReceived > 0 ? result.rejectedSamplesCount / totalReceived : 0;
-
-  if (gapDetected && rejectionRatio > 0.25) {
-    result.qualityWarning =
-      'Significant GPS signal loss and noisy samples were detected during this trip. Estimated distance may differ from actual route.';
-  } else if (gapDetected) {
-    result.qualityWarning =
-      'A temporary GPS signal interruption occurred during this trip. The estimated route bridges the gap.';
-  } else if (rejectionRatio > 0.35 && totalReceived > 10) {
-    result.qualityWarning =
-      'Many GPS samples were filtered due to weak satellite reception or stationary jitter.';
-  }
+  result.qualityWarning = buildQualityWarning({
+    hasGapWarning: gapDetected,
+    totalReceived: samples.length,
+    rejectedCount: result.rejectedSamplesCount,
+    rejectionCounts: result.rejectionCounts,
+  });
 
   return result;
 }
@@ -220,38 +253,68 @@ export interface ProcessSampleResult {
   sample: FilteredLocationSample | null;
   deltaKm: number;
   gapDetected: boolean;
+  gapDurationSeconds?: number;
   rejected: boolean;
   reason?: FilteredLocationSample['rejectionReason'];
 }
 
 /**
  * Validates, filters, and processes a single incoming GPS location fix in real-time.
+ * Signal gaps are evaluated independently of whether the incoming fix is accepted.
  */
 export function processLocationSample(
   current: RawLocationSample,
   lastAccepted: RawLocationSample | null
 ): ProcessSampleResult {
+  // Check if signal gap occurred since last accepted sample
+  let gapDetected = false;
+  let gapDurationSeconds: number | undefined;
+
+  if (lastAccepted && typeof current?.timestamp === 'number' && typeof lastAccepted?.timestamp === 'number') {
+    const timeDelta = (current.timestamp - lastAccepted.timestamp) / 1000;
+    if (timeDelta > SIGNAL_GAP_SECONDS) {
+      gapDetected = true;
+      gapDurationSeconds = timeDelta;
+    }
+  }
+
+  // 1. Coordinate validity check
   if (!isValidCoordinate(current)) {
     return {
       sample: null,
       deltaKm: 0,
-      gapDetected: false,
+      gapDetected,
+      gapDurationSeconds,
       rejected: true,
       reason: 'invalid_coordinates',
     };
   }
 
-  const accuracy = current.accuracy ?? 0;
-  if (accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
+  // 2. Unknown or missing accuracy check
+  if (!isValidAccuracy(current.accuracy)) {
     return {
       sample: null,
       deltaKm: 0,
-      gapDetected: false,
+      gapDetected,
+      gapDurationSeconds,
+      rejected: true,
+      reason: 'unknown_accuracy',
+    };
+  }
+
+  // 3. Poor accuracy check (> 35m)
+  if (current.accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
+    return {
+      sample: null,
+      deltaKm: 0,
+      gapDetected,
+      gapDurationSeconds,
       rejected: true,
       reason: 'poor_accuracy',
     };
   }
 
+  // First valid sample anchors the trip
   if (!lastAccepted) {
     const filtered: FilteredLocationSample = {
       ...current,
@@ -266,6 +329,7 @@ export function processLocationSample(
     };
   }
 
+  // 4. Stale or duplicate timestamp check
   const timeDeltaSeconds = (current.timestamp - lastAccepted.timestamp) / 1000;
   if (timeDeltaSeconds <= 0) {
     return {
@@ -277,6 +341,7 @@ export function processLocationSample(
     };
   }
 
+  // 5. Stationary drift check (< 4m)
   const stepDistance = haversineDistance(
     lastAccepted.latitude,
     lastAccepted.longitude,
@@ -288,24 +353,27 @@ export function processLocationSample(
     return {
       sample: null,
       deltaKm: 0,
-      gapDetected: false,
+      gapDetected,
+      gapDurationSeconds,
       rejected: true,
       reason: 'stationary_drift',
     };
   }
 
+  // 6. Plausible vehicle speed check (> 55.5 m/s)
   const speedMps = stepDistance / timeDeltaSeconds;
   if (speedMps > MAX_PLAUSIBLE_SPEED_MPS) {
     return {
       sample: null,
       deltaKm: 0,
-      gapDetected: false,
+      gapDetected,
+      gapDurationSeconds,
       rejected: true,
       reason: 'implausible_speed',
     };
   }
 
-  const gapDetected = timeDeltaSeconds > SIGNAL_GAP_SECONDS;
+  // Sample accepted!
   const filtered: FilteredLocationSample = {
     ...current,
     isAccepted: true,
@@ -316,6 +384,7 @@ export function processLocationSample(
     sample: filtered,
     deltaKm: stepDistance / 1000,
     gapDetected,
+    gapDurationSeconds,
     rejected: false,
   };
 }
