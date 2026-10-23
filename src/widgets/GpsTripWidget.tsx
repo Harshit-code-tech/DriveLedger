@@ -2,12 +2,13 @@
 import React from 'react';
 import { FlexWidget, SvgWidget, TextWidget } from 'react-native-android-widget';
 
-// ─── Satellite Vector SVG Icon ────────────────────────────────────────────────
-const SATELLITE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20">
+// ─── SVG Icons ────────────────────────────────────────────────────────────────
+
+const SATELLITE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18">
   <path fill="#38BDF8" d="M12 2a1 1 0 0 1 1 1v1.07A8.003 8.003 0 0 1 20.93 11H22a1 1 0 0 1 0 2h-1.07A8.003 8.003 0 0 1 13 20.93V22a1 1 0 0 1-2 0v-1.07A8.003 8.003 0 0 1 3.07 13H2a1 1 0 0 1 0-2h1.07A8.003 8.003 0 0 1 11 4.07V3a1 1 0 0 1 1-1zm0 4a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm0 3a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/>
 </svg>`;
 
-// ─── Data Shape ──────────────────────────────────────────────────────────────
+// ─── Data Shape ───────────────────────────────────────────────────────────────
 
 export type GpsTripWidgetStatus =
   | 'idle'
@@ -47,6 +48,9 @@ export interface GpsTripWidgetData {
   // Accuracy & signal quality
   gpsQuality: 'good' | 'fair' | 'poor' | 'none';
 
+  // Optional live speed in km/h — set by backgroundLocationTask when available
+  currentSpeedKph?: number | null;
+
   // Warnings / notices
   warningText?: string | null;
 
@@ -73,198 +77,190 @@ export const DEFAULT_GPS_WIDGET_DATA: GpsTripWidgetData = {
   lastTripDistanceKm: 0,
   lastTripDurationFormatted: '—',
   gpsQuality: 'none',
+  currentSpeedKph: null,
   warningText: null,
   vehicleCount: 1,
   interactionNonce: 'init',
 };
 
-// ─── Colors ──────────────────────────────────────────────────────────────────
+// ─── Design Tokens ────────────────────────────────────────────────────────────
 
-const COLORS = {
-  bg: '#0F172A',
-  surface: '#162032',
-  surfaceMid: '#1E293B',
-  border: '#334155',
-  text: '#F8FAFC',
-  textSub: '#94A3B8',
-  textDim: '#64748B',
-  sky: '#38BDF8',
-  skyDark: '#0284C7',
-  green: '#10B981',
-  greenBg: '#064E3B',
-  greenBorder: '#059669',
-  greenText: '#6EE7B7',
-  amber: '#F59E0B',
-  amberBg: '#451A03',
-  amberBorder: '#D97706',
-  amberText: '#FCD34D',
-  red: '#EF4444',
-  redBg: '#450A0A',
-  redBorder: '#DC2626',
-  redText: '#FCA5A5',
+const C = {
+  bg:          '#0B1120',
+  surface:     '#111827',
+  surfaceMid:  '#1C2A3A',
+  surfaceHi:   '#1E2D40',
+  border:      '#243447',
+  borderHi:    '#334D66',
+  text:        '#F0F6FF',
+  textSub:     '#8DA5BE',
+  textDim:     '#4D6680',
+  sky:         '#38BDF8',
+  skyDark:     '#0369A1',
+  skyBg:       '#0C2340',
+  green:       '#10B981',
+  greenDark:   '#059669',
+  greenBg:     '#042B1E',
+  greenBorder: '#065F46',
+  greenText:   '#34D399',
+  amber:       '#F59E0B',
+  amberDark:   '#B45309',
+  amberBg:     '#2D1A00',
+  amberBorder: '#92400E',
+  amberText:   '#FCD34D',
+  red:         '#EF4444',
+  redDark:     '#B91C1C',
+  redBg:       '#2A0A0A',
+  redBorder:   '#7F1D1D',
+  redText:     '#FCA5A5',
 } as const;
 
-function getStatusBadgeTheme(status: GpsTripWidgetStatus) {
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getStatusTheme(status: GpsTripWidgetStatus) {
   switch (status) {
     case 'recording':
-      return {
-        bg: COLORS.greenBg,
-        border: COLORS.greenBorder,
-        text: COLORS.greenText,
-        label: '● REC',
-      };
+      return { bg: C.greenBg, border: C.greenBorder, text: C.greenText, label: '● REC' };
     case 'paused':
-      return {
-        bg: COLORS.amberBg,
-        border: COLORS.amberBorder,
-        text: COLORS.amberText,
-        label: '⏸ PAUSED',
-      };
+      return { bg: C.amberBg, border: C.amberBorder, text: C.amberText, label: '⏸ PAUSED' };
     case 'interrupted':
-      return {
-        bg: COLORS.redBg,
-        border: COLORS.redBorder,
-        text: COLORS.redText,
-        label: '⚠️ NOTICE',
-      };
+      return { bg: C.redBg,   border: C.redBorder,   text: C.redText,   label: '⚠ ERR' };
     case 'no_vehicles':
-      return {
-        bg: COLORS.surfaceMid,
-        border: COLORS.border,
-        text: COLORS.textDim,
-        label: 'NO CAR',
-      };
+      return { bg: C.surfaceMid, border: C.border,   text: C.textDim,   label: 'NO CAR' };
     case 'permission_error':
-      return {
-        bg: COLORS.amberBg,
-        border: COLORS.amberBorder,
-        text: COLORS.amberText,
-        label: '⚠️ PERM',
-      };
-    case 'idle':
+      return { bg: C.amberBg, border: C.amberBorder, text: C.amberText, label: '⚠ PERM' };
     default:
-      return {
-        bg: COLORS.surfaceMid,
-        border: COLORS.border,
-        text: COLORS.textSub,
-        label: 'IDLE',
-      };
+      return { bg: C.surfaceMid, border: C.borderHi, text: C.textSub,   label: 'IDLE' };
   }
 }
 
+function gpsQualityLabel(q: GpsTripWidgetData['gpsQuality']): string {
+  switch (q) {
+    case 'good': return '▲ GPS Strong';
+    case 'fair': return '◈ GPS Fair';
+    case 'poor': return '▽ GPS Weak';
+    default:     return '○ GPS Off';
+  }
+}
+
+function gpsQualityColor(q: GpsTripWidgetData['gpsQuality']): string {
+  switch (q) {
+    case 'good': return C.greenText;
+    case 'fair': return C.amberText;
+    case 'poor': return C.redText;
+    default:     return C.textDim;
+  }
+}
+
+// ─── Widget ───────────────────────────────────────────────────────────────────
+
 /**
- * GpsTripWidget — Android Home Screen GPS Control Panel
+ * GpsTripWidget v2 — Android Home Screen GPS Control Panel
  *
- * Distinct widget from VehicleGlanceWidget.
- * Functions as an interactive trip control panel:
- * - Start trip directly from widget
- * - Pause and Resume ongoing trip with durable distance anchor
- * - Finish trip directly and update home screen
- * - Persistent vehicle switcher across all states (idle, recording, paused, interrupted)
- * - Independent button touch targets (no fall-through container taps)
+ * States: idle | recording | paused | interrupted | no_vehicles | permission_error
+ * Actions: START_TRIP | PAUSE_TRIP | RESUME_TRIP | FINISH_TRIP | SWITCH_NEXT_VEHICLE
+ *
+ * Metrics shown while tracking: distance (km), elapsed time, trip start time,
+ * GPS quality, live speed (km/h when available), next-trip vehicle name.
  */
 export function GpsTripWidget(props: GpsTripWidgetData) {
-  const d: GpsTripWidgetData = {
-    ...DEFAULT_GPS_WIDGET_DATA,
-    ...props,
-  };
+  const d: GpsTripWidgetData = { ...DEFAULT_GPS_WIDGET_DATA, ...props };
 
-  const nonce = d.interactionNonce || 'rnd';
-  const badge = getStatusBadgeTheme(d.status);
-  const isTracking = d.status === 'recording' || d.status === 'paused';
-  const isRecording = d.status === 'recording';
-  const isPaused = d.status === 'paused';
-  const isInterrupted = d.status === 'interrupted';
-  const isNoVehicles = d.status === 'no_vehicles' || (d.vehicleCount ?? 0) === 0;
+  const nonce             = d.interactionNonce || 'rnd';
+  const theme             = getStatusTheme(d.status);
+  const isTracking        = d.status === 'recording' || d.status === 'paused';
+  const isRecording       = d.status === 'recording';
+  const isPaused          = d.status === 'paused';
+  const isInterrupted     = d.status === 'interrupted';
+  const isNoVehicles      = d.status === 'no_vehicles' || (d.vehicleCount ?? 1) === 0;
   const isPermissionError = d.status === 'permission_error';
+  const vehicleCount      = d.vehicleCount ?? 1;
 
-  const vehicleCount = d.vehicleCount ?? 1;
-
-  // Header display: if tracking, show active vehicle name; if idle, show selected vehicle name
-  const headerVehicleTitle = isTracking
+  const headerLabel = isTracking
     ? d.vehicleName
     : isNoVehicles
-    ? 'No Vehicles'
+    ? 'DriveLedger'
     : d.nextVehicleName || d.vehicleName;
+
+  const speedStr =
+    isRecording && typeof d.currentSpeedKph === 'number' && d.currentSpeedKph > 0
+      ? `${Math.round(d.currentSpeedKph)} km/h`
+      : null;
 
   return (
     <FlexWidget
       style={{
         height: 'match_parent',
         width: 'match_parent',
-        backgroundColor: COLORS.bg,
+        backgroundColor: C.bg,
         borderRadius: 20,
-        padding: 12,
+        padding: 10,
         justifyContent: 'space-between',
-        borderColor: COLORS.border,
+        borderColor: isTracking ? theme.border : C.border,
         borderWidth: 1,
       }}
     >
-      {/* ── Row 1: Header (Vehicle Title, Persistent Switcher, Status Badge) ── */}
+      {/* ── ROW 1 — Header ── */}
       <FlexWidget
         style={{
           flexDirection: 'row',
           justifyContent: 'space-between',
           alignItems: 'center',
           width: 'match_parent',
+          paddingBottom: 6,
         }}
       >
-        {/* Left: Satellite Icon & Vehicle Title */}
-        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 6, flex: 1 }}>
+        {/* Satellite icon + vehicle name */}
+        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 5, flex: 1 }}>
           <SvgWidget svg={SATELLITE_SVG} style={{ width: 16, height: 16 }} />
           <TextWidget
-            text={headerVehicleTitle}
-            style={{ fontSize: 13, fontWeight: 'bold', color: COLORS.text }}
+            text={headerLabel}
+            style={{ fontSize: 13, fontWeight: 'bold', color: C.text }}
             truncate="END"
             maxLines={1}
           />
         </FlexWidget>
 
-        {/* Right: Persistent Switch Vehicle Control & Status Badge */}
+        {/* Vehicle switcher + status badge */}
         <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 5 }}>
-          {/* VISIBILITY RULE: Vehicle switcher is NEVER conditionally removed across states */}
+
+          {/* Switcher — 3 states: 0 vehicles, 1 vehicle, 2+ vehicles */}
           {vehicleCount === 0 ? (
             <FlexWidget
               style={{
-                backgroundColor: COLORS.surfaceMid,
+                backgroundColor: C.skyBg,
                 borderRadius: 6,
-                paddingHorizontal: 6,
+                paddingHorizontal: 7,
                 paddingVertical: 3,
-                borderColor: COLORS.border,
+                borderColor: C.skyDark,
                 borderWidth: 1,
               }}
               clickAction="OPEN_URI"
               clickActionData={{ uri: 'driveledger://add-vehicle' }}
             >
-              <TextWidget
-                text="+ Add"
-                style={{ fontSize: 10, fontWeight: 'bold', color: COLORS.sky }}
-              />
+              <TextWidget text="+ Add" style={{ fontSize: 10, fontWeight: 'bold', color: C.sky }} />
             </FlexWidget>
           ) : vehicleCount === 1 ? (
             <FlexWidget
               style={{
-                backgroundColor: COLORS.surfaceMid,
+                backgroundColor: C.surfaceMid,
                 borderRadius: 6,
-                paddingHorizontal: 6,
+                paddingHorizontal: 7,
                 paddingVertical: 3,
-                borderColor: COLORS.border,
+                borderColor: C.border,
                 borderWidth: 1,
               }}
             >
-              <TextWidget
-                text="⇄ (1)"
-                style={{ fontSize: 10, fontWeight: '600', color: COLORS.textDim }}
-              />
+              <TextWidget text="⇄ 1" style={{ fontSize: 10, fontWeight: '600', color: C.textDim }} />
             </FlexWidget>
           ) : (
             <FlexWidget
               style={{
-                backgroundColor: isTracking ? '#1E293B' : COLORS.surfaceMid,
+                backgroundColor: isTracking ? C.surfaceHi : C.surfaceMid,
                 borderRadius: 6,
-                paddingHorizontal: 6,
+                paddingHorizontal: 7,
                 paddingVertical: 3,
-                borderColor: isTracking ? COLORS.skyDark : COLORS.border,
+                borderColor: isTracking ? C.sky : C.borderHi,
                 borderWidth: 1,
               }}
               clickAction="SWITCH_NEXT_VEHICLE"
@@ -275,315 +271,366 @@ export function GpsTripWidget(props: GpsTripWidgetData) {
               }}
             >
               <TextWidget
-                text={isTracking ? '⇄ Next' : '⇄'}
-                style={{
-                  fontSize: 11,
-                  fontWeight: 'bold',
-                  color: isTracking ? COLORS.sky : COLORS.textSub,
-                }}
+                text={isTracking ? '⇄ Next' : '⇄ Switch'}
+                style={{ fontSize: 10, fontWeight: 'bold', color: isTracking ? C.sky : C.textSub }}
               />
             </FlexWidget>
           )}
 
-          {/* Status Badge */}
+          {/* Status badge */}
           <FlexWidget
             style={{
-              backgroundColor: badge.bg,
+              backgroundColor: theme.bg,
               borderRadius: 8,
               paddingHorizontal: 7,
               paddingVertical: 3,
-              borderColor: badge.border,
+              borderColor: theme.border,
               borderWidth: 1,
             }}
           >
-            <TextWidget
-              text={badge.label}
-              style={{ fontSize: 10, fontWeight: 'bold', color: badge.text }}
-            />
+            <TextWidget text={theme.label} style={{ fontSize: 10, fontWeight: 'bold', color: theme.text }} />
           </FlexWidget>
         </FlexWidget>
       </FlexWidget>
 
-      {/* ── Row 2: Central Metric & Status Display ── */}
+      {/* ── ROW 2 — Central Metric Panel ── */}
       {isTracking ? (
-        /* Recording / Paused State: Live distance, duration, and quality status */
+        /* RECORDING / PAUSED — Live metrics */
         <FlexWidget
           style={{
-            backgroundColor: COLORS.surface,
+            backgroundColor: isPaused ? C.amberBg : C.greenBg,
             borderRadius: 12,
-            paddingHorizontal: 12,
+            paddingHorizontal: 11,
             paddingVertical: 8,
-            borderColor: COLORS.border,
+            borderColor: isPaused ? C.amberBorder : C.greenBorder,
             borderWidth: 1,
-            justifyContent: 'center',
+            flex: 1,
+            justifyContent: 'space-between',
+            marginBottom: 6,
           }}
-          clickAction="OPEN_URI"
-          clickActionData={{ uri: 'driveledger://?action=active_trip' }}
+          clickAction="OPEN_TRIP_DETAILS"
+          clickActionData={{
+            action: 'OPEN_TRIP_DETAILS',
+            tripId: d.tripId,
+            interactionId: `details_${nonce}`,
+            timestamp: Date.now(),
+          }}
         >
-          <FlexWidget
-            style={{
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 4 }}>
-              <TextWidget
-                text={d.currentDistanceKm.toFixed(2)}
-                style={{
-                  fontSize: 26,
-                  fontWeight: 'bold',
-                  color: isPaused ? COLORS.amberText : COLORS.sky,
-                }}
-              />
-              <TextWidget
-                text="km"
-                style={{ fontSize: 13, fontWeight: 'bold', color: COLORS.textSub }}
-              />
-            </FlexWidget>
-
+          {/* Distance — primary big number */}
+          <FlexWidget style={{ flexDirection: 'row', alignItems: 'flex-end', flexGap: 4 }}>
             <TextWidget
-              text={isPaused ? '⏸ Paused' : `⏱️ ${d.currentDurationFormatted || '0m'}`}
-              style={{ fontSize: 11, fontWeight: '600', color: isPaused ? COLORS.amberText : COLORS.textSub }}
+              text={d.currentDistanceKm.toFixed(2)}
+              style={{ fontSize: 30, fontWeight: 'bold', color: isPaused ? C.amberText : C.greenText }}
+            />
+            <TextWidget
+              text="km"
+              style={{ fontSize: 14, fontWeight: '600', color: isPaused ? C.amber : C.green, marginBottom: 3 }}
             />
           </FlexWidget>
 
+          {/* Thin divider */}
+          <FlexWidget
+            style={{
+              width: 'match_parent',
+              height: 1,
+              backgroundColor: isPaused ? C.amberBorder : C.greenBorder,
+              marginVertical: 4,
+            }}
+          />
+
+          {/* Elapsed time + start time */}
           <FlexWidget
             style={{
               flexDirection: 'row',
               justifyContent: 'space-between',
               alignItems: 'center',
+              width: 'match_parent',
+            }}
+          >
+            <TextWidget
+              text={`⏱ ${d.currentDurationFormatted || '0m'}`}
+              style={{ fontSize: 12, fontWeight: '700', color: isPaused ? C.amberText : C.text }}
+            />
+            {d.startTimeFormatted && d.startTimeFormatted !== '—' && (
+              <TextWidget
+                text={`Started ${d.startTimeFormatted}`}
+                style={{ fontSize: 10, color: isPaused ? C.amber : C.textSub }}
+              />
+            )}
+          </FlexWidget>
+
+          {/* GPS quality + speed / next vehicle */}
+          <FlexWidget
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              width: 'match_parent',
               marginTop: 2,
             }}
           >
             <TextWidget
-              text={
-                isPaused
-                  ? 'Distance on hold'
+              text={isPaused ? '⏸ Distance on hold' : gpsQualityLabel(d.gpsQuality)}
+              style={{
+                fontSize: 10,
+                color: isPaused
+                  ? C.amber
                   : d.gpsQuality === 'good'
-                  ? '📶 GPS Good'
+                  ? C.greenText
                   : d.gpsQuality === 'fair'
-                  ? '📶 GPS Fair'
-                  : '📶 GPS Active'
-              }
-              style={{ fontSize: 10, color: isPaused ? COLORS.amber : COLORS.textDim }}
+                  ? C.amberText
+                  : d.gpsQuality === 'poor'
+                  ? C.redText
+                  : C.textDim,
+              }}
             />
-            {d.nextVehicleName && d.nextVehicleName !== d.vehicleName && (
-              <TextWidget
-                text={`Next: ${d.nextVehicleName}`}
-                style={{ fontSize: 10, color: COLORS.textDim }}
-                truncate="END"
-                maxLines={1}
-              />
+            {speedStr && !isPaused ? (
+              <TextWidget text={speedStr} style={{ fontSize: 10, fontWeight: '700', color: C.sky }} />
+            ) : (
+              d.nextVehicleName && d.nextVehicleName !== d.vehicleName && (
+                <TextWidget
+                  text={`Next: ${d.nextVehicleName}`}
+                  style={{ fontSize: 10, color: C.textDim }}
+                  truncate="END"
+                  maxLines={1}
+                />
+              )
             )}
           </FlexWidget>
         </FlexWidget>
+
       ) : isInterrupted ? (
-        /* Interrupted Session Notice */
+        /* INTERRUPTED — Recovery notice */
         <FlexWidget
           style={{
-            backgroundColor: COLORS.redBg,
+            backgroundColor: C.redBg,
             borderRadius: 12,
-            paddingHorizontal: 10,
-            paddingVertical: 8,
-            borderColor: COLORS.redBorder,
+            paddingHorizontal: 11,
+            paddingVertical: 9,
+            borderColor: C.redBorder,
             borderWidth: 1,
+            flex: 1,
+            justifyContent: 'center',
+            marginBottom: 6,
           }}
           clickAction="OPEN_URI"
           clickActionData={{ uri: 'driveledger://?action=recover_trip' }}
         >
           <TextWidget
-            text="⚠️ Interrupted Session"
-            style={{ fontSize: 12, fontWeight: 'bold', color: COLORS.redText }}
+            text="⚠ Interrupted Session"
+            style={{ fontSize: 13, fontWeight: 'bold', color: C.redText }}
           />
           <TextWidget
-            text="App closed unexpectedly. Tap Review to recover recorded data."
-            style={{ fontSize: 10, color: COLORS.textSub, marginTop: 2 }}
-            maxLines={2}
-            truncate="END"
+            text="App closed unexpectedly."
+            style={{ fontSize: 10, color: C.textSub, marginTop: 2 }}
+          />
+          {d.currentDistanceKm > 0 && (
+            <TextWidget
+              text={`Recorded: ${d.currentDistanceKm.toFixed(2)} km · ${d.currentDurationFormatted}`}
+              style={{ fontSize: 10, fontWeight: '600', color: C.redText, marginTop: 3 }}
+            />
+          )}
+          <TextWidget
+            text="Tap to review & recover →"
+            style={{ fontSize: 10, color: C.red, marginTop: 3 }}
           />
         </FlexWidget>
+
       ) : isNoVehicles ? (
-        /* No Vehicles Registered Notice */
+        /* NO VEHICLES — Onboarding prompt */
         <FlexWidget
           style={{
-            backgroundColor: COLORS.surface,
+            backgroundColor: C.surface,
             borderRadius: 12,
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            borderColor: COLORS.border,
+            paddingHorizontal: 11,
+            paddingVertical: 9,
+            borderColor: C.border,
             borderWidth: 1,
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginBottom: 6,
           }}
           clickAction="OPEN_URI"
           clickActionData={{ uri: 'driveledger://add-vehicle' }}
         >
+          <TextWidget text="NO VEHICLES YET" style={{ fontSize: 10, fontWeight: 'bold', color: C.textDim }} />
           <TextWidget
-            text="NO VEHICLES FOUND"
-            style={{ fontSize: 10, fontWeight: 'bold', color: COLORS.textDim }}
-          />
-          <TextWidget
-            text="Register a vehicle to start tracking"
-            style={{ fontSize: 12, fontWeight: '600', color: COLORS.textSub, marginTop: 2 }}
+            text="Register a vehicle to start GPS tracking."
+            style={{ fontSize: 11, fontWeight: '600', color: C.textSub, marginTop: 3 }}
+            maxLines={2}
+            truncate="END"
           />
         </FlexWidget>
+
       ) : isPermissionError ? (
-        /* Location Permission Missing Notice */
+        /* PERMISSION ERROR */
         <FlexWidget
           style={{
-            backgroundColor: COLORS.amberBg,
+            backgroundColor: C.amberBg,
             borderRadius: 12,
-            paddingHorizontal: 10,
-            paddingVertical: 8,
-            borderColor: COLORS.amberBorder,
+            paddingHorizontal: 11,
+            paddingVertical: 9,
+            borderColor: C.amberBorder,
             borderWidth: 1,
+            flex: 1,
+            justifyContent: 'center',
+            marginBottom: 6,
           }}
           clickAction="OPEN_URI"
           clickActionData={{ uri: 'driveledger://?action=permissions' }}
         >
           <TextWidget
-            text="⚠️ Permission Required"
-            style={{ fontSize: 12, fontWeight: 'bold', color: COLORS.amberText }}
+            text="⚠ Location Permission Required"
+            style={{ fontSize: 12, fontWeight: 'bold', color: C.amberText }}
           />
           <TextWidget
-            text="Enable location permission in DriveLedger to track trips."
-            style={{ fontSize: 10, color: COLORS.textSub, marginTop: 2 }}
+            text="Enable background location to record trips."
+            style={{ fontSize: 10, color: C.textSub, marginTop: 3 }}
             maxLines={2}
             truncate="END"
           />
         </FlexWidget>
+
       ) : (
-        /* Idle State: Last Trip Summary or Ready Prompt */
+        /* IDLE — Last trip summary or ready prompt */
         <FlexWidget
           style={{
-            backgroundColor: COLORS.surface,
+            backgroundColor: C.surface,
             borderRadius: 12,
-            paddingHorizontal: 12,
+            paddingHorizontal: 11,
             paddingVertical: 8,
-            borderColor: COLORS.border,
+            borderColor: C.border,
             borderWidth: 1,
+            flex: 1,
+            justifyContent: 'space-between',
+            marginBottom: 6,
           }}
         >
-          <TextWidget
-            text={d.hasLastTrip ? `LAST TRIP · ${d.lastTripDate}` : 'OFFLINE GPS TRACKER'}
-            style={{ fontSize: 10, fontWeight: 'bold', color: COLORS.textDim }}
-          />
-
-          <FlexWidget
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              flexGap: 6,
-              marginTop: 2,
-            }}
-          >
-            {d.hasLastTrip ? (
-              <>
+          {d.hasLastTrip ? (
+            <>
+              <TextWidget
+                text={`LAST TRIP · ${d.lastTripDate}`}
+                style={{ fontSize: 9, fontWeight: 'bold', color: C.textDim }}
+              />
+              <FlexWidget style={{ flexDirection: 'row', alignItems: 'flex-end', flexGap: 6, marginTop: 3 }}>
                 <TextWidget
                   text={`${d.lastTripDistanceKm.toFixed(1)} km`}
-                  style={{ fontSize: 17, fontWeight: 'bold', color: COLORS.text }}
+                  style={{ fontSize: 22, fontWeight: 'bold', color: C.text }}
                 />
                 {d.lastTripDurationFormatted && d.lastTripDurationFormatted !== '—' && (
                   <TextWidget
                     text={`· ${d.lastTripDurationFormatted}`}
-                    style={{ fontSize: 12, color: COLORS.textSub }}
+                    style={{ fontSize: 12, color: C.textSub, marginBottom: 2 }}
                   />
                 )}
-              </>
-            ) : (
+              </FlexWidget>
               <TextWidget
-                text="Ready to log trips"
-                style={{ fontSize: 14, fontWeight: '600', color: COLORS.textSub }}
+                text={`Ready: ${d.nextVehicleName || d.vehicleName}`}
+                style={{ fontSize: 10, color: C.sky, marginTop: 2 }}
+                truncate="END"
+                maxLines={1}
               />
-            )}
-          </FlexWidget>
+            </>
+          ) : (
+            <>
+              <TextWidget
+                text="GPS TRIP TRACKER"
+                style={{ fontSize: 9, fontWeight: 'bold', color: C.textDim }}
+              />
+              <TextWidget
+                text="Ready to log your drive"
+                style={{ fontSize: 14, fontWeight: '600', color: C.textSub, marginTop: 4 }}
+              />
+              <TextWidget
+                text={`Vehicle: ${d.nextVehicleName || d.vehicleName}`}
+                style={{ fontSize: 10, color: C.sky, marginTop: 4 }}
+                truncate="END"
+                maxLines={1}
+              />
+            </>
+          )}
         </FlexWidget>
       )}
 
-      {/* ── Row 3: Action Buttons ── */}
+      {/* ── ROW 3 — Action Buttons ── */}
       {isNoVehicles ? (
-        /* No Vehicles: Add Vehicle Action */
+        /* Add Vehicle */
         <FlexWidget
           style={{
             width: 'match_parent',
-            backgroundColor: COLORS.surfaceMid,
+            backgroundColor: C.skyBg,
             borderRadius: 10,
-            paddingVertical: 7,
+            paddingVertical: 8,
             alignItems: 'center',
             justifyContent: 'center',
-            borderColor: COLORS.skyDark,
+            borderColor: C.sky,
             borderWidth: 1,
           }}
           clickAction="OPEN_URI"
           clickActionData={{ uri: 'driveledger://add-vehicle' }}
         >
-          <TextWidget
-            text="+ Add Vehicle"
-            style={{ fontSize: 11, fontWeight: 'bold', color: COLORS.sky }}
-          />
+          <TextWidget text="+ Add Vehicle" style={{ fontSize: 12, fontWeight: 'bold', color: C.sky }} />
         </FlexWidget>
+
       ) : isInterrupted ? (
-        /* Interrupted: Review & Recover Action */
+        /* Review & Recover */
         <FlexWidget
           style={{
             width: 'match_parent',
-            backgroundColor: COLORS.red,
+            backgroundColor: C.red,
             borderRadius: 10,
-            paddingVertical: 7,
+            paddingVertical: 8,
             alignItems: 'center',
             justifyContent: 'center',
-            borderColor: COLORS.redBorder,
+            borderColor: C.redBorder,
             borderWidth: 1,
           }}
           clickAction="OPEN_URI"
           clickActionData={{ uri: 'driveledger://?action=recover_trip' }}
         >
-          <TextWidget
-            text="Review & Recover Trip →"
-            style={{ fontSize: 11, fontWeight: 'bold', color: '#0F172A' }}
-          />
+          <TextWidget text="Review & Recover Trip →" style={{ fontSize: 12, fontWeight: 'bold', color: '#0F172A' }} />
         </FlexWidget>
+
       ) : isPermissionError ? (
-        /* Permission Error: Grant Permission Action */
+        /* Grant Permission */
         <FlexWidget
           style={{
             width: 'match_parent',
-            backgroundColor: COLORS.amber,
+            backgroundColor: C.amber,
             borderRadius: 10,
-            paddingVertical: 7,
+            paddingVertical: 8,
             alignItems: 'center',
             justifyContent: 'center',
-            borderColor: COLORS.amberBorder,
+            borderColor: C.amberBorder,
             borderWidth: 1,
           }}
           clickAction="OPEN_URI"
           clickActionData={{ uri: 'driveledger://?action=permissions' }}
         >
-          <TextWidget
-            text="Grant Location Permission →"
-            style={{ fontSize: 11, fontWeight: 'bold', color: '#0F172A' }}
-          />
+          <TextWidget text="Grant Location Permission →" style={{ fontSize: 12, fontWeight: 'bold', color: '#0F172A' }} />
         </FlexWidget>
+
       ) : isRecording ? (
-        /* Recording: Pause & Finish Controls */
+        /* RECORDING: Pause + Finish */
         <FlexWidget
           style={{
             width: 'match_parent',
             flexDirection: 'row',
             justifyContent: 'space-between',
             alignItems: 'center',
-            flexGap: 8,
+            flexGap: 7,
           }}
         >
-          {/* Pause Button */}
           <FlexWidget
             style={{
               flex: 1,
-              backgroundColor: COLORS.amberBg,
+              backgroundColor: C.amberBg,
               borderRadius: 10,
-              paddingVertical: 7,
+              paddingVertical: 8,
               alignItems: 'center',
               justifyContent: 'center',
-              borderColor: COLORS.amberBorder,
+              borderColor: C.amberBorder,
               borderWidth: 1,
             }}
             clickAction="PAUSE_TRIP"
@@ -594,22 +641,18 @@ export function GpsTripWidget(props: GpsTripWidgetData) {
               timestamp: Date.now(),
             }}
           >
-            <TextWidget
-              text="⏸ Pause"
-              style={{ fontSize: 11, fontWeight: 'bold', color: COLORS.amberText }}
-            />
+            <TextWidget text="⏸  Pause" style={{ fontSize: 12, fontWeight: 'bold', color: C.amberText }} />
           </FlexWidget>
 
-          {/* Finish Button */}
           <FlexWidget
             style={{
               flex: 1,
-              backgroundColor: COLORS.surfaceMid,
+              backgroundColor: C.surfaceMid,
               borderRadius: 10,
-              paddingVertical: 7,
+              paddingVertical: 8,
               alignItems: 'center',
               justifyContent: 'center',
-              borderColor: COLORS.border,
+              borderColor: C.borderHi,
               borderWidth: 1,
             }}
             clickAction="FINISH_TRIP"
@@ -620,33 +663,30 @@ export function GpsTripWidget(props: GpsTripWidgetData) {
               timestamp: Date.now(),
             }}
           >
-            <TextWidget
-              text="⏹ Finish"
-              style={{ fontSize: 11, fontWeight: 'bold', color: COLORS.text }}
-            />
+            <TextWidget text="⏹  Finish" style={{ fontSize: 12, fontWeight: 'bold', color: C.text }} />
           </FlexWidget>
         </FlexWidget>
+
       ) : isPaused ? (
-        /* Paused: Resume & Finish Controls */
+        /* PAUSED: Resume + Finish */
         <FlexWidget
           style={{
             width: 'match_parent',
             flexDirection: 'row',
             justifyContent: 'space-between',
             alignItems: 'center',
-            flexGap: 8,
+            flexGap: 7,
           }}
         >
-          {/* Resume Button */}
           <FlexWidget
             style={{
               flex: 1,
-              backgroundColor: COLORS.greenBg,
+              backgroundColor: C.greenBg,
               borderRadius: 10,
-              paddingVertical: 7,
+              paddingVertical: 8,
               alignItems: 'center',
               justifyContent: 'center',
-              borderColor: COLORS.greenBorder,
+              borderColor: C.greenBorder,
               borderWidth: 1,
             }}
             clickAction="RESUME_TRIP"
@@ -657,22 +697,18 @@ export function GpsTripWidget(props: GpsTripWidgetData) {
               timestamp: Date.now(),
             }}
           >
-            <TextWidget
-              text="▶ Resume"
-              style={{ fontSize: 11, fontWeight: 'bold', color: COLORS.greenText }}
-            />
+            <TextWidget text="▶  Resume" style={{ fontSize: 12, fontWeight: 'bold', color: C.greenText }} />
           </FlexWidget>
 
-          {/* Finish Button */}
           <FlexWidget
             style={{
               flex: 1,
-              backgroundColor: COLORS.surfaceMid,
+              backgroundColor: C.surfaceMid,
               borderRadius: 10,
-              paddingVertical: 7,
+              paddingVertical: 8,
               alignItems: 'center',
               justifyContent: 'center',
-              borderColor: COLORS.border,
+              borderColor: C.borderHi,
               borderWidth: 1,
             }}
             clickAction="FINISH_TRIP"
@@ -683,23 +719,21 @@ export function GpsTripWidget(props: GpsTripWidgetData) {
               timestamp: Date.now(),
             }}
           >
-            <TextWidget
-              text="⏹ Finish"
-              style={{ fontSize: 11, fontWeight: 'bold', color: COLORS.text }}
-            />
+            <TextWidget text="⏹  Finish" style={{ fontSize: 12, fontWeight: 'bold', color: C.text }} />
           </FlexWidget>
         </FlexWidget>
+
       ) : (
-        /* Idle: Start GPS Trip Button */
+        /* IDLE: Start GPS Trip */
         <FlexWidget
           style={{
             width: 'match_parent',
-            backgroundColor: COLORS.sky,
+            backgroundColor: C.sky,
             borderRadius: 10,
-            paddingVertical: 7,
+            paddingVertical: 8,
             alignItems: 'center',
             justifyContent: 'center',
-            borderColor: COLORS.skyDark,
+            borderColor: C.skyDark,
             borderWidth: 1,
           }}
           clickAction="START_TRIP"
@@ -710,10 +744,7 @@ export function GpsTripWidget(props: GpsTripWidgetData) {
             timestamp: Date.now(),
           }}
         >
-          <TextWidget
-            text="📍 Start GPS Trip"
-            style={{ fontSize: 11, fontWeight: 'bold', color: '#0F172A' }}
-          />
+          <TextWidget text="📍  Start GPS Trip" style={{ fontSize: 12, fontWeight: 'bold', color: '#0B1120' }} />
         </FlexWidget>
       )}
     </FlexWidget>

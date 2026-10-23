@@ -63,6 +63,9 @@ export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
             await finishGpsTripCoordinator(tripId, undefined, interactionId);
           } else if (clickAction === 'SWITCH_NEXT_VEHICLE' || clickAction === 'SWITCH_VEHICLE') {
             await cycleNextVehicleCoordinator(interactionId);
+          } else if (clickAction === 'OPEN_TRIP_DETAILS') {
+            // Deep-link open — handled by Android via the OPEN_URI mechanism on the metric panel.
+            // No lifecycle mutation needed; the widget re-render below keeps UI consistent.
           }
         } catch (err) {
           console.warn('[DriveLedger] Error executing widget action:', clickAction, err);
