@@ -119,7 +119,7 @@
               "targetCellWidth": 3,
               "targetCellHeight": 2,
               "resizeMode": "horizontal|vertical",
-              "previewImage": "./assets/images/widgets/widget-preview.png",
+              "previewImage": "./assets/images/widgets/gps-widget-preview.png",
               "updatePeriodMillis": 900000
             }
           ]

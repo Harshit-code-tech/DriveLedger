@@ -251,7 +251,7 @@ export function GpsTripWidget(props: GpsTripWidgetData) {
                 borderWidth: 1,
               }}
             >
-              <TextWidget text="⇄ 1" style={{ fontSize: 10, fontWeight: '600', color: C.textDim }} />
+              <TextWidget text="⇄ (1)" style={{ fontSize: 10, fontWeight: '600', color: C.textDim }} />
             </FlexWidget>
           ) : (
             <FlexWidget
@@ -319,7 +319,7 @@ export function GpsTripWidget(props: GpsTripWidgetData) {
           {/* Distance — primary big number */}
           <FlexWidget style={{ flexDirection: 'row', alignItems: 'flex-end', flexGap: 4 }}>
             <TextWidget
-              text={d.currentDistanceKm.toFixed(2)}
+              text={(d.currentDistanceKm || 0).toFixed(2)}
               style={{ fontSize: 30, fontWeight: 'bold', color: isPaused ? C.amberText : C.greenText }}
             />
             <TextWidget
@@ -426,7 +426,7 @@ export function GpsTripWidget(props: GpsTripWidgetData) {
           />
           {d.currentDistanceKm > 0 && (
             <TextWidget
-              text={`Recorded: ${d.currentDistanceKm.toFixed(2)} km · ${d.currentDurationFormatted}`}
+              text={`Recorded: ${(d.currentDistanceKm || 0).toFixed(2)} km · ${d.currentDurationFormatted}`}
               style={{ fontSize: 10, fontWeight: '600', color: C.redText, marginTop: 3 }}
             />
           )}
@@ -508,14 +508,20 @@ export function GpsTripWidget(props: GpsTripWidgetData) {
           }}
         >
           {d.hasLastTrip ? (
-            <>
+            <FlexWidget
+              style={{
+                width: 'match_parent',
+                flex: 1,
+                justifyContent: 'space-between',
+              }}
+            >
               <TextWidget
                 text={`LAST TRIP · ${d.lastTripDate}`}
                 style={{ fontSize: 9, fontWeight: 'bold', color: C.textDim }}
               />
               <FlexWidget style={{ flexDirection: 'row', alignItems: 'flex-end', flexGap: 6, marginTop: 3 }}>
                 <TextWidget
-                  text={`${d.lastTripDistanceKm.toFixed(1)} km`}
+                  text={`${(d.lastTripDistanceKm || 0).toFixed(1)} km`}
                   style={{ fontSize: 22, fontWeight: 'bold', color: C.text }}
                 />
                 {d.lastTripDurationFormatted && d.lastTripDurationFormatted !== '—' && (
@@ -531,9 +537,15 @@ export function GpsTripWidget(props: GpsTripWidgetData) {
                 truncate="END"
                 maxLines={1}
               />
-            </>
+            </FlexWidget>
           ) : (
-            <>
+            <FlexWidget
+              style={{
+                width: 'match_parent',
+                flex: 1,
+                justifyContent: 'space-between',
+              }}
+            >
               <TextWidget
                 text="GPS TRIP TRACKER"
                 style={{ fontSize: 9, fontWeight: 'bold', color: C.textDim }}
@@ -548,7 +560,7 @@ export function GpsTripWidget(props: GpsTripWidgetData) {
                 truncate="END"
                 maxLines={1}
               />
-            </>
+            </FlexWidget>
           )}
         </FlexWidget>
       )}
