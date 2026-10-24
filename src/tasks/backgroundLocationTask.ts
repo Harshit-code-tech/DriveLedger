@@ -275,9 +275,13 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
     }
   }
 
-  // 6. Throttled update to GPS Cockpit Widget (every 50m of displacement or 10s)
+  // 6. Throttled update to GPS Cockpit Widget (immediately for initial fixes, or every 50m of displacement or 10s)
   const now = Date.now();
-  if (incrementalDistanceMeters >= 50 || now - lastWidgetSyncTime >= 10000) {
+  if (
+    currentDiagnostics.accepted_samples_count <= 2 ||
+    incrementalDistanceMeters >= 50 ||
+    now - lastWidgetSyncTime >= 10000
+  ) {
     lastWidgetSyncTime = now;
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports

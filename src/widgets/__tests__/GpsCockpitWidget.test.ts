@@ -86,4 +86,69 @@ describe('GpsCockpitWidget Component', () => {
     const tree = GpsCockpitWidget(cngData);
     expect(tree).toBeDefined();
   });
+
+  it('renders two-wheeler bike SVG when vehicle_type is two_wheeler', () => {
+    const bikeData: GpsCockpitWidgetData = {
+      ...DEFAULT_GPS_WIDGET_DATA,
+      recordingState: 'idle',
+      vehicleName: 'Activa 6G',
+      regNumber: 'MH 12 AB 1234',
+      vehicleType: 'two_wheeler',
+      fuelType: 'petrol',
+    };
+
+    const tree = GpsCockpitWidget(bikeData);
+    expect(tree).toBeDefined();
+  });
+
+  it('renders GpsCockpitCompactWidget in idle state as FlexWidget with vehicle info', () => {
+    const { GpsCockpitCompactWidget } = require('../GpsCockpitWidget');
+    const compactIdleData: GpsCockpitWidgetData = {
+      ...DEFAULT_GPS_WIDGET_DATA,
+      recordingState: 'idle',
+      vehicleName: 'Jupiter 125',
+      regNumber: 'KA 03 XY 7890',
+      vehicleType: 'two_wheeler',
+      vehicleCount: 2,
+    };
+
+    const tree = GpsCockpitCompactWidget(compactIdleData);
+    expect(tree).toBeDefined();
+    expect(tree.props.clickAction).toBe('OPEN_APP');
+  });
+
+  it('renders GpsCockpitCompactWidget in recording state with vehicle identity and metrics', () => {
+    const { GpsCockpitCompactWidget } = require('../GpsCockpitWidget');
+    const compactRecData: GpsCockpitWidgetData = {
+      ...DEFAULT_GPS_WIDGET_DATA,
+      recordingState: 'recording',
+      vehicleName: 'Pulsar NS200',
+      regNumber: 'DL 08 CC 5555',
+      speedKmh: 45,
+      distanceKm: 8.2,
+      formattedElapsed: '12:40',
+      tripStartTime: '18:15',
+    };
+
+    const tree = GpsCockpitCompactWidget(compactRecData);
+    expect(tree).toBeDefined();
+    expect(tree.props.style.borderColor).toBe('#0891B2');
+  });
+
+  it('renders GpsCockpitCompactWidget in paused state with frozen metrics and amber border', () => {
+    const { GpsCockpitCompactWidget } = require('../GpsCockpitWidget');
+    const compactPauseData: GpsCockpitWidgetData = {
+      ...DEFAULT_GPS_WIDGET_DATA,
+      recordingState: 'paused',
+      vehicleName: 'Pulsar NS200',
+      regNumber: 'DL 08 CC 5555',
+      speedKmh: 0,
+      distanceKm: 8.2,
+      formattedElapsed: '12:40',
+    };
+
+    const tree = GpsCockpitCompactWidget(compactPauseData);
+    expect(tree).toBeDefined();
+    expect(tree.props.style.borderColor).toBe('#D97706');
+  });
 });

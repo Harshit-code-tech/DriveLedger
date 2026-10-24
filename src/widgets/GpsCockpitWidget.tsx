@@ -1,5 +1,4 @@
 "use no memo";
-import React from 'react';
 import { FlexWidget, SvgWidget, TextWidget } from 'react-native-android-widget';
 
 // ─── Car Silhouette SVG (white hatchback side-profile) ───────────────────────
@@ -17,6 +16,174 @@ const CAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 56" wi
   <path d="M64 26 L64 40" stroke="#94A3B8" stroke-width="0.7" stroke-dasharray="2,2"/>
   <path d="M84 26 L84 40" stroke="#94A3B8" stroke-width="0.7" stroke-dasharray="2,2"/>
 </svg>`;
+
+// ─── Two-Wheeler Silhouette SVG (Motorcycle / Scooter side-profile) ───────────
+const BIKE_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 75" width="90" height="42">
+  <defs>
+    <linearGradient id="bikeRed" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FDA4AF"/>
+      <stop offset="50%" stop-color="#E11D48"/>
+      <stop offset="100%" stop-color="#881337"/>
+    </linearGradient>
+
+    <linearGradient id="bikeGold" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#92400E"/>
+      <stop offset="50%" stop-color="#FDE68A"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+
+    <linearGradient id="bikeBeam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity=".25"/>
+      <stop offset="100%" stop-color="#38BDF8" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Wheels and tires -->
+  <g fill="#0B0F19" stroke="#475569" stroke-width="1.5">
+    <circle cx="34" cy="51" r="15"/>
+    <circle cx="125" cy="51" r="15"/>
+  </g>
+
+  <!-- Alloy rims -->
+  <g fill="#1E293B" stroke="#FBBF24" stroke-width="1.2">
+    <circle cx="34" cy="51" r="11"/>
+    <circle cx="125" cy="51" r="11"/>
+  </g>
+
+  <!-- Alloy spokes -->
+  <g stroke="#FBBF24" stroke-width=".8">
+    <path d="M34 51L44 51 M34 51L41.1 43.9
+             M34 51L34 41 M34 51L26.9 43.9
+             M34 51L24 51 M34 51L26.9 58.1
+             M34 51L34 61 M34 51L41.1 58.1"/>
+    <path d="M125 51L135 51 M125 51L132.1 43.9
+             M125 51L125 41 M125 51L117.9 43.9
+             M125 51L115 51 M125 51L117.9 58.1
+             M125 51L125 61 M125 51L132.1 58.1"/>
+  </g>
+
+  <!-- Wheel hubs -->
+  <g fill="#334155" stroke="#CBD5E1" stroke-width=".8">
+    <circle cx="34" cy="51" r="4"/>
+    <circle cx="125" cy="51" r="4"/>
+    <circle cx="34" cy="51" r="1.5" fill="#0F172A"/>
+    <circle cx="125" cy="51" r="1.5" fill="#0F172A"/>
+  </g>
+
+  <!-- Rear swingarm and frame -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M34 50L57 44L77 48L54 53Z"
+          fill="#1E293B" stroke="#64748B" stroke-width="1.2"/>
+    <path d="M52 47L67 33L90 35L76 48"
+          stroke="#64748B" stroke-width="2"/>
+    <path d="M55 46L65 34"
+          stroke="url(#bikeGold)" stroke-width="3"/>
+    <path d="M62 35L70 45L81 43L90 35"
+          stroke="#475569" stroke-width="1.6"/>
+  </g>
+
+  <!-- Exhaust -->
+  <path d="M49 51L31 43L25 37L28 35L38 42L52 47Z"
+        fill="#0F172A" stroke="#94A3B8" stroke-width="1"/>
+  <path d="M25 37L28 35"
+        stroke="#FB7185" stroke-width="1.5"/>
+
+  <!-- Fuel tank and bodywork -->
+  <path d="M99 24Q87 19 76 25L56 31L43 29L39 33
+           Q60 40 77 36L94 34L105 29Z"
+        fill="url(#bikeRed)" stroke="#881337" stroke-width=".8"/>
+
+  <!-- Tank highlight -->
+  <path d="M97 25Q85 22 76 27L59 32"
+        fill="none" stroke="#FDA4AF" stroke-width="1.2"
+        stroke-linecap="round"/>
+
+  <!-- Rear seat and tail -->
+  <path d="M56 29Q47 28 39 29L22 24L18 25
+           L38 33L59 34L69 31Z"
+        fill="#090D16" stroke="#334155" stroke-width=".8"/>
+
+  <path d="M22 24L18 25L25 29L32 30L28 26Z"
+        fill="#E11D48"/>
+
+  <!-- Front fairing -->
+  <path d="M96 31L87 41L78 39L87 32Z"
+        fill="#1E293B" stroke="#64748B" stroke-width=".8"/>
+  <path d="M88 34L82 39"
+        stroke="#FB7185" stroke-width="1.2"/>
+
+  <!-- Engine block -->
+  <path d="M70 37L85 36L88 44L81 49L68 47Z"
+        fill="#1E293B" stroke="#64748B" stroke-width="1"/>
+
+  <!-- Engine cooling fins -->
+  <g stroke="#94A3B8" stroke-width=".8">
+    <path d="M71 39H84"/>
+    <path d="M70 42H83"/>
+    <path d="M70 45H81"/>
+  </g>
+
+  <!-- Crankcase -->
+  <circle cx="75" cy="47" r="4"
+          fill="#334155" stroke="#94A3B8" stroke-width="1"/>
+  <circle cx="75" cy="47" r="1.5" fill="#0F172A"/>
+
+  <!-- Front suspension -->
+  <path d="M125 51L105 18"
+        stroke="url(#bikeGold)" stroke-width="3"
+        stroke-linecap="round" fill="none"/>
+
+  <path d="M125 51L116 34"
+        stroke="#CBD5E1" stroke-width="2"
+        stroke-linecap="round" fill="none"/>
+
+  <!-- Handlebars -->
+  <path d="M105 18L100 14L94 15"
+        stroke="#CBD5E1" stroke-width="2"
+        stroke-linecap="round" fill="none"/>
+
+  <path d="M100 14L94 15"
+        stroke="#06B6D4" stroke-width="2.5"
+        stroke-linecap="round" fill="none"/>
+
+  <!-- Headlight housing -->
+  <path d="M106 22L112 24L108 28L101 26Z"
+        fill="#0F172A" stroke="#64748B" stroke-width=".8"/>
+
+  <!-- LED headlight -->
+  <path d="M109 24L116 26L110 28Z"
+        fill="#67E8F9"/>
+
+  <!-- Headlight beam -->
+  <path d="M115 25L159 17L159 37L115 28Z"
+        fill="url(#bikeBeam)"/>
+
+  <!-- Front mudguard -->
+  <path d="M113 43Q120 34 137 40"
+        fill="none" stroke="#FB7185"
+        stroke-width="2.2" stroke-linecap="round"/>
+
+  <!-- Rear brake detail -->
+  <circle cx="34" cy="51" r="7"
+          fill="none" stroke="#94A3B8" stroke-width=".8"
+          stroke-dasharray="3 2"/>
+
+  <!-- Front brake detail -->
+  <circle cx="125" cy="51" r="7"
+          fill="none" stroke="#94A3B8" stroke-width=".8"
+          stroke-dasharray="3 2"/>
+
+  <!-- Rear monoshock -->
+  <path d="M48 44L57 37"
+        stroke="#FBBF24" stroke-width="2.4"
+        stroke-linecap="round" fill="none"/>
+
+  <path d="M48 44L57 37"
+        stroke="#0F172A" stroke-width=".8"
+        stroke-dasharray="1.5 1.5" fill="none"/>
+</svg>
+`;
 
 // ─── Telemetry Icon SVGs ─────────────────────────────────────────────────────
 const SPEEDO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none">
@@ -70,6 +237,7 @@ export interface GpsCockpitWidgetData {
   vehicleName: string;
   regNumber: string;
   fuelType: string;
+  vehicleType?: string;
   vehicleCount: number;
 
   // Active Telematics
@@ -101,6 +269,7 @@ export const DEFAULT_GPS_WIDGET_DATA: GpsCockpitWidgetData = {
   vehicleName: 'DriveLedger',
   regNumber: '—',
   fuelType: 'petrol',
+  vehicleType: 'car',
   vehicleCount: 1,
   speedKmh: 0,
   distanceKm: 0,
@@ -206,7 +375,10 @@ function VehicleIdentity({ d, size }: { d: GpsCockpitWidgetData; size: 'normal' 
   return (
     <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: size === 'compact' ? 4 : 6 }}>
       {size === 'normal' && (
-        <SvgWidget svg={CAR_SVG} style={{ width: 64, height: 30 }} />
+        <SvgWidget
+          svg={d.vehicleType === 'two_wheeler' ? BIKE_SVG : CAR_SVG}
+          style={{ width: 64, height: 30 }}
+        />
       )}
       <FlexWidget style={{ justifyContent: 'center', flexGap: 2 }}>
         <TextWidget
@@ -805,7 +977,7 @@ export function GpsCockpitCompactWidget(props: GpsCockpitWidgetData) {
 
 function renderCompactIdle(d: GpsCockpitWidgetData) {
   return (
-    <>
+    <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: 'match_parent', height: 'match_parent' }}>
       <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 6, flex: 1 }}>
         <FlexWidget style={{ justifyContent: 'center' }}>
           <TextWidget text={d.vehicleName} style={{ fontSize: 13, fontWeight: 'bold', color: C.text }} truncate="END" maxLines={1} />
@@ -847,129 +1019,180 @@ function renderCompactIdle(d: GpsCockpitWidgetData) {
           <TextWidget text="🔄" style={{ fontSize: 14 }} />
         </FlexWidget>
       )}
-    </>
+    </FlexWidget>
   );
 }
 
 function renderCompactRecording(d: GpsCockpitWidgetData) {
   return (
-    <>
+    <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: 'match_parent', height: 'match_parent' }}>
+      {/* ── Vehicle Identity & Live Status ── */}
       <FlexWidget
         style={{
-          backgroundColor: C.redBg,
-          borderColor: C.redBorder,
-          borderWidth: 1,
-          borderRadius: 8,
-          paddingHorizontal: 6,
-          paddingVertical: 4,
-          alignItems: 'center',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          maxWidth: 105,
         }}
       >
-        <TextWidget text="● REC" style={{ fontSize: 10, fontWeight: 'bold', color: C.redText }} />
-        {d.tripStartTime ? <TextWidget text={`[${d.tripStartTime}]`} style={{ fontSize: 8, color: C.redText }} /> : null}
+        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 4 }}>
+          <FlexWidget
+            style={{
+              backgroundColor: C.redBg,
+              borderColor: C.redBorder,
+              borderWidth: 1,
+              borderRadius: 6,
+              paddingHorizontal: 4,
+              paddingVertical: 1,
+            }}
+          >
+            <TextWidget text="● REC" style={{ fontSize: 9, fontWeight: 'bold', color: C.redText }} />
+          </FlexWidget>
+          <TextWidget
+            text={d.vehicleName}
+            style={{ fontSize: 11, fontWeight: 'bold', color: C.text }}
+            truncate="END"
+            maxLines={1}
+          />
+        </FlexWidget>
+        <TextWidget
+          text={d.regNumber || (d.tripStartTime ? `[${d.tripStartTime}]` : '')}
+          style={{ fontSize: 8, color: C.textSub, marginTop: 1 }}
+          truncate="END"
+          maxLines={1}
+        />
       </FlexWidget>
 
-      <FlexWidget style={{ width: 1, height: 28, backgroundColor: C.surfaceLight, marginHorizontal: 6 }} />
+      <FlexWidget style={{ width: 1, height: 26, backgroundColor: C.surfaceLight, marginHorizontal: 3 }} />
 
-      <FlexWidget style={{ alignItems: 'center', flex: 1 }}>
+      {/* ── Speed ── */}
+      <FlexWidget style={{ alignItems: 'center' }}>
         <FlexWidget style={{ flexDirection: 'row', alignItems: 'flex-end', flexGap: 1 }}>
-          <TextWidget text={String(d.speedKmh)} style={{ fontSize: 22, fontWeight: 'bold', color: C.greenText }} />
-          <TextWidget text="km/h" style={{ fontSize: 8, color: C.textSub, marginBottom: 3 }} />
+          <TextWidget text={String(d.speedKmh)} style={{ fontSize: 19, fontWeight: 'bold', color: C.greenText }} />
+          <TextWidget text="km/h" style={{ fontSize: 8, color: C.textSub, marginBottom: 2 }} />
         </FlexWidget>
       </FlexWidget>
 
-      <FlexWidget style={{ width: 1, height: 28, backgroundColor: C.surfaceLight, marginHorizontal: 6 }} />
+      <FlexWidget style={{ width: 1, height: 26, backgroundColor: C.surfaceLight, marginHorizontal: 3 }} />
 
-      <FlexWidget style={{ alignItems: 'center', flex: 1.1 }}>
+      {/* ── Distance ── */}
+      <FlexWidget style={{ alignItems: 'center' }}>
         <FlexWidget style={{ flexDirection: 'row', alignItems: 'flex-end', flexGap: 1 }}>
-          <TextWidget text={d.distanceKm.toFixed(2)} style={{ fontSize: 22, fontWeight: 'bold', color: C.cyanText }} />
-          <TextWidget text="km" style={{ fontSize: 8, color: C.cyanText, marginBottom: 3 }} />
+          <TextWidget text={d.distanceKm.toFixed(1)} style={{ fontSize: 19, fontWeight: 'bold', color: C.cyanText }} />
+          <TextWidget text="km" style={{ fontSize: 8, color: C.cyanText, marginBottom: 2 }} />
         </FlexWidget>
       </FlexWidget>
 
-      <FlexWidget style={{ width: 1, height: 28, backgroundColor: C.surfaceLight, marginHorizontal: 6 }} />
+      <FlexWidget style={{ width: 1, height: 26, backgroundColor: C.surfaceLight, marginHorizontal: 3 }} />
 
-      <FlexWidget style={{ alignItems: 'center', flex: 1 }}>
-        <TextWidget text={d.formattedElapsed} style={{ fontSize: 20, fontWeight: 'bold', color: C.text }} />
+      {/* ── Elapsed Duration ── */}
+      <FlexWidget style={{ alignItems: 'center' }}>
+        <TextWidget text={d.formattedElapsed} style={{ fontSize: 17, fontWeight: 'bold', color: C.text }} />
       </FlexWidget>
 
+      {/* ── Pause Trip Button ── */}
       <FlexWidget
         style={{
           backgroundColor: C.amberBg,
           borderColor: C.amberBorder,
           borderWidth: 1,
-          borderRadius: 10,
-          paddingHorizontal: 10,
-          paddingVertical: 6,
+          borderRadius: 8,
+          paddingHorizontal: 9,
+          paddingVertical: 5,
           alignItems: 'center',
           justifyContent: 'center',
-          marginLeft: 6,
+          marginLeft: 4,
         }}
         clickAction="PAUSE_GPS_TRIP"
       >
-        <TextWidget text="⏸" style={{ fontSize: 14, color: C.amberText }} />
+        <TextWidget text="⏸" style={{ fontSize: 13, color: C.amberText }} />
       </FlexWidget>
-    </>
+    </FlexWidget>
   );
 }
 
 function renderCompactPaused(d: GpsCockpitWidgetData) {
   return (
-    <>
+    <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: 'match_parent', height: 'match_parent' }}>
+      {/* ── Vehicle Identity & Paused Status ── */}
       <FlexWidget
         style={{
-          backgroundColor: C.amberBg,
-          borderColor: C.amberBorder,
-          borderWidth: 1,
-          borderRadius: 8,
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          alignItems: 'center',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          maxWidth: 105,
         }}
       >
-        <TextWidget text="⏸ PAUSED" style={{ fontSize: 10, fontWeight: 'bold', color: C.amberText }} />
+        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 4 }}>
+          <FlexWidget
+            style={{
+              backgroundColor: C.amberBg,
+              borderColor: C.amberBorder,
+              borderWidth: 1,
+              borderRadius: 6,
+              paddingHorizontal: 4,
+              paddingVertical: 1,
+            }}
+          >
+            <TextWidget text="⏸ PAUSED" style={{ fontSize: 9, fontWeight: 'bold', color: C.amberText }} />
+          </FlexWidget>
+          <TextWidget
+            text={d.vehicleName}
+            style={{ fontSize: 11, fontWeight: 'bold', color: C.text }}
+            truncate="END"
+            maxLines={1}
+          />
+        </FlexWidget>
+        <TextWidget
+          text={d.regNumber}
+          style={{ fontSize: 8, color: C.textSub, marginTop: 1 }}
+          truncate="END"
+          maxLines={1}
+        />
       </FlexWidget>
 
-      <FlexWidget style={{ width: 1, height: 28, backgroundColor: C.surfaceLight, marginHorizontal: 6 }} />
+      <FlexWidget style={{ width: 1, height: 26, backgroundColor: C.surfaceLight, marginHorizontal: 3 }} />
 
-      <FlexWidget style={{ alignItems: 'center', flex: 1 }}>
+      {/* ── Speed (Frozen at 0) ── */}
+      <FlexWidget style={{ alignItems: 'center' }}>
         <FlexWidget style={{ flexDirection: 'row', alignItems: 'flex-end', flexGap: 1 }}>
-          <TextWidget text="0" style={{ fontSize: 22, fontWeight: 'bold', color: C.textDim }} />
-          <TextWidget text="km/h" style={{ fontSize: 8, color: C.textDim, marginBottom: 3 }} />
+          <TextWidget text="0" style={{ fontSize: 19, fontWeight: 'bold', color: C.textDim }} />
+          <TextWidget text="km/h" style={{ fontSize: 8, color: C.textDim, marginBottom: 2 }} />
         </FlexWidget>
       </FlexWidget>
 
-      <FlexWidget style={{ width: 1, height: 28, backgroundColor: C.surfaceLight, marginHorizontal: 6 }} />
+      <FlexWidget style={{ width: 1, height: 26, backgroundColor: C.surfaceLight, marginHorizontal: 3 }} />
 
-      <FlexWidget style={{ alignItems: 'center', flex: 1.1 }}>
+      {/* ── Distance (Frozen) ── */}
+      <FlexWidget style={{ alignItems: 'center' }}>
         <FlexWidget style={{ flexDirection: 'row', alignItems: 'flex-end', flexGap: 1 }}>
-          <TextWidget text={d.distanceKm.toFixed(2)} style={{ fontSize: 22, fontWeight: 'bold', color: C.amberText }} />
-          <TextWidget text="km" style={{ fontSize: 8, color: C.amberText, marginBottom: 3 }} />
+          <TextWidget text={d.distanceKm.toFixed(1)} style={{ fontSize: 19, fontWeight: 'bold', color: C.amberText }} />
+          <TextWidget text="km" style={{ fontSize: 8, color: C.amberText, marginBottom: 2 }} />
         </FlexWidget>
       </FlexWidget>
 
-      <FlexWidget style={{ width: 1, height: 28, backgroundColor: C.surfaceLight, marginHorizontal: 6 }} />
+      <FlexWidget style={{ width: 1, height: 26, backgroundColor: C.surfaceLight, marginHorizontal: 3 }} />
 
-      <FlexWidget style={{ alignItems: 'center', flex: 1 }}>
-        <TextWidget text={d.formattedElapsed} style={{ fontSize: 20, fontWeight: 'bold', color: C.amberText }} />
+      {/* ── Elapsed Duration ── */}
+      <FlexWidget style={{ alignItems: 'center' }}>
+        <TextWidget text={d.formattedElapsed} style={{ fontSize: 17, fontWeight: 'bold', color: C.amberText }} />
       </FlexWidget>
 
+      {/* ── Resume Trip Button ── */}
       <FlexWidget
         style={{
           backgroundColor: C.greenBg,
           borderColor: C.greenBorder,
           borderWidth: 1,
-          borderRadius: 10,
-          paddingHorizontal: 10,
-          paddingVertical: 6,
+          borderRadius: 8,
+          paddingHorizontal: 9,
+          paddingVertical: 5,
           alignItems: 'center',
           justifyContent: 'center',
-          marginLeft: 6,
+          marginLeft: 4,
         }}
         clickAction="RESUME_GPS_TRIP"
       >
-        <TextWidget text="▶" style={{ fontSize: 14, color: C.greenText }} />
+        <TextWidget text="▶" style={{ fontSize: 13, color: C.greenText }} />
       </FlexWidget>
-    </>
+    </FlexWidget>
   );
 }

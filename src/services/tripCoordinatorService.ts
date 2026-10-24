@@ -213,17 +213,60 @@ export async function startGpsTripCoordinator(
 
   resetBackgroundLocationAnchor();
 
-  // 5. Start background tracking
+  // 5. Immediate location anchor so widget immediately locks instead of staying at "Acquiring GPS"
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Location = require('expo-location');
+    const lastKnown = await Location.getLastKnownPositionAsync();
+    let initialFix = lastKnown;
+
+    const isStale = !lastKnown || (Date.now() - lastKnown.timestamp > 60000);
+    if (isStale) {
+      const freshPromise = Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 2500));
+      const freshFix = await Promise.race([freshPromise, timeoutPromise]);
+      if (freshFix) {
+        initialFix = freshFix;
+      }
+    }
+
+    if (initialFix?.coords) {
+      const accuracy = initialFix.coords.accuracy;
+      if (accuracy !== null && accuracy !== undefined && accuracy <= 50) {
+        tripRepo.addTripLocations(trip.id, [{
+          latitude: initialFix.coords.latitude,
+          longitude: initialFix.coords.longitude,
+          altitude: initialFix.coords.altitude ?? undefined,
+          accuracy,
+          speed: initialFix.coords.speed ?? undefined,
+          heading: initialFix.coords.heading ?? undefined,
+          timestamp: initialFix.timestamp,
+          isAccepted: true,
+          stepDistanceMeters: 0,
+        }]);
+
+        tripRepo.updateTrip(trip.id, {
+          sample_count: 1,
+        });
+      }
+    }
+  } catch (locErr) {
+    console.warn('[TripCoordinator] Immediate location anchor skipped:', locErr);
+  }
+
+  // 6. Start background tracking
   try {
     await startBackgroundLocationUpdates();
   } catch (err) {
     console.warn('[TripCoordinator] Failed to launch background location updates:', err);
   }
 
-  // 6. Notify UI store if registered
+  // 7. Notify UI store if registered
   storeRegistry.refreshTrips(resolvedVehicle.id);
 
-  // 7. Synchronize native Android widget
+  // 8. Synchronize native Android widget
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { syncAllWidgets } = require('@/widgets/widgetDataService');

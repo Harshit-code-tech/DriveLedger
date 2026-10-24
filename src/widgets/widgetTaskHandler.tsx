@@ -33,8 +33,8 @@ import {
 export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
   const { widgetAction, widgetInfo, renderWidget, clickAction } = props;
 
-  // ── Handler for GpsCockpitWidget (4×2 Hero) ──
-  if (widgetInfo?.widgetName === GPS_WIDGET_NAME) {
+  // ── Handler for GpsCockpitWidget (4×2 Hero) & legacy GpsTripWidget ──
+  if (widgetInfo?.widgetName === GPS_WIDGET_NAME || widgetInfo?.widgetName === 'GpsTripWidget') {
     await handleGpsCockpitWidgetAction(props);
     return;
   }
