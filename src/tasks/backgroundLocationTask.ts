@@ -27,19 +27,10 @@ import {
   haversineDistance,
   buildQualityWarning,
 } from '@/engine/distanceEngine';
-import { syncGpsWidgetState } from '@/widgets/widgetDataService';
+
 
 export const BACKGROUND_LOCATION_TASK = 'DRIVELEDGER_BACKGROUND_LOCATION_TASK';
 
-/** Throttle background widget updates to at most once every 15 seconds */
-let lastBgWidgetSync = 0;
-function maybeSyncGpsWidgetFromBackground(): void {
-  const now = Date.now();
-  if (now - lastBgWidgetSync >= 15000) {
-    lastBgWidgetSync = now;
-    void syncGpsWidgetState();
-  }
-}
 
 /** Flag indicating the next location fix must act as an anchor (e.g. initial start or post-pause resume) */
 let needsNewAnchor = true;
@@ -282,9 +273,6 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
       console.warn('[BackgroundLocationTask] Listener error:', err);
     }
   }
-
-  // 6. Periodically synchronize native Android GPS widget
-  maybeSyncGpsWidgetFromBackground();
 }
 
 // Register TaskManager task at top-level module scope

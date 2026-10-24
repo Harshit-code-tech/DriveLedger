@@ -24,7 +24,7 @@ import {
 } from '@/tasks/backgroundLocationTask';
 import { checkLocationPermissionStatus } from '@/services/locationPermissionService';
 import { haversineDistance, buildQualityWarning } from '@/engine/distanceEngine';
-import { syncGpsWidgetState } from '@/widgets/widgetDataService';
+
 import { storeRegistry } from '@/stores/storeRegistry';
 import type { Trip, TripLocation, TripDiagnostics, FinishTripOptions } from '@/types/trip';
 import type { Vehicle } from '@/types/vehicle';
@@ -224,7 +224,7 @@ export async function startGpsTripCoordinator(
   storeRegistry.refreshTrips(resolvedVehicle.id);
 
   // 7. Synchronize native Android widget
-  await syncGpsWidgetState();
+
 
   return { success: true, data: trip };
 }
@@ -289,7 +289,7 @@ export async function pauseGpsTripCoordinator(
   });
 
   storeRegistry.refreshTrips(activeTrip.vehicle_id);
-  await syncGpsWidgetState();
+
 
   return { success: true, data: updated ?? undefined };
 }
@@ -365,7 +365,7 @@ export async function resumeGpsTripCoordinator(
   }
 
   storeRegistry.refreshTrips(activeTrip.vehicle_id);
-  await syncGpsWidgetState();
+
 
   return { success: true, data: updated ?? undefined };
 }
@@ -448,7 +448,7 @@ export async function finishGpsTripCoordinator(
   });
 
   storeRegistry.refreshTrips(activeTrip.vehicle_id);
-  await syncGpsWidgetState();
+
 
   return { success: true, data: finalized ?? undefined };
 }
@@ -484,6 +484,6 @@ export async function cycleNextVehicleCoordinator(
     }
   }
 
-  await syncGpsWidgetState();
+
   return { success: true, data: nextId ?? undefined };
 }

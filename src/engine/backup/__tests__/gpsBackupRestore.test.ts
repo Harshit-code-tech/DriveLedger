@@ -37,7 +37,6 @@ jest.mock('@/services/notificationService', () => ({
 
 jest.mock('@/widgets/widgetDataService', () => ({
   syncWidgetState: jest.fn().mockResolvedValue(undefined),
-  syncGpsWidgetState: jest.fn().mockResolvedValue(undefined),
 }));
 
 describe('Phase 6: Encrypted GPS Backup & Restore Tests', () => {
