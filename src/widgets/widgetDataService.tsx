@@ -522,16 +522,15 @@ export async function getGpsWidgetDataSnapshot(): Promise<GpsTripWidgetData> {
     let lastTripDistanceKm = 0;
     let lastTripDurationFormatted = '—';
 
-    // Check latest completed trip for the selected vehicle first, then global
+    // Check latest completed trip strictly for the selected vehicle
     const vehicleTrips = tripRepo.getTripsByVehicle(nextVehicle.id);
     const vehicleCompleted = vehicleTrips.find((t) => t.status === 'completed');
-    const completedTrip = vehicleCompleted ?? (latestTrip?.status === 'completed' ? latestTrip : null);
 
-    if (completedTrip) {
+    if (vehicleCompleted) {
       hasLastTrip = true;
-      lastTripDate = shortDateLabel(completedTrip.start_time);
-      lastTripDistanceKm = completedTrip.distance_km;
-      lastTripDurationFormatted = formatWidgetDuration(completedTrip.duration_seconds);
+      lastTripDate = shortDateLabel(vehicleCompleted.start_time);
+      lastTripDistanceKm = vehicleCompleted.distance_km || 0;
+      lastTripDurationFormatted = formatWidgetDuration(vehicleCompleted.duration_seconds || 0);
     }
 
     return {

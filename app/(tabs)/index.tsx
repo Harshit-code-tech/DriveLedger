@@ -221,8 +221,20 @@ export default function HomeScreen() {
     // Immediately consume and clear params from URL so finished trips or re-renders never loop
     router.setParams({ action: undefined, vehicleId: undefined });
 
-    if (currentAction === 'active_trip') {
-      setShowActiveTripModal(true);
+    if (targetVehicleId && targetVehicleId !== selectedVehicle?.id) {
+      selectVehicle(targetVehicleId);
+    }
+
+    if (currentAction === 'active_trip' || currentAction === 'gps_trip') {
+      const currentRecState = useTripStore.getState().recordingState;
+      const currentActiveTrip = useTripStore.getState().activeTrip;
+      if ((currentRecState === 'recording' || currentRecState === 'paused') && currentActiveTrip) {
+        setShowActiveTripModal(true);
+      } else {
+        setShowTripHistoryModal(true);
+      }
+    } else if (currentAction === 'trip_history') {
+      setShowTripHistoryModal(true);
     } else if (currentAction === 'start_trip') {
       const currentRecState = useTripStore.getState().recordingState;
       if (currentRecState === 'recording' || currentRecState === 'paused') {
@@ -244,7 +256,7 @@ export default function HomeScreen() {
       recoverInterruptedTrips();
       setShowTripReviewModal(true);
     }
-  }, [params.action, params.vehicleId, selectedVehicle?.id]);
+  }, [params.action, params.vehicleId, selectedVehicle?.id, selectVehicle]);
 
   // ── Data loading ─────────────────────────────────────────────────────
   // useFocusEffect fires on initial mount AND every time this tab gains
