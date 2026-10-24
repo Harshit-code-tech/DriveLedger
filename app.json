@@ -109,6 +109,30 @@
               "resizeMode": "horizontal|vertical",
               "previewImage": "./assets/images/widgets/widget-preview.png",
               "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "GpsCockpitWidget",
+              "label": "DriveLedger GPS Cockpit",
+              "description": "Live GPS trip tracking HUD, speedometer, and instant trip recorder",
+              "minWidth": "320dp",
+              "minHeight": "140dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "previewImage": "./assets/images/widgets/gps-widget-preview.png",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "GpsCockpitCompactWidget",
+              "label": "DriveLedger GPS Strip",
+              "description": "Minimal single-row GPS trip strip: live speed, distance, elapsed time and pause/resume controls",
+              "minWidth": "320dp",
+              "minHeight": "60dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 1,
+              "resizeMode": "horizontal",
+              "previewImage": "./assets/images/widgets/gps-compact-widget-preview.png",
+              "updatePeriodMillis": 1800000
             }
           ]
         }

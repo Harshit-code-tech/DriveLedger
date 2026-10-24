@@ -132,6 +132,14 @@ function determineGpsQuality(accuracy: number | null | undefined): 'good' | 'fai
 }
 
 
+function notifyWidgetSync(): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { syncAllWidgets } = require('@/widgets/widgetDataService');
+    syncAllWidgets?.();
+  } catch {}
+}
+
 function handleLocationCallback(
   loc: Location.LocationObject,
   session: ActiveTripSession,
@@ -505,6 +513,7 @@ export const useTripStore = create<TripState>((set, get) => ({
         console.warn('[tripStore] Background tracking start non-fatal error:', bgErr);
       }
 
+      notifyWidgetSync();
 
       return { success: true };
     } catch (err: unknown) {
@@ -581,7 +590,7 @@ export const useTripStore = create<TripState>((set, get) => ({
       diagnostics: updatedDiagnostics,
     });
     set({ recordingState: 'paused' });
-
+    notifyWidgetSync();
   },
 
   resumeGpsTrip: async () => {
@@ -734,6 +743,8 @@ export const useTripStore = create<TripState>((set, get) => ({
       }
     }
 
+    set({ recordingState: 'recording' });
+    notifyWidgetSync();
   },
 
   finishGpsTrip: async (options?: FinishTripOptions) => {
@@ -862,7 +873,7 @@ export const useTripStore = create<TripState>((set, get) => ({
       },
     });
 
-
+    notifyWidgetSync();
     return finalizedTrip;
   },
 
@@ -914,6 +925,7 @@ export const useTripStore = create<TripState>((set, get) => ({
       },
     });
 
+    notifyWidgetSync();
   },
 
   addManualTrip: (input: CreateManualTripInput) => {

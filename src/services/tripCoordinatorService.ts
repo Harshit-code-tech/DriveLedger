@@ -224,7 +224,11 @@ export async function startGpsTripCoordinator(
   storeRegistry.refreshTrips(resolvedVehicle.id);
 
   // 7. Synchronize native Android widget
-
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { syncAllWidgets } = require('@/widgets/widgetDataService');
+    syncAllWidgets?.();
+  } catch {}
 
   return { success: true, data: trip };
 }
@@ -290,6 +294,12 @@ export async function pauseGpsTripCoordinator(
 
   storeRegistry.refreshTrips(activeTrip.vehicle_id);
 
+  // Synchronize native Android widget
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { syncAllWidgets } = require('@/widgets/widgetDataService');
+    syncAllWidgets?.();
+  } catch {}
 
   return { success: true, data: updated ?? undefined };
 }
@@ -366,6 +376,12 @@ export async function resumeGpsTripCoordinator(
 
   storeRegistry.refreshTrips(activeTrip.vehicle_id);
 
+  // Synchronize native Android widget
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { syncAllWidgets } = require('@/widgets/widgetDataService');
+    syncAllWidgets?.();
+  } catch {}
 
   return { success: true, data: updated ?? undefined };
 }
@@ -449,6 +465,12 @@ export async function finishGpsTripCoordinator(
 
   storeRegistry.refreshTrips(activeTrip.vehicle_id);
 
+  // Synchronize native Android widget
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { syncAllWidgets } = require('@/widgets/widgetDataService');
+    syncAllWidgets?.();
+  } catch {}
 
   return { success: true, data: finalized ?? undefined };
 }
@@ -484,6 +506,12 @@ export async function cycleNextVehicleCoordinator(
     }
   }
 
+  // Synchronize native Android widget
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { syncAllWidgets } = require('@/widgets/widgetDataService');
+    syncAllWidgets?.();
+  } catch {}
 
   return { success: true, data: nextId ?? undefined };
 }

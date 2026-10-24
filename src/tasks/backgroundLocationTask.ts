@@ -34,6 +34,7 @@ export const BACKGROUND_LOCATION_TASK = 'DRIVELEDGER_BACKGROUND_LOCATION_TASK';
 
 /** Flag indicating the next location fix must act as an anchor (e.g. initial start or post-pause resume) */
 let needsNewAnchor = true;
+let lastWidgetSyncTime = 0;
 
 export function resetBackgroundLocationAnchor(): void {
   needsNewAnchor = true;
@@ -271,6 +272,19 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
       listener(event);
     } catch (err) {
       console.warn('[BackgroundLocationTask] Listener error:', err);
+    }
+  }
+
+  // 6. Throttled update to GPS Cockpit Widget (every 50m of displacement or 10s)
+  const now = Date.now();
+  if (incrementalDistanceMeters >= 50 || now - lastWidgetSyncTime >= 10000) {
+    lastWidgetSyncTime = now;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { syncGpsWidgetState } = require('@/widgets/widgetDataService');
+      syncGpsWidgetState?.();
+    } catch (err) {
+      console.debug('[BackgroundLocationTask] Widget sync error:', err);
     }
   }
 }

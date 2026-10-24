@@ -770,6 +770,13 @@ export default function SettingsScreen() {
             onPress={() => router.push({ pathname: '/onboarding', params: { mode: 'replay' } })}
           />
           <SettingsRow
+            emoji="📱"
+            title="GPS & Home-Screen Widgets"
+            subtitle="Interactive live preview of GPS Cockpit & Glance widgets"
+            colors={colors}
+            onPress={() => router.push('/widget-preview')}
+          />
+          <SettingsRow
             emoji="🛡️"
             title="Update & Data Safety Guide"
             subtitle="How to update without losing your records"

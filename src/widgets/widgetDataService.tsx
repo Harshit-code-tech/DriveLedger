@@ -21,12 +21,24 @@ import {
   VehicleGlanceWidgetData,
   DEFAULT_WIDGET_DATA,
 } from './VehicleGlanceWidget';
+import {
+  GpsCockpitWidget,
+  GpsCockpitCompactWidget,
+  GpsCockpitWidgetData,
+  DEFAULT_GPS_WIDGET_DATA,
+} from './GpsCockpitWidget';
+export { GpsCockpitWidget, GpsCockpitCompactWidget, GpsCockpitWidgetData, DEFAULT_GPS_WIDGET_DATA };
+import { buildPreTripChecklist, getChecklistStats } from '@/stores/checklistStore';
 import * as tripRepo from '@/database/repositories/tripRepo';
 import { getDatabase } from '@/database/connection';
 
 const WIDGET_STORAGE_KEY = 'driveledger_widget_data_v2';
 export const WIDGET_NAME = 'VehicleGlanceWidget';
 export const WIDGET_VEHICLE_KEY = 'driveledger_widget_vehicle_id';
+
+export const GPS_WIDGET_STORAGE_KEY = 'driveledger_gps_widget_data_v1';
+export const GPS_WIDGET_NAME = 'GpsCockpitWidget';
+export const GPS_COMPACT_WIDGET_NAME = 'GpsCockpitCompactWidget';
 
 import { getNextVehicleId } from '@/services/tripCoordinatorService';
 import type { Trip } from '@/types/trip';
@@ -351,3 +363,233 @@ export async function syncWidgetState(): Promise<void> {
     console.debug('[DriveLedger] Widget sync skipped or not registered:', e);
   }
 }
+
+// ─── GPS Cockpit Widget Snapshot & Sync ───────────────────────────────────────
+
+/**
+ * Builds a real-time GPS telemetry snapshot from SQLite.
+ * Reflects whether a trip is actively recording, paused, or idle.
+ */
+export async function getGpsWidgetDataSnapshot(): Promise<GpsCockpitWidgetData> {
+  try {
+    const vehicles = vehicleRepo.getActiveVehicles();
+    if (!vehicles || vehicles.length === 0) {
+      return DEFAULT_GPS_WIDGET_DATA;
+    }
+
+    const activeTrip = tripRepo.getActiveTrip();
+    const vehicleCount = vehicles.length;
+
+    // ── 1. ACTIVE OR PAUSED TRIP MODE ──
+    if (activeTrip && (activeTrip.status === 'recording' || activeTrip.status === 'paused')) {
+      const activeVehicle =
+        vehicles.find((v) => String(v.id) === String(activeTrip.vehicle_id)) ?? vehicles[0];
+
+      // Calculate elapsed time
+      let elapsedSeconds = activeTrip.duration_seconds || 0;
+      if (activeTrip.start_time) {
+        const startMs = new Date(activeTrip.start_time).getTime();
+        if (!isNaN(startMs)) {
+          elapsedSeconds = Math.max(elapsedSeconds, Math.floor((Date.now() - startMs) / 1000));
+        }
+      }
+
+      const hrs = Math.floor(elapsedSeconds / 3600);
+      const mins = Math.floor((elapsedSeconds % 3600) / 60);
+      const secs = elapsedSeconds % 60;
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const formattedElapsed =
+        hrs > 0 ? `${pad(hrs)}:${pad(mins)}:${pad(secs)}` : `${pad(mins)}:${pad(secs)}`;
+
+      // Derive telemetry from recorded locations
+      let speedKmh = 0;
+      let accuracyMeters: number | null = null;
+      let gpsQuality: 'good' | 'fair' | 'poor' | 'none' = 'none';
+
+      try {
+        const storedLocations = tripRepo.getTripLocations(activeTrip.id);
+        if (storedLocations && storedLocations.length > 0) {
+          const latest = storedLocations[storedLocations.length - 1];
+          if (typeof latest.speed === 'number' && latest.speed >= 0) {
+            speedKmh = Math.round(latest.speed * 3.6);
+          }
+          if (typeof latest.accuracy === 'number' && latest.accuracy > 0) {
+            accuracyMeters = latest.accuracy;
+            gpsQuality = latest.accuracy <= 15 ? 'good' : latest.accuracy <= 35 ? 'fair' : 'poor';
+          }
+        }
+      } catch (locErr) {
+        console.debug('[DriveLedger] Error reading locations for GPS widget telemetry:', locErr);
+      }
+
+      // If trip is paused, zero out speed
+      if (activeTrip.status === 'paused') {
+        speedKmh = 0;
+      }
+
+      let hasGapWarning = false;
+      if (activeTrip.diagnostics) {
+        try {
+          const parsed = JSON.parse(activeTrip.diagnostics);
+          if (parsed?.has_gap_warning) {
+            hasGapWarning = true;
+          }
+        } catch {}
+      }
+
+      // Format trip start time as HH:MM for the REC badge
+      let tripStartTime: string | null = null;
+      if (activeTrip.start_time) {
+        try {
+          const d = new Date(activeTrip.start_time);
+          if (!isNaN(d.getTime())) {
+            tripStartTime = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+          }
+        } catch {}
+      }
+
+      return {
+        recordingState: activeTrip.status as 'recording' | 'paused',
+        tripId: activeTrip.id,
+        vehicleId: activeVehicle.id,
+        vehicleName: activeVehicle.nickname,
+        regNumber: activeVehicle.registration_number,
+        fuelType: activeVehicle.fuel_type,
+        vehicleCount,
+        speedKmh,
+        distanceKm: activeTrip.distance_km || 0,
+        elapsedSeconds,
+        formattedElapsed,
+        sampleCount: activeTrip.sample_count || 0,
+        gpsQuality,
+        accuracyMeters,
+        hasGapWarning,
+        tripStartTime,
+        currentOdometer: activeVehicle.current_odometer ?? 0,
+        lastTripDistanceKm: null,
+        lastTripDuration: null,
+      };
+    }
+
+    // ── 2. IDLE / PRE-FLIGHT LAUNCHER MODE ──
+    const storedId = await AsyncStorage.getItem(WIDGET_VEHICLE_KEY);
+    const { defaultVehicleId } = getPreferences();
+    const vehicle =
+      (storedId ? vehicles.find((v) => String(v.id) === storedId) : null) ??
+      vehicles.find((v) => v.id === defaultVehicleId) ??
+      vehicles[0];
+
+    // Last trip summary
+    let lastTripDistanceKm: number | null = null;
+    let lastTripDuration: string | null = null;
+    try {
+      const trips = tripRepo.getTripsByVehicle(vehicle.id);
+      if (trips && trips.length > 0) {
+        const last = trips[0];
+        lastTripDistanceKm = last.distance_km;
+        const mins = Math.round((last.duration_seconds || 0) / 60);
+        lastTripDuration = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
+      }
+    } catch (tripErr) {
+      console.debug('[DriveLedger] Error reading trips for GPS widget idle recap:', tripErr);
+    }
+
+    // Highway Checklist Readiness
+    let checklistSummary = 'Ready ✅';
+    let highwayChecklistReady = true;
+    try {
+      const docs = documentRepo.getAllDocumentsByVehicle(vehicle.id);
+      const rawChecked = await AsyncStorage.getItem(`@driveledger_checklist_${vehicle.id}`);
+      const checkedIds = rawChecked ? JSON.parse(rawChecked) : [];
+      const items = buildPreTripChecklist(vehicle, docs, checkedIds);
+      const stats = getChecklistStats(items);
+      checklistSummary = stats.isComplete ? 'Ready ✅' : `${stats.completed}/${stats.total} Checked`;
+      highwayChecklistReady = stats.isComplete;
+    } catch (checkErr) {
+      console.debug('[DriveLedger] Error reading checklist for GPS widget idle recap:', checkErr);
+    }
+
+    return {
+      recordingState: 'idle',
+      vehicleId: vehicle.id,
+      vehicleName: vehicle.nickname,
+      regNumber: vehicle.registration_number,
+      fuelType: vehicle.fuel_type,
+      vehicleCount,
+      speedKmh: 0,
+      distanceKm: 0,
+      elapsedSeconds: 0,
+      formattedElapsed: '00:00',
+      sampleCount: 0,
+      gpsQuality: 'none',
+      accuracyMeters: null,
+      hasGapWarning: false,
+      tripStartTime: null,
+      currentOdometer: vehicle.current_odometer ?? 0,
+      lastTripDistanceKm,
+      lastTripDuration,
+      highwayChecklistReady,
+      checklistSummary,
+    };
+  } catch (error) {
+    console.warn('[DriveLedger] Failed to build GPS widget snapshot:', error);
+    return DEFAULT_GPS_WIDGET_DATA;
+  }
+}
+
+/**
+ * Retrieve saved GPS widget data from AsyncStorage.
+ * Used by background headless task handler if SQLite is not available.
+ */
+export async function getCachedGpsWidgetData(): Promise<GpsCockpitWidgetData> {
+  try {
+    const raw = await AsyncStorage.getItem(GPS_WIDGET_STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as GpsCockpitWidgetData;
+  } catch {}
+  return DEFAULT_GPS_WIDGET_DATA;
+}
+
+/**
+ * Builds a fresh GPS snapshot and pushes it to the Android GpsCockpitWidget.
+ *
+ * Android-only guard: returns immediately on other platforms.
+ * Non-blocking: never throws.
+ */
+export async function syncGpsWidgetState(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+
+  try {
+    const data = await getGpsWidgetDataSnapshot();
+    await AsyncStorage.setItem(GPS_WIDGET_STORAGE_KEY, JSON.stringify(data));
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { requestWidgetUpdate } = require('react-native-android-widget');
+      if (typeof requestWidgetUpdate === 'function') {
+        // Push to both 4×2 hero and 4×1 compact widget simultaneously
+        await Promise.allSettled([
+          requestWidgetUpdate({
+            widgetName: GPS_WIDGET_NAME,
+            renderWidget: () => <GpsCockpitWidget {...data} />,
+          }),
+          requestWidgetUpdate({
+            widgetName: GPS_COMPACT_WIDGET_NAME,
+            renderWidget: () => <GpsCockpitCompactWidget {...data} />,
+          }),
+        ]);
+      }
+    } catch (widgetErr) {
+      console.debug('[DriveLedger] Native GPS widget update skipped:', widgetErr);
+    }
+  } catch (e) {
+    console.debug('[DriveLedger] GPS Widget sync skipped or not registered:', e);
+  }
+}
+
+/**
+ * Pushes updates to all registered Android widgets (VehicleGlance + GPSCockpit).
+ */
+export async function syncAllWidgets(): Promise<void> {
+  await Promise.allSettled([syncWidgetState(), syncGpsWidgetState()]);
+}
+
