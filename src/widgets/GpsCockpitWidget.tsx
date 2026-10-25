@@ -745,7 +745,12 @@ function renderPausedView(d: GpsCockpitWidgetData) {
             justifyContent: 'center',
             flexGap: 1,
           }}
-          clickAction="RESUME_GPS_TRIP"
+          clickAction="OPEN_URI"
+          clickActionData={{
+            uri: d.vehicleId
+              ? `driveledger://?action=resume_gps&vehicleId=${d.vehicleId}`
+              : 'driveledger://?action=resume_gps',
+          }}
         >
           <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 4 }}>
             <TextWidget text="▶" style={{ fontSize: 12, color: C.greenText }} />
@@ -903,7 +908,12 @@ function renderIdleView(d: GpsCockpitWidgetData) {
             justifyContent: 'center',
             flexGap: 1,
           }}
-          clickAction="START_GPS_TRIP"
+          clickAction="OPEN_URI"
+          clickActionData={{
+            uri: d.vehicleId
+              ? `driveledger://?action=start_gps&vehicleId=${d.vehicleId}`
+              : 'driveledger://?action=start_gps',
+          }}
         >
           <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 6 }}>
             <TextWidget text="▶" style={{ fontSize: 14, color: C.greenText }} />
@@ -997,7 +1007,12 @@ function renderCompactIdle(d: GpsCockpitWidgetData) {
           alignItems: 'center',
           flexGap: 5,
         }}
-        clickAction="START_GPS_TRIP"
+        clickAction="OPEN_URI"
+        clickActionData={{
+          uri: d.vehicleId
+            ? `driveledger://?action=start_gps&vehicleId=${d.vehicleId}`
+            : 'driveledger://?action=start_gps',
+        }}
       >
         <TextWidget text="▶" style={{ fontSize: 12, color: C.greenText }} />
         <TextWidget text="START" style={{ fontSize: 12, fontWeight: 'bold', color: C.greenText }} />
@@ -1189,7 +1204,12 @@ function renderCompactPaused(d: GpsCockpitWidgetData) {
           justifyContent: 'center',
           marginLeft: 4,
         }}
-        clickAction="RESUME_GPS_TRIP"
+        clickAction="OPEN_URI"
+        clickActionData={{
+          uri: d.vehicleId
+            ? `driveledger://?action=resume_gps&vehicleId=${d.vehicleId}`
+            : 'driveledger://?action=resume_gps',
+        }}
       >
         <TextWidget text="▶" style={{ fontSize: 13, color: C.greenText }} />
       </FlexWidget>

@@ -151,4 +151,41 @@ describe('GpsCockpitWidget Component', () => {
     expect(tree).toBeDefined();
     expect(tree.props.style.borderColor).toBe('#D97706');
   });
+
+  it('wires hero START button with OPEN_URI deep link to avoid Android 12+ FGS restrictions', () => {
+    const idleData: GpsCockpitWidgetData = {
+      ...DEFAULT_GPS_WIDGET_DATA,
+      recordingState: 'idle',
+      vehicleId: 'veh-123',
+    };
+
+    const tree = GpsCockpitWidget(idleData);
+    const jsonStr = JSON.stringify(tree);
+    expect(jsonStr).toContain('driveledger://?action=start_gps&vehicleId=veh-123');
+  });
+
+  it('wires compact START button with OPEN_URI deep link', () => {
+    const { GpsCockpitCompactWidget } = require('../GpsCockpitWidget');
+    const compactIdleData: GpsCockpitWidgetData = {
+      ...DEFAULT_GPS_WIDGET_DATA,
+      recordingState: 'idle',
+      vehicleId: 'veh-456',
+    };
+
+    const tree = GpsCockpitCompactWidget(compactIdleData);
+    const jsonStr = JSON.stringify(tree);
+    expect(jsonStr).toContain('driveledger://?action=start_gps&vehicleId=veh-456');
+  });
+
+  it('wires RESUME button with OPEN_URI deep link', () => {
+    const pausedData: GpsCockpitWidgetData = {
+      ...DEFAULT_GPS_WIDGET_DATA,
+      recordingState: 'paused',
+      vehicleId: 'veh-789',
+    };
+
+    const tree = GpsCockpitWidget(pausedData);
+    const jsonStr = JSON.stringify(tree);
+    expect(jsonStr).toContain('driveledger://?action=resume_gps&vehicleId=veh-789');
+  });
 });

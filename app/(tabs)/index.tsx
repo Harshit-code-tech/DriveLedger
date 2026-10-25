@@ -216,7 +216,11 @@ export default function HomeScreen() {
     lastProcessedActionKey.current = actionKey;
 
     const currentAction = params.action;
-    const targetVehicleId = params.vehicleId || selectedVehicle?.id;
+    const targetVehicleId =
+      params.vehicleId ||
+      selectedVehicle?.id ||
+      useVehicleStore.getState().selectedVehicle?.id ||
+      useVehicleStore.getState().vehicles[0]?.id;
 
     // Immediately consume and clear params from URL so finished trips or re-renders never loop
     router.setParams({ action: undefined, vehicleId: undefined });
@@ -235,7 +239,7 @@ export default function HomeScreen() {
       }
     } else if (currentAction === 'trip_history') {
       setShowTripHistoryModal(true);
-    } else if (currentAction === 'start_trip') {
+    } else if (currentAction === 'start_trip' || currentAction === 'start_gps') {
       const currentRecState = useTripStore.getState().recordingState;
       if (currentRecState === 'recording' || currentRecState === 'paused') {
         setShowActiveTripModal(true);
@@ -244,19 +248,37 @@ export default function HomeScreen() {
           if (res.success) {
             setShowActiveTripModal(true);
           } else {
-            setShowTripHistoryModal(true);
+            const currentTrip = useTripStore.getState().activeTrip;
+            if (currentTrip) {
+              setShowActiveTripModal(true);
+            } else {
+              setShowTripHistoryModal(true);
+            }
           }
         });
       } else {
         setShowTripHistoryModal(true);
       }
+    } else if (currentAction === 'resume_gps' || currentAction === 'resume_trip') {
+      const currentRecState = useTripStore.getState().recordingState;
+      if (currentRecState === 'paused') {
+        resumeGpsTrip().then(() => {
+          setShowActiveTripModal(true);
+        });
+      } else {
+        setShowActiveTripModal(true);
+      }
+    } else if (currentAction === 'trip_review') {
+      setShowTripReviewModal(true);
+    } else if (currentAction === 'trip_checklist') {
+      setShowChecklistModal(true);
     } else if (currentAction === 'manual_trip') {
       setShowManualTripModal(true);
     } else if (currentAction === 'recover_trip') {
       recoverInterruptedTrips();
       setShowTripReviewModal(true);
     }
-  }, [params.action, params.vehicleId, selectedVehicle?.id, selectVehicle]);
+  }, [params.action, params.vehicleId, selectedVehicle?.id, selectVehicle, startGpsTrip, resumeGpsTrip, recoverInterruptedTrips]);
 
   // ── Data loading ─────────────────────────────────────────────────────
   // useFocusEffect fires on initial mount AND every time this tab gains

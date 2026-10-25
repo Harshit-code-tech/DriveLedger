@@ -19,7 +19,7 @@ import {
 import { usePreferencesStore } from '@/stores/preferencesStore';
 import { useVehicleStore } from '@/stores/vehicleStore';
 import { syncWidgetState } from '@/widgets/widgetDataService';
-import { Stack, useGlobalSearchParams } from 'expo-router';
+import { Stack, useGlobalSearchParams, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -35,6 +35,7 @@ import { useColorScheme, View } from 'react-native';
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  const router = useRouter();
   const colorScheme = useColorScheme();
   const loadVehicles = useVehicleStore((s) => s.loadVehicles);
   // Only subscribe to a serialized key of vehicle IDs, so loadVehicles() does NOT re-render RootLayout on tab focus
@@ -62,6 +63,17 @@ export default function RootLayout() {
         if (typeof vid === 'string' && vid) {
           useVehicleStore.getState().selectVehicle(vid);
         }
+        const action = parsed.queryParams?.action;
+        if (typeof action === 'string' && action) {
+          try {
+            router.replace({
+              pathname: '/(tabs)',
+              params: { action, vehicleId: typeof vid === 'string' ? vid : undefined },
+            });
+          } catch (navErr) {
+            console.debug('Deep link navigation deferred:', navErr);
+          }
+        }
       } catch (err) {
         console.debug('Failed to parse deep link URL:', err);
       }
@@ -70,7 +82,7 @@ export default function RootLayout() {
     Linking.getInitialURL().then(handleUrl);
     const sub = Linking.addEventListener('url', (event) => handleUrl(event.url));
     return () => sub.remove();
-  }, []);
+  }, [router]);
 
   const handleRootLayout = useCallback(() => {
     if (nativeSplashHidden.current) return;
