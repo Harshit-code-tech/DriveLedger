@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Sizing, Spacing, Typography } from '@/constants/theme';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { useTripStore } from '@/stores/tripStore';
+import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import type { Vehicle } from '@/types/vehicle';
 import { formatDisplayDateLong } from '@/utils/date';
 import {
@@ -55,6 +56,14 @@ export function TripReviewModal({
   const liveMetrics = useTripStore((s) => s.liveMetrics);
   const finishGpsTrip = useTripStore((s) => s.finishGpsTrip);
 
+  const targetVehicle = useMemo(() => {
+    if (activeTrip && activeTrip.vehicle_id !== vehicle.id) {
+      const v = vehicleRepo.getVehicleById(activeTrip.vehicle_id);
+      if (v) return v;
+    }
+    return vehicle;
+  }, [activeTrip?.vehicle_id, vehicle]);
+
   const estimatedEndOdo = useMemo(() => {
     if (!activeTrip) return null;
     return calculateEstimatedEndOdometer(activeTrip.start_odometer, liveMetrics.distanceKm);
@@ -64,10 +73,10 @@ export function TripReviewModal({
     if (!activeTrip) return { hasConflict: false, expectedEstimatedEndOdo: null };
     return detectBaselineConflict(
       activeTrip.start_odometer,
-      vehicle.current_odometer,
+      targetVehicle.current_odometer,
       liveMetrics.distanceKm
     );
-  }, [activeTrip?.start_odometer, vehicle.current_odometer, liveMetrics.distanceKm]);
+  }, [activeTrip?.start_odometer, targetVehicle.current_odometer, liveMetrics.distanceKm]);
 
   const [purpose, setPurpose] = useState(activeTrip?.purpose || 'Personal');
   const [endOdometer, setEndOdometer] = useState(
@@ -84,8 +93,8 @@ export function TripReviewModal({
   const parsedEndOdo = endOdometer.trim() ? parseFloat(endOdometer.trim()) : undefined;
   const isHistorical =
     parsedEndOdo !== undefined &&
-    typeof vehicle.current_odometer === 'number' &&
-    parsedEndOdo < vehicle.current_odometer;
+    typeof targetVehicle.current_odometer === 'number' &&
+    parsedEndOdo < targetVehicle.current_odometer;
 
   const handleSave = async () => {
     if (isSaving) return;
@@ -112,7 +121,7 @@ export function TripReviewModal({
 
     const canonicalCheck = canUpdateCanonicalOdometer({
       proposedOdometer: validEndOdo,
-      currentCanonicalOdometer: vehicle.current_odometer,
+      currentCanonicalOdometer: targetVehicle.current_odometer,
       isExplicitlyConfirmed: shouldUpdateVehicleOdo,
     });
 
@@ -166,7 +175,7 @@ export function TripReviewModal({
               Trip Summary
             </Text>
             <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
-              {formatDisplayDateLong(new Date().toISOString().split('T')[0])} · {vehicle.nickname}
+              {formatDisplayDateLong(new Date().toISOString().split('T')[0])} · {targetVehicle.nickname}
             </Text>
           </View>
 
@@ -325,7 +334,7 @@ export function TripReviewModal({
                 </Text>
                 {isHistorical && (
                   <Text style={[Typography.caption, { color: colors.warning, marginTop: 4, fontWeight: '600' }]}>
-                    Historical reading cannot roll back current vehicle odometer ({vehicle.current_odometer} km).
+                    Historical reading cannot roll back current vehicle odometer ({targetVehicle.current_odometer} km).
                   </Text>
                 )}
               </View>

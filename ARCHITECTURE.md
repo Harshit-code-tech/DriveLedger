@@ -6,7 +6,7 @@
 
 ## Overview
 
-DriveLedger is an offline-first vehicle tracking mobile app built with **Expo SDK 57 / React Native 0.86**. All data is stored locally on the device using **expo-sqlite**. There is no backend server; cloud sync is planned for v2.0 using UUID primary keys chosen specifically for this reason.
+DriveLedger is an offline-first vehicle tracking mobile app built with **Expo SDK 58 / React Native 0.88**. All data is stored locally on the device using **expo-sqlite**. There is no backend server; cloud sync is planned for v2.0 using UUID primary keys chosen specifically for this reason.
 
 ---
 
@@ -14,7 +14,7 @@ DriveLedger is an offline-first vehicle tracking mobile app built with **Expo SD
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | Expo SDK 57, React Native 0.86 |
+| Framework | Expo SDK 58, React Native 0.88 |
 | Navigation | Expo Router 4 (file-based) |
 | State | Zustand 5 |
 | Persistence | expo-sqlite 15 (synchronous API) |

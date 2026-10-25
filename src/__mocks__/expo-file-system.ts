@@ -18,7 +18,8 @@ export class File {
     this.uri = `${typeof parent === 'string' ? parent : parent?.uri ?? ''}/${name}`;
   }
   create = jest.fn();
-  write = jest.fn();
+  write = jest.fn().mockResolvedValue(undefined);
+  writeSync = jest.fn();
   delete = jest.fn();
   text = jest.fn().mockResolvedValue('');
   bytes = jest.fn().mockResolvedValue(new Uint8Array());

@@ -182,6 +182,7 @@ export default function HomeScreen() {
   const loadChecklist = useChecklistStore((s) => s.loadChecklist);
 
   // ── P2 Trip & Profile Stores ──
+  const vehicles = useVehicleStore((s) => s.vehicles);
   const trips = useTripStore((s) => s.trips);
   const activeTrip = useTripStore((s) => s.activeTrip);
   const recordingState = useTripStore((s) => s.recordingState);
@@ -192,6 +193,25 @@ export default function HomeScreen() {
   const resumeGpsTrip = useTripStore((s) => s.resumeGpsTrip);
   const cancelGpsTrip = useTripStore((s) => s.cancelGpsTrip);
   const recoverInterruptedTrips = useTripStore((s) => s.recoverInterruptedTrips);
+
+  const tripVehicle = useMemo(() => {
+    if (!activeTrip) return null;
+    return vehicles.find((v) => String(v.id) === String(activeTrip.vehicle_id)) || null;
+  }, [activeTrip, vehicles]);
+
+  const isTripOnSelectedVehicle = Boolean(
+    activeTrip && selectedVehicle && String(activeTrip.vehicle_id) === String(selectedVehicle.id)
+  );
+  const isTripOnAnotherVehicle = Boolean(
+    activeTrip && selectedVehicle && String(activeTrip.vehicle_id) !== String(selectedVehicle.id)
+  );
+
+  // Auto-switch UI to the active trip's vehicle whenever the active trip modal or review modal is opened
+  useEffect(() => {
+    if ((showActiveTripModal || showTripReviewModal) && tripVehicle && selectedVehicle?.id !== tripVehicle.id) {
+      selectVehicle(tripVehicle.id);
+    }
+  }, [showActiveTripModal, showTripReviewModal, tripVehicle, selectedVehicle?.id, selectVehicle]);
 
   const loadProfiles = useMaintenanceProfileStore((s) => s.loadProfiles);
 
@@ -230,9 +250,11 @@ export default function HomeScreen() {
     }
 
     if (currentAction === 'active_trip' || currentAction === 'gps_trip') {
-      const currentRecState = useTripStore.getState().recordingState;
       const currentActiveTrip = useTripStore.getState().activeTrip;
-      if ((currentRecState === 'recording' || currentRecState === 'paused') && currentActiveTrip) {
+      if (currentActiveTrip) {
+        if (selectedVehicle?.id !== currentActiveTrip.vehicle_id) {
+          selectVehicle(currentActiveTrip.vehicle_id);
+        }
         setShowActiveTripModal(true);
       } else {
         setShowTripHistoryModal(true);
@@ -269,6 +291,10 @@ export default function HomeScreen() {
         setShowActiveTripModal(true);
       }
     } else if (currentAction === 'trip_review') {
+      const currentActiveTrip = useTripStore.getState().activeTrip;
+      if (currentActiveTrip && selectedVehicle?.id !== currentActiveTrip.vehicle_id) {
+        selectVehicle(currentActiveTrip.vehicle_id);
+      }
       setShowTripReviewModal(true);
     } else if (currentAction === 'trip_checklist') {
       setShowChecklistModal(true);
@@ -464,6 +490,21 @@ export default function HomeScreen() {
 
   const handleStartGpsTrip = async () => {
     if (!selectedVehicle) return;
+    if (activeTrip && String(activeTrip.vehicle_id) !== String(selectedVehicle.id)) {
+      const otherVehicle = vehicles.find((v) => String(v.id) === String(activeTrip.vehicle_id));
+      Alert.alert(
+        'Trip Already Active',
+        `A GPS trip is already recording for ${otherVehicle?.nickname || 'another vehicle'}. Only one vehicle can record a trip at a time.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: `Switch to ${otherVehicle?.nickname || 'Active Vehicle'}`,
+            onPress: () => otherVehicle && selectVehicle(otherVehicle.id),
+          },
+        ]
+      );
+      return;
+    }
     const res = await startGpsTrip(selectedVehicle.id, selectedVehicle.current_odometer ?? undefined);
     if (res.success) {
       setShowActiveTripModal(true);
@@ -755,8 +796,8 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── LIVE DRIVING HUD CARD (When Trip is In-Progress or Paused) ── */}
-        {activeTrip ? (
+        {/* ── LIVE DRIVING HUD CARD (Only shown when trip is on THIS selected vehicle) ── */}
+        {isTripOnSelectedVehicle ? (
           <View
             style={[
               styles.activeTripHudCard,
@@ -916,76 +957,129 @@ export default function HomeScreen() {
             </View>
           </View>
         ) : (
-          /* ── GPS TRIP TRACKER CARD (Clean & Minimal) ── */
-          <View
-            style={[
-              styles.gpsLauncherCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.borderLight,
-                ...Sizing.cardShadow,
-              },
-            ]}
-          >
-            {/* Header: Icon + Title + 100% Offline Badge */}
-            <View style={styles.gpsLauncherHeader}>
-              <View style={[styles.toolIconWrap, { backgroundColor: colors.primaryLight ?? (colors.primary + '18') }]}>
-                <Text style={{ fontSize: 20 }}>📍</Text>
-              </View>
-              <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+          /* ── Idle GPS Launcher Card (or Banner if trip is on another vehicle) ── */
+          <>
+            {isTripOnAnotherVehicle && (
+              <TouchableOpacity
+                style={[
+                  styles.activeTripHudCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: recordingState === 'paused' ? colors.warning : colors.primary,
+                    paddingVertical: Spacing.sm,
+                    paddingHorizontal: Spacing.md,
+                    marginBottom: Spacing.md,
+                    ...Sizing.cardShadow,
+                  },
+                ]}
+                onPress={() => tripVehicle && selectVehicle(tripVehicle.id)}
+                activeOpacity={0.85}
+              >
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text style={[Typography.body, { color: colors.text, fontWeight: '700', fontSize: 16 }]}>
-                    GPS Trip Tracker
-                  </Text>
-                  <View style={[styles.offlineBadge, { backgroundColor: colors.successLight }]}>
-                    <Text style={[Typography.caption, { color: colors.success, fontWeight: '700', fontSize: 10 }]}>
-                      100% Offline
-                    </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                    <View
+                      style={[
+                        styles.hudLivePulse,
+                        { backgroundColor: recordingState === 'paused' ? colors.warning : colors.danger },
+                      ]}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[Typography.bodySmall, { color: colors.text, fontWeight: '700' }]}>
+                        {recordingState === 'paused' ? '⏸️ Trip Paused' : '🔴 Trip Active'} on {tripVehicle?.nickname || 'other vehicle'}
+                      </Text>
+                      <Text style={[Typography.caption, { color: colors.textSecondary }]}>
+                        {liveMetrics.distanceKm.toFixed(1)} km recorded · Tap to switch to {tripVehicle?.nickname}
+                      </Text>
+                    </View>
                   </View>
+                  <Text style={[Typography.button, { color: colors.primary, fontSize: 13 }]}>
+                    Switch →
+                  </Text>
                 </View>
-                <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
-                  Track driving route, live speed, and distance.
+              </TouchableOpacity>
+            )}
+
+            {/* ── GPS TRIP TRACKER CARD (Clean & Minimal) ── */}
+            <View
+              style={[
+                styles.gpsLauncherCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.borderLight,
+                  ...Sizing.cardShadow,
+                },
+              ]}
+            >
+              {/* Header: Icon + Title + 100% Offline Badge */}
+              <View style={styles.gpsLauncherHeader}>
+                <View style={[styles.toolIconWrap, { backgroundColor: colors.primaryLight ?? (colors.primary + '18') }]}>
+                  <Text style={{ fontSize: 20 }}>📍</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={[Typography.body, { color: colors.text, fontWeight: '700', fontSize: 16 }]}>
+                      GPS Trip Tracker
+                    </Text>
+                    <View style={[styles.offlineBadge, { backgroundColor: colors.successLight }]}>
+                      <Text style={[Typography.caption, { color: colors.success, fontWeight: '700', fontSize: 10 }]}>
+                        100% Offline
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
+                    {isTripOnAnotherVehicle
+                      ? `A trip is currently active on ${tripVehicle?.nickname || 'another vehicle'}.`
+                      : 'Track driving route, live speed, and distance.'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Primary Start Button */}
+              <TouchableOpacity
+                style={[
+                  styles.startGpsPrimaryBtn,
+                  {
+                    backgroundColor: isTripOnAnotherVehicle ? colors.border : colors.primary,
+                    opacity: isTripOnAnotherVehicle ? 0.7 : 1,
+                  },
+                ]}
+                onPress={handleStartGpsTrip}
+                activeOpacity={0.85}
+              >
+                <Text style={{ fontSize: 16, marginRight: 8 }}>
+                  {isTripOnAnotherVehicle ? '⚠️' : '▶️'}
                 </Text>
+                <Text style={[Typography.button, { color: isTripOnAnotherVehicle ? colors.textSecondary : colors.primaryText, fontSize: 15 }]}>
+                  {isTripOnAnotherVehicle ? `Trip Active on ${tripVehicle?.nickname}` : 'Start GPS Trip'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Sub-actions: Manual Trip & History */}
+              <View style={styles.gpsLauncherLinksRow}>
+                <TouchableOpacity
+                  style={styles.gpsLauncherSubLink}
+                  onPress={() => setShowManualTripModal(true)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[Typography.caption, { color: colors.textSecondary, fontWeight: '600' }]}>
+                    ✍️ Log Manual Trip
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.gpsLauncherSubLink}
+                  onPress={() => setShowTripHistoryModal(true)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700' }]}>
+                    Trip History ({trips.length}) →
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
-
-            {/* Primary Start Button */}
-            <TouchableOpacity
-              style={[styles.startGpsPrimaryBtn, { backgroundColor: colors.primary }]}
-              onPress={handleStartGpsTrip}
-              activeOpacity={0.85}
-            >
-              <Text style={{ fontSize: 16, marginRight: 8 }}>▶️</Text>
-              <Text style={[Typography.button, { color: colors.primaryText, fontSize: 15 }]}>
-                Start GPS Trip
-              </Text>
-            </TouchableOpacity>
-
-            {/* Sub-actions: Manual Trip & History */}
-            <View style={styles.gpsLauncherLinksRow}>
-              <TouchableOpacity
-                style={styles.gpsLauncherSubLink}
-                onPress={() => setShowManualTripModal(true)}
-                activeOpacity={0.7}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={[Typography.caption, { color: colors.textSecondary, fontWeight: '600' }]}>
-                  ✍️ Log Manual Trip
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.gpsLauncherSubLink}
-                onPress={() => setShowTripHistoryModal(true)}
-                activeOpacity={0.7}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700' }]}>
-                  Trip History ({trips.length}) →
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          </>
         )}
 
         {/* ── Quick Tools Grid: Targets & Highway Checks ── */}
@@ -1217,7 +1311,7 @@ export default function HomeScreen() {
       {showActiveTripModal && (
         <ActiveTripModal
           visible={showActiveTripModal}
-          vehicle={selectedVehicle}
+          vehicle={tripVehicle || selectedVehicle}
           onFinish={() => {
             setShowActiveTripModal(false);
             setShowTripReviewModal(true);
@@ -1230,10 +1324,14 @@ export default function HomeScreen() {
       {showTripReviewModal && (
         <TripReviewModal
           visible={showTripReviewModal}
-          vehicle={selectedVehicle}
+          vehicle={tripVehicle || selectedVehicle}
           onSaved={() => {
             setShowTripReviewModal(false);
-            loadTrips(selectedVehicle.id);
+            if (tripVehicle) {
+              loadTrips(tripVehicle.id);
+            } else if (selectedVehicle) {
+              loadTrips(selectedVehicle.id);
+            }
           }}
           onCancel={() => {
             setShowTripReviewModal(false);

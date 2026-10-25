@@ -15,18 +15,19 @@ import { FUEL_TYPE_SHORT_LABELS } from '@/constants/fuelTypes';
 import { Sizing, Spacing, Typography } from '@/constants/theme';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import {
-  createBackup,
-  exportToFile,
   exportCsvFile,
+  exportToFile,
   pickAndVerifyBackup,
-  verifyBackupContent,
   restoreFromValidated,
+  verifyBackupContent
 } from '@/engine/backupEngine';
 import { useThemeColors } from '@/hooks/useThemeColors';
+import { refreshReminders, sendTestNotification } from '@/services/notificationService';
 import { checkForAppUpdate, showDataSafetyGuide } from '@/services/updateChecker';
-import { sendTestNotification, refreshReminders } from '@/services/notificationService';
 import {
-  CURRENCY_OPTIONS, DISTANCE_OPTIONS, FUEL_VOLUME_OPTIONS, PRESSURE_OPTIONS, DOC_LEAD_DAYS_OPTIONS,
+  CURRENCY_OPTIONS, DISTANCE_OPTIONS,
+  DOC_LEAD_DAYS_OPTIONS,
+  FUEL_VOLUME_OPTIONS, PRESSURE_OPTIONS,
   usePreferencesStore,
   type CurrencyCode, type DistanceUnit, type FuelVolumeUnit, type PressureUnit,
 } from '@/stores/preferencesStore';
@@ -41,13 +42,12 @@ import {
   Modal,
   Platform,
   ScrollView,
-  Share,
   StyleSheet,
   Switch,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
 
@@ -770,13 +770,6 @@ export default function SettingsScreen() {
             onPress={() => router.push({ pathname: '/onboarding', params: { mode: 'replay' } })}
           />
           <SettingsRow
-            emoji="📱"
-            title="GPS & Home-Screen Widgets"
-            subtitle="Interactive live preview of GPS Cockpit & Glance widgets"
-            colors={colors}
-            onPress={() => router.push('/widget-preview')}
-          />
-          <SettingsRow
             emoji="🛡️"
             title="Update & Data Safety Guide"
             subtitle="How to update without losing your records"
@@ -868,7 +861,7 @@ export default function SettingsScreen() {
             selectVehicle(vehicles[0].id);
           }
           if (Platform.OS === 'android') {
-            syncWidgetState().catch(() => {});
+            syncWidgetState().catch(() => { });
           }
         }}
         onClose={() => setPickerVehicle(false)}

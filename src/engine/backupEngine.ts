@@ -309,7 +309,7 @@ export async function exportToFile(password: string): Promise<ExportFileResult> 
     } catch (_) {
       /* didn't exist */
     }
-    tempFile.write(content);
+    await tempFile.write(content);
   } catch (e) {
     return {
       success: false,
@@ -321,7 +321,7 @@ export async function exportToFile(password: string): Promise<ExportFileResult> 
   try {
     const destDir = await Directory.pickDirectoryAsync();
     const destFile = destDir.createFile(filename, BACKUP_MIME_TYPE);
-    destFile.write(content);
+    await destFile.write(content);
 
     return {
       success: true,
@@ -386,7 +386,7 @@ export async function exportCsvFile(): Promise<ExportFileResult> {
       /* didn't exist */
     }
     tempFile.create();
-    tempFile.write(csvContent);
+    await tempFile.write(csvContent);
   } catch (e) {
     return {
       success: false,
@@ -397,7 +397,7 @@ export async function exportCsvFile(): Promise<ExportFileResult> {
   try {
     const destDir = await Directory.pickDirectoryAsync();
     const destFile = destDir.createFile(filename, mimeType);
-    destFile.write(csvContent);
+    await destFile.write(csvContent);
 
     return {
       success: true,

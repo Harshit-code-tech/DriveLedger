@@ -12,7 +12,7 @@
  * - Zero map dependencies; 100% offline
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Alert,
   Modal,
@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Sizing, Spacing, Typography } from '@/constants/theme';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { useTripStore } from '@/stores/tripStore';
+import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import type { Vehicle } from '@/types/vehicle';
 
 interface ActiveTripModalProps {
@@ -49,6 +50,14 @@ export function ActiveTripModal({
   const pauseGpsTrip = useTripStore((s) => s.pauseGpsTrip);
   const resumeGpsTrip = useTripStore((s) => s.resumeGpsTrip);
   const cancelGpsTrip = useTripStore((s) => s.cancelGpsTrip);
+
+  const targetVehicle = useMemo(() => {
+    if (activeTrip && activeTrip.vehicle_id !== vehicle.id) {
+      const v = vehicleRepo.getVehicleById(activeTrip.vehicle_id);
+      if (v) return v;
+    }
+    return vehicle;
+  }, [activeTrip?.vehicle_id, vehicle]);
 
   if (!visible || !activeTrip) return null;
 
@@ -167,7 +176,7 @@ export function ActiveTripModal({
           <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
             Recording trip for{' '}
             <Text style={{ fontWeight: '700', color: colors.text }}>
-              {vehicle.nickname}
+              {targetVehicle.nickname}
             </Text>
           </Text>
         </View>

@@ -749,10 +749,11 @@ export const useTripStore = create<TripState>((set, get) => ({
 
   finishGpsTrip: async (options?: FinishTripOptions) => {
     const { activeTrip } = get();
-    if (!activeTrip || !activeSession) return null;
+    if (!activeTrip) return null;
 
     const currentSession = activeSession;
     const thisTrip = activeTrip;
+    const vehicleId = thisTrip.vehicle_id;
 
     // Invalidate callbacks immediately
     currentSessionGeneration++;
@@ -775,7 +776,7 @@ export const useTripStore = create<TripState>((set, get) => ({
     }
 
     // Flush any remaining buffered samples
-    if (currentSession.sampleBuffer.length > 0) {
+    if (currentSession && currentSession.sampleBuffer.length > 0) {
       try {
         tripRepo.addTripLocations(currentSession.tripId, currentSession.sampleBuffer);
         currentSession.sampleBuffer = [];
@@ -799,7 +800,7 @@ export const useTripStore = create<TripState>((set, get) => ({
     }
 
     let finalDistanceKm = 0;
-    if (currentSession.distanceKm > 0) {
+    if (currentSession && currentSession.distanceKm > 0) {
       finalDistanceKm = Math.round(currentSession.distanceKm * 100) / 100;
     } else if (typeof thisTrip.distance_km === 'number' && thisTrip.distance_km > 0) {
       finalDistanceKm = thisTrip.distance_km;
@@ -807,11 +808,17 @@ export const useTripStore = create<TripState>((set, get) => ({
       finalDistanceKm = calculateDurableTripDistance(acceptedPoints, pauseIntervals);
     }
 
-    const finalDurationSeconds = currentSession.elapsedSeconds;
+    let finalDurationSeconds = currentSession ? currentSession.elapsedSeconds : (thisTrip.duration_seconds || 0);
+    if (finalDurationSeconds === 0 && thisTrip.start_time) {
+      const startMs = new Date(thisTrip.start_time).getTime();
+      if (!isNaN(startMs)) {
+        finalDurationSeconds = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+      }
+    }
     const finalDurationMinutes = Math.round(finalDurationSeconds / 60);
 
     // Build aggregate diagnostics and quality warning from observed live events
-    const diagnostics: TripDiagnostics = {
+    const diagnostics: TripDiagnostics = currentSession ? {
       rejection_counts: { ...currentSession.rejectionCounts },
       total_samples_received: currentSession.totalSamplesReceived,
       accepted_samples_count: currentSession.acceptedSamplesCount,
@@ -819,14 +826,29 @@ export const useTripStore = create<TripState>((set, get) => ({
       gap_count: currentSession.gapCount,
       max_gap_seconds: currentSession.maxGapSeconds,
       has_gap_warning: currentSession.hasGaps,
+    } : {
+      rejection_counts: {
+        invalid_coordinates: 0,
+        poor_accuracy: 0,
+        unknown_accuracy: 0,
+        stale_or_duplicate_timestamp: 0,
+        stationary_drift: 0,
+        implausible_speed: 0,
+      },
+      total_samples_received: storedLocations.length,
+      accepted_samples_count: acceptedPoints.length,
+      rejected_samples_count: storedLocations.length - acceptedPoints.length,
+      gap_count: 0,
+      max_gap_seconds: 0,
+      has_gap_warning: false,
     };
 
-    const qualityNotes = buildQualityWarning({
+    const qualityNotes = currentSession ? buildQualityWarning({
       hasGapWarning: currentSession.hasGaps,
       totalReceived: currentSession.totalSamplesReceived,
       rejectedCount: currentSession.rejectedSamplesCount,
       rejectionCounts: currentSession.rejectionCounts,
-    });
+    }) : undefined;
 
     const finalizedTrip = tripRepo.finalizeTrip(thisTrip.id, {
       distance_km: finalDistanceKm,
@@ -835,12 +857,11 @@ export const useTripStore = create<TripState>((set, get) => ({
       notes: options?.notes,
       purpose: options?.purpose ?? thisTrip.purpose,
       end_odometer: options?.endOdometer,
-      has_quality_warnings: currentSession.hasGaps || currentSession.rejectedSamplesCount > 0,
+      has_quality_warnings: currentSession ? (currentSession.hasGaps || currentSession.rejectedSamplesCount > 0) : false,
       quality_notes: qualityNotes,
       diagnostics,
     });
 
-    const vehicleId = currentSession.vehicleId;
     activeSession = null;
 
     // Explicit canonical odometer reconciliation
