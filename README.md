@@ -48,14 +48,24 @@
 - Quick-pick chips (₹200 – ₹2,500), live calculation summary (`₹1,000 ÷ ₹105.00 = 9.52 L` or `₹500 ÷ ₹8.00 = 62.50 kWh`), and previous station/rate pre-filled.
 - Saving with any two of the three values (amount, quantity, price) auto-fills the third.
 
-### 📱 Android Home-Screen Widget
-- Odometer, last-fill mileage, monthly spend, tyre pressure, and colour-coded service / PUC / insurance alerts at a glance.
-- Quick actions to log fuel, service, or an expense; refreshes whenever fuel, service, expense, or vehicle data changes.
+### 🛰️ Live GPS Cockpit & Offline Trip Recording
+- Real-time speedometer (km/h), live trip distance, elapsed duration, and offline GPS route recorder with background tracking support.
+- Vehicle-isolated recording ensures trips started on one vehicle never bleed into another.
+- Automatic trip completion modal with odometer sync, trip classification (Personal, Commute, Business), and optional fuel consumption estimation.
+
+### 📱 Android Home-Screen Widgets (3 Variants)
+- **DriveLedger Quick Glance (4x2)**: Live odometer, last-fill mileage, monthly spend, tyre pressure, service/document alerts, and 1-tap logging shortcuts.
+- **DriveLedger GPS Cockpit (4x2)**: Live cockpit HUD with large digital speedometer, recording controls (Pause/Resume/End), and active vehicle indicator.
+- **DriveLedger GPS Strip (4x1)**: Compact, single-row HUD widget designed to live right below your search bar showing live speed, distance, and timer.
 
 ### 🔧 Vehicle Maintenance & Service Ledger
 - Automotive-centric record keeping: track oil changes, brake pads, filters, battery, tyre rotations, and general checkups.
 - Keep tabs on workshop/garage names, parts replaced, labor costs, and odometer intervals.
 - Service interval alerts showing exact kilometers until your next scheduled maintenance.
+
+### 📑 Executive PDF Service Ledger & Tax CSV Export
+- Export printable, official **Verified Service Ledger** PDF reports for vehicle resale (Spinny, Cars24, private buyers) with offline verified provenance.
+- Generate RFC 4180 compliant CSV ledgers with UTF-8 BOM for Microsoft Excel / Google Sheets tax deductions and business reimbursement.
 
 ### 💰 Running Costs & Expense Tracker
 - Record non-fuel costs: tolls, parking, car washes, state permits, insurance renewals, fines, and accessories.
@@ -73,18 +83,20 @@
 - Checks the official [GitHub Releases API](https://api.github.com/repos/JyotikaJayani-08/DriveLedger/releases/latest) with one tap in Settings.
 - View release notes ("What's New") and download the new `.apk` directly in your browser.
 
-### 💾 1-Tap Offline Backup & Restore
-- Export your entire database as an encrypted/portable JSON file to Google Drive, WhatsApp, or local storage.
-- Easily restore or migrate your records to another device anytime.
+### 💾 1-Tap Offline Backup & Restore (V3 Encryption)
+- Export your entire database encrypted with **AES-256-GCM** and password-protected via **PBKDF2-HMAC-SHA256**.
+- Attachments (receipt photos and document scans) are bundled directly into the portable `.dlbak` file.
+- Atomic restore inside SQLite transactions with automatic rollback if verification fails.
 
 ---
 
 ## 📱 Tech Stack
 
-- **Framework**: [Expo SDK 57](https://expo.dev) with [React Native 0.86](https://reactnative.dev)
-- **Navigation**: [Expo Router v57](https://docs.expo.dev/router/introduction/) (file-based routing)
+- **Framework**: [Expo SDK 58](https://expo.dev) with [React Native 0.88](https://reactnative.dev)
+- **Navigation**: [Expo Router v58](https://docs.expo.dev/router/introduction/) (file-based routing)
 - **Language**: [TypeScript](https://www.typescriptlang.org/) (Strict Mode)
-- **Local Database**: [Expo SQLite v57](https://docs.expo.dev/versions/latest/sdk/sqlite/)
+- **Local Database**: [Expo SQLite v58](https://docs.expo.dev/versions/latest/sdk/sqlite/)
+- **Widgets**: [react-native-android-widget](https://github.com/sovmas/react-native-android-widget)
 - **State Management**: [Zustand](https://github.com/pmndrs/zustand)
 - **Date & Storage Utilities**: DayJS, Expo FileSystem, Expo WebBrowser
 - **Testing**: [Jest](https://jestjs.io/) & [ts-jest](https://kulshekhar.github.io/ts-jest/)
