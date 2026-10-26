@@ -69,9 +69,9 @@ export const PRESSURE_OPTIONS: { value: PressureUnit; label: string }[] = [
 ];
 
 export const GPS_TRACKING_PROFILE_OPTIONS: { value: GpsTrackingProfile; label: string }[] = [
-  { value: 'high_accuracy', label: 'High accuracy (more battery)' },
-  { value: 'balanced', label: 'Balanced' },
-  { value: 'battery_saver', label: 'Battery saver (less frequent updates)' },
+  { value: 'high_accuracy', label: 'High Accuracy (Real-time 2s updates, more battery)' },
+  { value: 'balanced', label: 'Balanced (5s updates, moderate battery)' },
+  { value: 'battery_saver', label: 'Battery Saver (10s updates, minimum battery)' },
 ];
 
 export const DOC_LEAD_DAYS_OPTIONS: { value: string; label: string }[] = [

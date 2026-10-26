@@ -55,6 +55,12 @@ import {
 /** Sentinel value for "no explicit default — use the first-added vehicle". */
 const FIRST_VEHICLE_OPTION = '__first__';
 
+const GPS_PROFILE_SHORT_LABELS: Record<GpsTrackingProfile, string> = {
+  high_accuracy: 'High Accuracy',
+  balanced: 'Balanced',
+  battery_saver: 'Battery Saver',
+};
+
 // ─── Main Screen ──────────────────────────────────────────────────────────
 
 
@@ -134,8 +140,8 @@ export default function SettingsScreen() {
   // ── Derived display labels ──
   const currencyLabel = CURRENCY_OPTIONS.find((o) => o.value === currency)?.symbol ?? currency;
   const defaultVehicleLabel = vehicles.find((v) => v.id === defaultVehicleId)?.nickname ?? 'First Added';
-  const gpsTrackingProfileLabel =
-    GPS_TRACKING_PROFILE_OPTIONS.find((o) => o.value === gpsTrackingProfile)?.label ?? 'High accuracy';
+  const gpsTrackingProfileShortLabel =
+    GPS_PROFILE_SHORT_LABELS[gpsTrackingProfile] ?? 'High Accuracy';
 
   // ── Vehicle picker options ──
   const vehiclePickerOptions = [
@@ -372,14 +378,44 @@ export default function SettingsScreen() {
             colors={colors}
             onPress={() => setPickerVehicle(true)}
           />
-          <SettingsRow
-            emoji="🔋"
-            title="GPS Tracking Profile"
-            subtitle="Balance route accuracy and battery use"
-            rightText={gpsTrackingProfileLabel}
-            colors={colors}
+          <TouchableOpacity
+            style={[
+              styles.dropdownSettingRow,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
             onPress={() => setPickerGpsTrackingProfile(true)}
-          />
+            activeOpacity={0.7}
+          >
+            <View style={styles.dropdownSettingLeft}>
+              <Text style={styles.dropdownSettingEmoji}>🔋</Text>
+              <View style={{ flex: 1, marginRight: Spacing.sm }}>
+                <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>
+                  GPS Tracking Profile
+                </Text>
+                <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
+                  Balance route accuracy and battery use
+                </Text>
+              </View>
+            </View>
+
+            {/* Enclosed Dropdown Trigger */}
+            <View
+              style={[
+                styles.enclosedDropdownTrigger,
+                {
+                  backgroundColor: colors.primaryLight ?? (colors.primary + '18'),
+                  borderColor: colors.primary + '40',
+                },
+              ]}
+            >
+              <Text style={[styles.enclosedDropdownText, { color: colors.primary }]}>
+                {gpsTrackingProfileShortLabel}
+              </Text>
+              <Text style={[styles.enclosedDropdownArrow, { color: colors.primary }]}>
+                ▼
+              </Text>
+            </View>
+          </TouchableOpacity>
 
           {/* ── Notifications & Reminders ── */}
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Notifications & Reminders</Text>
