@@ -26,9 +26,8 @@ import { checkLocationPermissionStatus } from '@/services/locationPermissionServ
 import { haversineDistance, buildQualityWarning } from '@/engine/distanceEngine';
 
 import { storeRegistry } from '@/stores/storeRegistry';
-import type { Trip, TripLocation, TripDiagnostics, FinishTripOptions } from '@/types/trip';
+import type { Trip, TripDiagnostics, FinishTripOptions } from '@/types/trip';
 import type { Vehicle } from '@/types/vehicle';
-import { nowISO } from '@/utils/date';
 
 export const WIDGET_VEHICLE_KEY = 'driveledger_widget_vehicle_id';
 

@@ -19,12 +19,10 @@ import type {
   RawLocationSample,
   FilteredLocationSample,
   TripDiagnostics,
-  RejectionCounts,
 } from '@/types/trip';
 import * as tripRepo from '@/database/repositories/tripRepo';
 import {
   processLocationSample,
-  haversineDistance,
   buildQualityWarning,
 } from '@/engine/distanceEngine';
 

@@ -23,17 +23,14 @@ import { syncWidgetState } from '@/widgets/widgetDataService';
 import { storeRegistry } from '@/stores/storeRegistry';
 import { refreshReminders } from '@/services/notificationService';
 import {
-  calculateMileageForEntry,
   calculatePartialEstimate,
-  recalculateAllMileage,
   computeMileageStats,
-  checkMileageReasonableness,
   type MileageStats,
   type MileageWarning,
   type MileageResult,
 } from '@/engine/mileageEngine';
-import { FuelType, FUEL_UNIT_TO_MILEAGE_UNIT } from '@/constants/fuelTypes';
-import type { FuelUnit, VehicleType } from '@/constants/fuelTypes';
+import { FuelType } from '@/constants/fuelTypes';
+import type { VehicleType } from '@/constants/fuelTypes';
 
 interface FuelState {
   /** Fuel entries for the currently selected vehicle (date DESC for display) */

@@ -36,6 +36,10 @@ interface VehicleState {
   // ── Actions ──
   /** Load all active vehicles from the database */
   loadVehicles: () => void;
+  /** Load archived vehicles list into state */
+  loadArchivedVehicles: () => void;
+  /** Archived vehicles list (non-active) */
+  archivedVehicles: Vehicle[];
   /** Select a vehicle (sets it as the active dashboard vehicle) */
   selectVehicle: (vehicleId: string) => void;
   /** Create a new vehicle */
@@ -51,6 +55,7 @@ interface VehicleState {
 export const useVehicleStore = create<VehicleState>((set, get) => ({
   vehicles: [],
   selectedVehicle: null,
+  archivedVehicles: [],
   isLoading: true,
   error: null,
 
@@ -80,6 +85,15 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
       set({ vehicles, selectedVehicle: selected, isLoading: false, error: null });
     } catch (e) {
       set({ isLoading: false, error: 'Failed to load vehicles.' });
+    }
+  },
+
+  loadArchivedVehicles: () => {
+    try {
+      const all = vehicleRepo.getAllVehicles();
+      set({ archivedVehicles: all.filter((v) => v.is_archived === 1) });
+    } catch {
+      set({ archivedVehicles: [] });
     }
   },
 
@@ -133,10 +147,13 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
 
     set({ vehicles, selectedVehicle: selected });
     if (Platform.OS === 'android') syncWidgetState();
+    // Keep archivedVehicles list in sync so subscribers don't need a separate repo call
+    get().loadArchivedVehicles();
   },
 
   restoreVehicle: (id: string) => {
     vehicleRepo.restoreVehicle(id);
     get().loadVehicles();
+    get().loadArchivedVehicles();
   },
 }));

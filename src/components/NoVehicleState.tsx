@@ -12,7 +12,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { Typography, Spacing, Sizing } from '@/constants/theme';
+import { Typography, Spacing } from '@/constants/theme';
 
 interface NoVehicleStateProps {
   /** Whether to show the close button at the top */

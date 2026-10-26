@@ -31,7 +31,6 @@ import { storeRegistry } from '@/stores/storeRegistry';
 import { canUpdateCanonicalOdometer } from '@/engine/odometerReconciliation';
 import {
   processLocationSample,
-  haversineDistance,
   buildQualityWarning,
 } from '@/engine/distanceEngine';
 import { nowISO } from '@/utils/date';
@@ -39,7 +38,6 @@ import { requestTripTrackingPermissions } from '@/services/locationPermissionSer
 import {
   startBackgroundLocationUpdates,
   stopBackgroundLocationUpdates,
-  isBackgroundLocationUpdatesActive,
   addBackgroundLocationListener,
 } from '@/tasks/backgroundLocationTask';
 

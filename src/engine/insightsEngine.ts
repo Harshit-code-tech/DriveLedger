@@ -240,7 +240,7 @@ function checkRepeatedRepairs(
           id: `repeat-repair-${part}-${vehicleId}`,
           type: 'repeated_repair',
           title: `Repeated Repair: ${part}`,
-          reason: `Recorded maintenance notes show ${part} was serviced or replaced twice within ${intervalDesc} (${r2.date} and ${r1.date}).`,
+          reason: `Recorded maintenance notes show ${part} was serviced or replaced twice within ${intervalDesc} (${formatDDMMYYYY(r2.date)} and ${formatDDMMYYYY(r1.date)}).`,
           severity: 'warning',
           details: {
             componentName: part,
@@ -328,7 +328,6 @@ function checkCostPatterns(
 
   // A. Maintenance spending increase in recent 3 months vs prior 3 months
   const nowMs = now.getTime();
-  const ms30d = 30 * 24 * 60 * 60 * 1000;
   const ms90d = 90 * 24 * 60 * 60 * 1000;
   const ms180d = 180 * 24 * 60 * 60 * 1000;
 
@@ -387,6 +386,17 @@ function checkCostPatterns(
   return items;
 }
 
+/** Converts ISO YYYY-MM-DD or ISO timestamp to DD-MM-YYYY display format */
+function formatDDMMYYYY(dateStr: string): string {
+  if (!dateStr) return '';
+  const dateOnly = dateStr.split('T')[0];
+  const parts = dateOnly.split('-');
+  if (parts.length === 3 && parts[0].length === 4) {
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  return dateStr;
+}
+
 /**
  * 6. Data Integrity / Odometer Inconsistencies
  */
@@ -396,10 +406,17 @@ function checkDataIntegrity(
 ): InsightItem[] {
   const items: InsightItem[] = [];
 
-  // Sort chronological by date
-  const sortedFuel = [...fuelEntries].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
+  // Sort chronological by date; tie-break same-day entries by created_at or odometer
+  const sortedFuel = [...fuelEntries].sort((a, b) => {
+    const timeA = new Date(a.date).getTime();
+    const timeB = new Date(b.date).getTime();
+    if (timeA !== timeB) return timeA - timeB;
+    if (a.created_at && b.created_at) {
+      const createdDiff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      if (createdDiff !== 0) return createdDiff;
+    }
+    return a.odometer - b.odometer;
+  });
 
   for (let i = 1; i < sortedFuel.length; i++) {
     const prev = sortedFuel[i - 1];
@@ -410,7 +427,7 @@ function checkDataIntegrity(
         type: 'data_anomaly',
         title: 'Odometer Reading Inconsistency',
         severity: 'warning',
-        reason: `Fill-up on ${curr.date} has odometer reading ${curr.odometer.toLocaleString('en-IN')} km, which is lower than earlier entry on ${prev.date} (${prev.odometer.toLocaleString('en-IN')} km).`,
+        reason: `Fill-up on ${formatDDMMYYYY(curr.date)} has odometer reading ${curr.odometer.toLocaleString('en-IN')} km, which is lower than earlier entry on ${formatDDMMYYYY(prev.date)} (${prev.odometer.toLocaleString('en-IN')} km).`,
         details: {
           odometer: curr.odometer,
         },

@@ -99,7 +99,6 @@ export function MileageTrendChart({
 
   const allValues = data.map((d) => d.value);
   const maxVal = Math.max(...allValues, avg);
-  const minVal = Math.min(...allValues);
   // Add 12% headroom above the highest data point
   const yAxisMax = Math.ceil(maxVal * 1.12);
 

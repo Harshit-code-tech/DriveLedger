@@ -33,7 +33,6 @@
  * fully operational, with an explanatory warning for the user.
  */
 
-import { Platform } from 'react-native';
 import * as Location from 'expo-location';
 
 export interface LocationPermissionStatus {

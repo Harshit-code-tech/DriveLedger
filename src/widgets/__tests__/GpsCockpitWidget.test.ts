@@ -49,8 +49,8 @@ describe('GpsCockpitWidget Component', () => {
 
     const tree = GpsCockpitWidget(recordingData);
     expect(tree).toBeDefined();
-    // In recording state, the widget has cyan border styling
-    expect(tree.props.style.borderColor).toBe('#0891B2');
+    // In recording state, the widget has cyan border styling (C.cyanBorder = #0E7490)
+    expect(tree.props.style.borderColor).toBe('#0E7490');
   });
 
   it('renders in paused state with frozen telematics and amber border', () => {
@@ -132,7 +132,8 @@ describe('GpsCockpitWidget Component', () => {
 
     const tree = GpsCockpitCompactWidget(compactRecData);
     expect(tree).toBeDefined();
-    expect(tree.props.style.borderColor).toBe('#0891B2');
+    // In recording state, the compact widget has cyan border styling (C.cyanBorder = #0E7490)
+    expect(tree.props.style.borderColor).toBe('#0E7490');
   });
 
   it('renders GpsCockpitCompactWidget in paused state with frozen metrics and amber border', () => {

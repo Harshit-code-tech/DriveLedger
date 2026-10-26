@@ -38,7 +38,6 @@ import {
 } from '@/constants/fuelTypes';
 import { Sizing, Spacing, Typography } from '@/constants/theme';
 import * as fuelRepo from '@/database/repositories/fuelRepo';
-import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import { hasWarningsOnly, validateFuelEntry } from '@/engine/validationEngine';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { useFuelStore } from '@/stores/fuelStore';
@@ -78,7 +77,6 @@ export default function AddFuelScreen() {
   const loadVehicles = useVehicleStore((s) => s.loadVehicles);
   const addFuelEntry = useFuelStore((s) => s.addFuelEntry);
   const updateFuelEntry = useFuelStore((s) => s.updateFuelEntry);
-  const loadEntries = useFuelStore((s) => s.loadEntries);
 
   useEffect(() => {
     if (params.vehicleId && params.vehicleId !== selectedVehicle?.id) {

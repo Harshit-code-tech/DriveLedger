@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Typography, Spacing, Sizing } from '@/constants/theme';
 import { formatCurrency } from '@/utils/format';
 
@@ -54,7 +54,7 @@ export function BarChart({
   height = 125,
   colors,
 }: BarChartProps) {
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<React.ElementRef<typeof ScrollView>>(null);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(
     data.length > 0 ? data.length - 1 : null
   );

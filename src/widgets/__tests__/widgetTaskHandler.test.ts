@@ -54,7 +54,7 @@ describe('WidgetTaskHandler GPS Widget Actions', () => {
     await widgetTaskHandler({
       widgetAction: 'WIDGET_CLICK',
       clickAction: 'START_GPS_TRIP',
-      widgetInfo: { widgetName: GPS_WIDGET_NAME, widgetId: 101, width: 320, height: 140 },
+      widgetInfo: { widgetName: GPS_WIDGET_NAME, widgetId: 101, width: 320, height: 140, screenInfo: { screenHeightDp: 800, screenWidthDp: 400, density: 2.0, densityDpi: 320 } },
       renderWidget,
     });
 
@@ -66,7 +66,7 @@ describe('WidgetTaskHandler GPS Widget Actions', () => {
     await widgetTaskHandler({
       widgetAction: 'WIDGET_CLICK',
       clickAction: 'PAUSE_GPS_TRIP',
-      widgetInfo: { widgetName: GPS_WIDGET_NAME, widgetId: 101, width: 320, height: 140 },
+      widgetInfo: { widgetName: GPS_WIDGET_NAME, widgetId: 101, width: 320, height: 140, screenInfo: { screenHeightDp: 800, screenWidthDp: 400, density: 2.0, densityDpi: 320 } },
       renderWidget,
     });
 
@@ -78,7 +78,7 @@ describe('WidgetTaskHandler GPS Widget Actions', () => {
     await widgetTaskHandler({
       widgetAction: 'WIDGET_CLICK',
       clickAction: 'RESUME_GPS_TRIP',
-      widgetInfo: { widgetName: GPS_WIDGET_NAME, widgetId: 101, width: 320, height: 140 },
+      widgetInfo: { widgetName: GPS_WIDGET_NAME, widgetId: 101, width: 320, height: 140, screenInfo: { screenHeightDp: 800, screenWidthDp: 400, density: 2.0, densityDpi: 320 } },
       renderWidget,
     });
 
@@ -90,7 +90,7 @@ describe('WidgetTaskHandler GPS Widget Actions', () => {
     await widgetTaskHandler({
       widgetAction: 'WIDGET_CLICK',
       clickAction: 'FINISH_GPS_TRIP',
-      widgetInfo: { widgetName: GPS_WIDGET_NAME, widgetId: 101, width: 320, height: 140 },
+      widgetInfo: { widgetName: GPS_WIDGET_NAME, widgetId: 101, width: 320, height: 140, screenInfo: { screenHeightDp: 800, screenWidthDp: 400, density: 2.0, densityDpi: 320 } },
       renderWidget,
     });
 
@@ -102,7 +102,7 @@ describe('WidgetTaskHandler GPS Widget Actions', () => {
     await widgetTaskHandler({
       widgetAction: 'WIDGET_CLICK',
       clickAction: 'SWITCH_VEHICLE',
-      widgetInfo: { widgetName: GPS_WIDGET_NAME, widgetId: 101, width: 320, height: 140 },
+      widgetInfo: { widgetName: GPS_WIDGET_NAME, widgetId: 101, width: 320, height: 140, screenInfo: { screenHeightDp: 800, screenWidthDp: 400, density: 2.0, densityDpi: 320 } },
       renderWidget,
     });
 
@@ -113,7 +113,7 @@ describe('WidgetTaskHandler GPS Widget Actions', () => {
   it('renders widget on WIDGET_UPDATE and WIDGET_ADDED', async () => {
     await widgetTaskHandler({
       widgetAction: 'WIDGET_UPDATE',
-      widgetInfo: { widgetName: GPS_WIDGET_NAME, widgetId: 101, width: 320, height: 140 },
+      widgetInfo: { widgetName: GPS_WIDGET_NAME, widgetId: 101, width: 320, height: 140, screenInfo: { screenHeightDp: 800, screenWidthDp: 400, density: 2.0, densityDpi: 320 } },
       renderWidget,
     });
 

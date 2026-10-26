@@ -2,10 +2,7 @@
 import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { isRunningInExpoGo } from 'expo';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
-
-const isExpoGo = isRunningInExpoGo();
 import * as fuelRepo from '@/database/repositories/fuelRepo';
 import * as serviceRepo from '@/database/repositories/serviceRepo';
 import * as expenseRepo from '@/database/repositories/expenseRepo';
@@ -15,7 +12,6 @@ import { getPreferences } from '@/stores/preferencesStore';
 import { daysUntil } from '@/utils/date';
 import { MILEAGE_UNIT_LABELS } from '@/constants/fuelTypes';
 import { DocumentType } from '@/constants/documentTypes';
-import type { FuelType } from '@/constants/fuelTypes';
 import {
   VehicleGlanceWidget,
   VehicleGlanceWidgetData,
@@ -30,7 +26,6 @@ import {
 export { GpsCockpitWidget, GpsCockpitCompactWidget, GpsCockpitWidgetData, DEFAULT_GPS_WIDGET_DATA };
 import { buildPreTripChecklist, getChecklistStats } from '@/stores/checklistStore';
 import * as tripRepo from '@/database/repositories/tripRepo';
-import { getDatabase } from '@/database/connection';
 
 const WIDGET_STORAGE_KEY = 'driveledger_widget_data_v2';
 export const WIDGET_NAME = 'VehicleGlanceWidget';
@@ -41,7 +36,6 @@ export const GPS_WIDGET_NAME = 'GpsCockpitWidget';
 export const GPS_COMPACT_WIDGET_NAME = 'GpsCockpitCompactWidget';
 
 import { getNextVehicleId } from '@/services/tripCoordinatorService';
-import type { Trip } from '@/types/trip';
 
 export { getNextVehicleId };
 
@@ -89,15 +83,6 @@ function currentYearMonth(): string {
   return `${now.getFullYear()}-${m}`;
 }
 
-// ─── Urgency helper ───────────────────────────────────────────────────────────
-
-function docUrgency(days: number | null): 'ok' | 'due_soon' | 'expired' {
-  if (days === null) return 'ok'; // Caller handles null (not_set) separately
-  if (days < 0)  return 'expired';
-  if (days <= 30) return 'due_soon';
-  return 'ok';
-}
-
 // ─── Snapshot builder ─────────────────────────────────────────────────────────
 
 /**
@@ -125,7 +110,6 @@ export async function getWidgetDataSnapshot(): Promise<VehicleGlanceWidgetData> 
       ?? vehicles.find((v) => v.id === defaultVehicleId)
       ?? vehicles[0];
     const vehicleCount = vehicles.length;
-    const fuelType = vehicle.fuel_type as FuelType;
 
     // ── Fuel entries ──────────────────────────────────────────────────────────
     const allEntries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);

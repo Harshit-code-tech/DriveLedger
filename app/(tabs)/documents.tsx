@@ -368,7 +368,7 @@ export default function DocumentsScreen() {
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.primary }]}
         activeOpacity={0.85}
-        onPress={() => router.push('/add-document')}
+        onPress={() => router.push({ pathname: '/add-document', params: { vehicleId: selectedVehicle?.id } })}
       >
         <Text style={styles.fabIcon}>+</Text>
         <Text style={[styles.fabText, { color: colors.textOnPrimary }]}>Add Document</Text>

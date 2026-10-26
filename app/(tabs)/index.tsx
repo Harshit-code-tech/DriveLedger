@@ -26,11 +26,11 @@ import { useDocumentStore } from '@/stores/documentStore';
 import { useExpenseStore } from '@/stores/expenseStore';
 import { useFuelStore } from '@/stores/fuelStore';
 import { convertPressure, getPressureLabel } from '@/stores/preferencesStore';
-import { getKmUntilService, getServiceDueStatus, useServiceStore, type ServiceDueStatus } from '@/stores/serviceStore';
+import { getServiceDueStatus, useServiceStore } from '@/stores/serviceStore';
 import { useVehicleStore } from '@/stores/vehicleStore';
 import { daysUntil, formatDisplayDateLong } from '@/utils/date';
 import { formatCurrency, formatMileage, formatOdometer } from '@/utils/format';
-import { estimateFuelLevel, getCurrentMonthTotalSpend, type FuelLevelResult } from '@/utils/statsHelpers';
+import { estimateFuelLevel, getCurrentMonthTotalSpend } from '@/utils/statsHelpers';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -48,95 +48,9 @@ import { TripReviewModal } from '@/components/TripReviewModal';
 import { ManualTripModal } from '@/components/ManualTripModal';
 import { MaintenanceProfilesModal } from '@/components/MaintenanceProfilesModal';
 import { TripHistoryModal } from '@/components/TripHistoryModal';
+import { FuelBarSection } from '@/components/FuelBarSection';
 import { useTripStore } from '@/stores/tripStore';
 import { useMaintenanceProfileStore } from '@/stores/maintenanceProfileStore';
-
-interface FuelBarSectionProps {
-  title: string;
-  icon: React.ReactNode;
-  level: FuelLevelResult | null;
-  tip?: string | null;
-  tankDescription?: string;
-  colors: ReturnType<typeof useThemeColors>;
-}
-
-function FuelBarSection({
-  title,
-  icon,
-  level,
-  tip,
-  tankDescription,
-  colors,
-}: FuelBarSectionProps) {
-  if (level) {
-    return (
-      <View>
-        <View style={styles.fuelBarHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-            {icon}
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{title}</Text>
-          </View>
-          <Text style={[Typography.bodySmall, { color: level.color, fontWeight: '700' }]}>
-            {level.percent.toFixed(0)}%
-          </Text>
-        </View>
-
-        {/* 5-segment bar */}
-        <View style={styles.fuelBarsRow}>
-          {[1, 2, 3, 4, 5].map((bar) => (
-            <View
-              key={bar}
-              style={[
-                styles.fuelBarSegment,
-                { backgroundColor: bar <= level.bars ? level.color : colors.border },
-              ]}
-            />
-          ))}
-        </View>
-
-        {/* Labels row */}
-        <View style={styles.fuelBarLabels}>
-          <Text style={[Typography.caption, { color: colors.textTertiary }]}>Empty</Text>
-          <Text style={[Typography.caption, { color: level.color, fontWeight: '600' }]}>
-            {level.label}{level.bars <= 1 ? ' ⚠️' : level.bars === 5 ? ' ✅' : ''}
-          </Text>
-          <Text style={[Typography.caption, { color: colors.textTertiary }]}>Full</Text>
-        </View>
-
-        <Text style={[Typography.bodySmall, { color: colors.text, fontWeight: '600', marginTop: Spacing.sm }]}>
-          ≈ {level.remainingLitres.toFixed(1)} {level.unit} left · ~{level.kmRemaining.toLocaleString()} km range
-        </Text>
-
-        {tankDescription ? (
-          <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
-            {tankDescription}
-          </Text>
-        ) : null}
-      </View>
-    );
-  }
-
-  if (tip) {
-    return (
-      <View>
-        <View style={styles.fuelBarHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-            {icon}
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{title}</Text>
-          </View>
-        </View>
-        <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>{tip}</Text>
-        {tankDescription ? (
-          <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
-            {tankDescription}
-          </Text>
-        ) : null}
-      </View>
-    );
-  }
-
-  return null;
-}
 
 const EMPTY_CHECKED_LIST: string[] = [];
 
@@ -377,7 +291,6 @@ export default function HomeScreen() {
 
   const lastEntry = entries.length > 0 ? entries[0] : null;
   const lastService = serviceRecords.length > 0 ? serviceRecords[0] : null;
-  const kmUntilService = getKmUntilService(selectedVehicle, lastService);
 
   const { total: monthlyTotal } = getCurrentMonthTotalSpend(entries, serviceRecords, expenses);
 
@@ -463,17 +376,6 @@ export default function HomeScreen() {
   };
 
   const serviceDueStatus = getServiceDueStatus(selectedVehicle, lastService);
-
-  /** Returns bg/border/text color triplet for the dual-dimension service alert card. */
-  const getServiceStatusTheme = (status: ServiceDueStatus) => {
-    if (status.urgency === 'overdue') {
-      return { bg: colors.dangerLight, border: colors.danger, text: colors.danger };
-    }
-    if (status.urgency === 'due_soon') {
-      return { bg: colors.warningLight, border: colors.warning, text: colors.warning };
-    }
-    return { bg: colors.successLight, border: colors.success, text: colors.success };
-  };
 
   // ── GPS Trip & Live Driving HUD Handlers ──
   const formatTripTime = (totalSeconds: number) => {
@@ -733,41 +635,49 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* ── Dual-Dimension Service Status: Only shown when Overdue ── */}
-        {serviceDueStatus.urgency === 'overdue' && (
-          <View style={[styles.serviceAlertCard, { backgroundColor: colors.dangerLight ?? '#FEE2E2', borderColor: colors.danger }]}>
-            {/* Top Badge Strip: Action Required + Vehicle Context */}
-            <View style={styles.serviceAlertTopRow}>
-              <View style={[styles.serviceAlertPill, { backgroundColor: colors.danger }]}>
-                <Text style={styles.serviceAlertPillText}>⚠️ ACTION REQUIRED</Text>
+        {/* ── Dual-Dimension Service Status: Overdue or Due Soon ── */}
+        {(serviceDueStatus.urgency === 'overdue' || serviceDueStatus.urgency === 'due_soon') && (() => {
+          const isOverdue = serviceDueStatus.urgency === 'overdue';
+          const cardBg = isOverdue ? (colors.dangerLight ?? '#FEE2E2') : (colors.warningLight ?? '#FEF3C7');
+          const badgeBg = isOverdue ? colors.danger : (colors.warning ?? '#F59E0B');
+          const textColor = isOverdue ? colors.danger : (colors.accentDark ?? '#D97706');
+          const pillText = isOverdue ? '⚠️ ACTION REQUIRED' : '🔧 SERVICE DUE SOON';
+
+          return (
+            <View style={[styles.serviceAlertCard, { backgroundColor: cardBg, borderColor: badgeBg }]}>
+              {/* Top Badge Strip: Action / Urgency + Vehicle Context */}
+              <View style={styles.serviceAlertTopRow}>
+                <View style={[styles.serviceAlertPill, { backgroundColor: badgeBg }]}>
+                  <Text style={styles.serviceAlertPillText}>{pillText}</Text>
+                </View>
+                <Text style={[Typography.caption, { color: textColor, fontWeight: '700' }]} numberOfLines={1}>
+                  {selectedVehicle.nickname} · Regular Service
+                </Text>
               </View>
-              <Text style={[Typography.caption, { color: colors.danger, fontWeight: '700' }]} numberOfLines={1}>
-                {selectedVehicle.nickname} · Regular Service
+
+              {/* Clear Headline */}
+              <Text style={[Typography.body, { color: textColor, fontWeight: '800', marginTop: Spacing.xs }]}>
+                {serviceDueStatus.headline.replace(/^[^\w]+/, '')}
               </Text>
+
+              {/* Clear Subtext explaining odometer/time breach */}
+              <Text style={[Typography.bodySmall, { color: colors.text, marginTop: 4, lineHeight: 19 }]}>
+                {serviceDueStatus.subtext}
+              </Text>
+
+              {/* Explicit Action Button */}
+              <TouchableOpacity
+                style={[styles.serviceAlertActionBtn, { backgroundColor: badgeBg }]}
+                onPress={() => router.push({ pathname: '/add-service', params: { vehicleId: selectedVehicle.id } })}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.serviceAlertActionBtnText}>
+                  Log Service Record →
+                </Text>
+              </TouchableOpacity>
             </View>
-
-            {/* Clear Headline */}
-            <Text style={[Typography.body, { color: colors.danger, fontWeight: '800', marginTop: Spacing.xs }]}>
-              {serviceDueStatus.headline.replace(/^[^\w]+/, '')}
-            </Text>
-
-            {/* Clear Subtext explaining odometer/time breach */}
-            <Text style={[Typography.bodySmall, { color: colors.text, marginTop: 4, lineHeight: 19 }]}>
-              {serviceDueStatus.subtext}
-            </Text>
-
-            {/* Explicit Action Button */}
-            <TouchableOpacity
-              style={[styles.serviceAlertActionBtn, { backgroundColor: colors.danger }]}
-              onPress={() => router.push({ pathname: '/add-service', params: { vehicleId: selectedVehicle.id } })}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.serviceAlertActionBtnText}>
-                Log Service Record →
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+          );
+        })()}
 
         {/* ── Tyre Pressure Recommendation ── */}
         {(selectedVehicle.front_tyre_pressure != null || selectedVehicle.rear_tyre_pressure != null) && (

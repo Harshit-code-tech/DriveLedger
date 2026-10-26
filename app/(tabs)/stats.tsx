@@ -34,8 +34,6 @@ import {
   StatsTimeRange,
   aggregateCostBreakdown,
   filterRecordsByTimeRange,
-  getMonthlySpendHistory,
-  getMonthlyTotalSpend,
 } from '@/utils/statsHelpers';
 // serviceRepo and expenseRepo reads are now inside useCrossVehicleStats hook
 import { MonthlySpendCard } from '@/components/MonthlySpendCard';

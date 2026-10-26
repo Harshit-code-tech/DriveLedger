@@ -231,6 +231,123 @@ describe('InsightsEngine — Mileage Anomaly Detection', () => {
   });
 });
 
+describe('InsightsEngine — Data Integrity & Odometer Checks', () => {
+  test('does not report anomaly when multiple fills occur on the same date with increasing odometer', () => {
+    // Two entries on the same date: 46100 then 46250
+    // Passed in reverse-chronological order (46250 first, 46100 second)
+    const fuelEntries: FuelEntry[] = [
+      {
+        id: 'f2',
+        vehicle_id: mockVehicle.id,
+        date: '2026-10-26',
+        odometer: 46250,
+        fuel_amount: 10,
+        fuel_unit: FuelUnit.LITRES,
+        price_per_unit: 90.5,
+        total_cost: 905,
+        fuel_station: null,
+        is_full_tank: 0,
+        calculated_mileage: null,
+        mileage_unit: null,
+        receipt_photo_uri: null,
+        notes: null,
+        created_at: '2026-10-26T14:00:00Z',
+        updated_at: '2026-10-26T14:00:00Z',
+        deleted_at: null,
+      },
+      {
+        id: 'f1',
+        vehicle_id: mockVehicle.id,
+        date: '2026-10-26',
+        odometer: 46100,
+        fuel_amount: 29,
+        fuel_unit: FuelUnit.LITRES,
+        price_per_unit: 90.5,
+        total_cost: 2624.5,
+        fuel_station: null,
+        is_full_tank: 1,
+        calculated_mileage: 20,
+        mileage_unit: null,
+        receipt_photo_uri: null,
+        notes: null,
+        created_at: '2026-10-26T08:00:00Z',
+        updated_at: '2026-10-26T08:00:00Z',
+        deleted_at: null,
+      },
+    ];
+
+    const result = evaluateVehicleInsights({
+      vehicle: mockVehicle,
+      fuelEntries,
+      serviceRecords: [],
+      expenses: [],
+      mileageStats: emptyMileageStats,
+    });
+
+    const dropInsight = result.insights.find((i) => i.type === 'data_anomaly');
+    expect(dropInsight).toBeUndefined();
+  });
+
+  test('reports anomaly with DD-MM-YYYY dates when true odometer rollback occurs', () => {
+    const fuelEntries: FuelEntry[] = [
+      {
+        id: 'f2',
+        vehicle_id: mockVehicle.id,
+        date: '2026-10-26',
+        odometer: 45000, // Rollback from 46100
+        fuel_amount: 30,
+        fuel_unit: FuelUnit.LITRES,
+        price_per_unit: 90,
+        total_cost: 2700,
+        fuel_station: null,
+        is_full_tank: 1,
+        calculated_mileage: null,
+        mileage_unit: null,
+        receipt_photo_uri: null,
+        notes: null,
+        created_at: '2026-10-26T10:00:00Z',
+        updated_at: '2026-10-26T10:00:00Z',
+        deleted_at: null,
+      },
+      {
+        id: 'f1',
+        vehicle_id: mockVehicle.id,
+        date: '2026-10-20',
+        odometer: 46100,
+        fuel_amount: 30,
+        fuel_unit: FuelUnit.LITRES,
+        price_per_unit: 90,
+        total_cost: 2700,
+        fuel_station: null,
+        is_full_tank: 1,
+        calculated_mileage: null,
+        mileage_unit: null,
+        receipt_photo_uri: null,
+        notes: null,
+        created_at: '2026-10-20T10:00:00Z',
+        updated_at: '2026-10-20T10:00:00Z',
+        deleted_at: null,
+      },
+    ];
+
+    const result = evaluateVehicleInsights({
+      vehicle: mockVehicle,
+      fuelEntries,
+      serviceRecords: [],
+      expenses: [],
+      mileageStats: emptyMileageStats,
+    });
+
+    const dropInsight = result.insights.find((i) => i.type === 'data_anomaly');
+    expect(dropInsight).toBeDefined();
+    expect(dropInsight?.severity).toBe('warning');
+    expect(dropInsight?.reason).toContain('26-10-2026');
+    expect(dropInsight?.reason).toContain('20-10-2026');
+    expect(dropInsight?.reason).toContain('45,000 km');
+    expect(dropInsight?.reason).toContain('46,100 km');
+  });
+});
+
 describe('InsightsEngine — Public generateVehicleInsights Wrapper', () => {
   test('returns cleanly formatted VehicleInsight array for UI', () => {
     const insights = generateVehicleInsights(

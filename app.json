@@ -138,7 +138,8 @@
         }
       ],
       "expo-font",
-      "expo-status-bar"
+      "expo-status-bar",
+      "./plugins/withWorkManagerProguardRules"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -22,7 +22,6 @@ import * as Crypto from 'expo-crypto';
 import { pbkdf2Async } from '@noble/hashes/pbkdf2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import {
-  APP_ID,
   ENCRYPTED_BACKUP_FORMAT,
   CURRENT_BACKUP_VERSION,
   type PasswordEncryptedBackupEnvelope,

@@ -15,7 +15,7 @@
  * expensive re-instantiation on every render.
  */
 
-import { getPreferences, getCurrencySymbol, convertDistance, getDistanceLabel, CURRENCY_OPTIONS } from '@/stores/preferencesStore';
+import { getPreferences, getCurrencySymbol, convertDistance, getDistanceLabel } from '@/stores/preferencesStore';
 
 // ─── Cached Formatters ───────────────────────────────────────────────
 // Cache one formatter per currency code so repeated calls are fast.

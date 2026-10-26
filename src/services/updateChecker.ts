@@ -10,23 +10,21 @@ import { Alert, Linking } from 'react-native';
 export { GITHUB_REPO, GitHubRelease, parseGitHubRelease };
 
 /**
- * Displays the 2 golden rules of data safety when updating APKs.
+ * Displays a concise guide to safe app updates and data backups.
  */
 export function showDataSafetyGuide() {
   Alert.alert(
-    '🛡️ Update Like a Pro!',
-    `1. NEVER UNINSTALL FIRST — seriously, don't!\n` +
-    `• Open the downloaded APK and tap "Update".\n` +
-    `• Android keeps all your vehicle logs, fuel records, and history safe automatically.\n\n` +
+    '🛡️ Update Safely',
+    `1. UPDATE, DON'T UNINSTALL\n` +
+    `• Install the new APK over the existing app to preserve your data.\n\n` +
 
-    `2. BACK UP JUST IN CASE 💾\n` +
-    `• DriveLedger is 100% offline — data lives only on your device.\n` +
-    `• Go to Settings › Download Backup to save an encrypted .dlbak file to Google Drive or Files.\n\n` +
+    `2. BACK UP YOUR DATA 💾\n` +
+    `• Go to Settings → Download Backup.\n` +
+    `• Save your .dlbak file before updating.\n\n` +
 
-    `3. USE OFFICIAL BUILDS ONLY ✅\n` +
-    `• Install only from official GitHub Releases.\n` +
-    `• Third-party builds can fail to install and risk your data.`,
-    [{ text: 'Got it, thanks! 👍' }]
+    `3. USE OFFICIAL BUILDS ✅\n` +
+    `• Download APKs only from official GitHub Releases.`,
+    [{ text: 'Got it' }]
   );
 }
 

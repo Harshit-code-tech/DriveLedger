@@ -24,25 +24,25 @@
  * In a production dev build, notifications work normally.
  */
 
-import { Platform } from 'react-native';
-import { isRunningInExpoGo } from 'expo';
+import { DOCUMENT_TYPE_LABELS } from '@/constants/documentTypes';
 import * as documentRepo from '@/database/repositories/documentRepo';
-import * as serviceRepo from '@/database/repositories/serviceRepo';
+import * as fuelRepo from '@/database/repositories/fuelRepo';
 import * as maintCompRepo from '@/database/repositories/maintenanceComponentRepo';
 import * as maintProfileRepo from '@/database/repositories/maintenanceProfileRepo';
+import * as serviceRepo from '@/database/repositories/serviceRepo';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
-import { getKmUntilService, getServiceDueStatus } from '@/stores/serviceStore';
-import { DOCUMENT_TYPE_LABELS } from '@/constants/documentTypes';
-import { daysUntil } from '@/utils/date';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as fuelRepo from '@/database/repositories/fuelRepo';
-import { getPreferences } from '@/stores/preferencesStore';
 import {
   DEFAULT_COOLDOWN_DAYS,
   FUEL_NUDGE_COOLDOWN_DAYS,
   isInCooldown,
   shouldSendFuelNudge,
 } from '@/services/reminderRules';
+import { getPreferences } from '@/stores/preferencesStore';
+import { getServiceDueStatus } from '@/stores/serviceStore';
+import { daysUntil } from '@/utils/date';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { isRunningInExpoGo } from 'expo';
+import { Platform } from 'react-native';
 
 const SENT_LOG_KEY = 'driveledger_notification_sent_log';
 const CHANNEL_GENERAL = 'general-reminders';
@@ -52,10 +52,7 @@ const CHANNEL_GENERAL = 'general-reminders';
 const CHANNEL_DOCUMENT_EXPIRY = 'document-expiry';
 const CHANNEL_SERVICE_DUE = 'service-due';
 
-/** Remind when the next service is within this many km. */
-const SERVICE_DUE_KM_THRESHOLD = 500;
-/** Remind when the next service date is within this many days. */
-const SERVICE_DUE_DAYS_THRESHOLD = 7;
+
 
 // ─── Expo Go detection ──────────────────────────────────────────────
 // Since SDK 53, expo-notifications is NOT available in Expo Go.
@@ -566,33 +563,6 @@ export async function reconcileNotifications(injectedN?: NotificationsModule | n
   }
 }
 
-/**
- * Fires a test notification to verify notification permissions, channels,
- * and delivery on the user's device.
- */
-export async function sendTestNotification(): Promise<boolean> {
-  const N = getNotifications();
-  if (!N) return false;
-
-  ensureHandlerConfigured();
-  const hasPermission = await requestNotificationPermission();
-  if (!hasPermission) return false;
-
-  try {
-    await N.scheduleNotificationAsync({
-      content: {
-        title: '🔔 DriveLedger Notifications Active',
-        body: 'Local vehicle reminders are configured and working properly.',
-        data: { type: 'test_notification' },
-      },
-      trigger: null, // deliver immediately
-    });
-    return true;
-  } catch (err) {
-    console.warn('[DriveLedger] Failed to send test notification:', err);
-    return false;
-  }
-}
 
 /**
  * Checks all vehicles' documents and service records, and reconciles

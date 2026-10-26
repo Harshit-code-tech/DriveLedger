@@ -9,20 +9,21 @@
  * 5. About — version info, update check, data safety guide
  */
 
+import { BackupPasswordModal } from '@/components/BackupPasswordModal';
+import { OperationProgressModal } from '@/components/OperationProgressModal';
 import { OptionPicker } from '@/components/OptionPicker';
+import { RestorePasswordModal } from '@/components/RestorePasswordModal';
 import { SettingsRow } from '@/components/SettingsRow';
 import { FUEL_TYPE_SHORT_LABELS } from '@/constants/fuelTypes';
 import { Sizing, Spacing, Typography } from '@/constants/theme';
-import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import {
   exportCsvFile,
   exportToFile,
   pickAndVerifyBackup,
   restoreFromValidated,
-  verifyBackupContent
 } from '@/engine/backupEngine';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { refreshReminders, sendTestNotification } from '@/services/notificationService';
+import { refreshReminders } from '@/services/notificationService';
 import { checkForAppUpdate, showDataSafetyGuide } from '@/services/updateChecker';
 import {
   CURRENCY_OPTIONS, DISTANCE_OPTIONS,
@@ -37,15 +38,12 @@ import { syncWidgetState } from '@/widgets/widgetDataService';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
-  Modal,
   Platform,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -69,6 +67,8 @@ export default function SettingsScreen() {
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
   const selectVehicle = useVehicleStore((s) => s.selectVehicle);
   const loadVehicles = useVehicleStore((s) => s.loadVehicles);
+  const loadArchivedVehicles = useVehicleStore((s) => s.loadArchivedVehicles);
+  const archivedVehicles = useVehicleStore((s) => s.archivedVehicles);
   const archiveVehicle = useVehicleStore((s) => s.archiveVehicle);
   const restoreVehicle = useVehicleStore((s) => s.restoreVehicle);
 
@@ -96,33 +96,20 @@ export default function SettingsScreen() {
   const setDocExpiryLeadDays = usePreferencesStore((s) => s.setDocExpiryLeadDays);
 
   // Local UI state
-  const [archivedVehicles, setArchivedVehicles] = useState<Vehicle[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [isSendingTestNotif, setIsSendingTestNotif] = useState(false);
 
-  // Operation Progress Modal (Backup in progress, Restore in progress, Export in progress)
+  // Operation progress overlay — shared by backup / restore / export flows
   const [operationModal, setOperationModal] = useState<{
-    visible: boolean;
     title: string;
     subtitle: string;
-    emoji: string;
   } | null>(null);
 
-  // Backup Password Modal state
+  // Backup modal visibility (state lives inside BackupPasswordModal)
   const [exportModalVisible, setExportModalVisible] = useState(false);
-  const [exportPassword, setExportPassword] = useState('');
-  const [exportConfirmPassword, setExportConfirmPassword] = useState('');
-  const [exportPasswordError, setExportPasswordError] = useState<string | null>(null);
-  const [showExportPassword, setShowExportPassword] = useState(false);
-  const [showExportConfirmPassword, setShowExportConfirmPassword] = useState(false);
 
-  // Restore Password Modal state
+  // Restore modal + pending encrypted file content (state lives inside RestorePasswordModal)
   const [importPasswordModalVisible, setImportPasswordModalVisible] = useState(false);
-  const [importPassword, setImportPassword] = useState('');
-  const [importPasswordError, setImportPasswordError] = useState<string | null>(null);
-  const [showImportPassword, setShowImportPassword] = useState(false);
-  const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
   const [pendingFileContent, setPendingFileContent] = useState<string | null>(null);
 
   // Option picker visibility
@@ -137,16 +124,12 @@ export default function SettingsScreen() {
   useFocusEffect(
     useCallback(() => {
       loadVehicles();
-      const all = vehicleRepo.getAllVehicles();
-      setArchivedVehicles(all.filter((v) => v.is_archived === 1));
+      loadArchivedVehicles();
     }, [])
   );
 
   // ── Derived display labels ──
   const currencyLabel = CURRENCY_OPTIONS.find((o) => o.value === currency)?.symbol ?? currency;
-  const distanceLabel = DISTANCE_OPTIONS.find((o) => o.value === distanceUnit)?.label ?? distanceUnit;
-  const fuelVolumeLabel = FUEL_VOLUME_OPTIONS.find((o) => o.value === fuelVolumeUnit)?.label ?? fuelVolumeUnit;
-  const pressureLabel = PRESSURE_OPTIONS.find((o) => o.value === pressureUnit)?.label ?? pressureUnit;
   const defaultVehicleLabel = vehicles.find((v) => v.id === defaultVehicleId)?.nickname ?? 'First Added';
 
   // ── Vehicle picker options ──
@@ -155,38 +138,21 @@ export default function SettingsScreen() {
     ...vehicles.map((v) => ({ value: v.id, label: `${v.nickname} · ${v.registration_number}` })),
   ];
 
-  // ── Export — password protected .dlbak file ──
-  const handleBackup = () => {
-    setExportPassword('');
-    setExportConfirmPassword('');
-    setShowExportPassword(false);
-    setShowExportConfirmPassword(false);
-    setExportPasswordError(null);
-    setExportModalVisible(true);
-  };
+  // ── Export — opens BackupPasswordModal; actual export triggered by onSubmit callback ──
+  const handleBackup = () => setExportModalVisible(true);
 
-  const submitExport = async () => {
-    if (exportPassword.length < 4) {
-      setExportPasswordError('Password must be at least 4 characters.');
-      return;
-    }
-    if (exportPassword !== exportConfirmPassword) {
-      setExportPasswordError('Passwords do not match. Please re-enter.');
-      return;
-    }
-
+  // Called by BackupPasswordModal.onSubmit with the validated password
+  const submitExport = async (password: string) => {
     setExportModalVisible(false);
     setOperationModal({
-      visible: true,
       title: 'Backup in Progress',
       subtitle: 'Encrypting your database with AES-256-GCM. Please wait...',
-      emoji: '🔒',
     });
     // Allow UI thread to paint the progress modal
     await new Promise((resolve) => setTimeout(resolve, 80));
 
     try {
-      const result = await exportToFile(exportPassword);
+      const result = await exportToFile(password);
       setOperationModal(null);
       if (result.success) {
         Alert.alert('🎉 Backup Created!', result.message);
@@ -205,10 +171,8 @@ export default function SettingsScreen() {
   // ── CSV export — creates and exports a real .csv file ──
   const handleExportCsv = async () => {
     setOperationModal({
-      visible: true,
       title: 'Export in Progress',
       subtitle: 'Generating your ledger spreadsheet file. Please wait...',
-      emoji: '📊',
     });
     await new Promise((resolve) => setTimeout(resolve, 80));
 
@@ -257,11 +221,8 @@ export default function SettingsScreen() {
       }
 
       if (verified.requiresPassword && verified.pickedFileContent) {
+        // Open RestorePasswordModal; verification happens inside it
         setPendingFileContent(verified.pickedFileContent);
-        setImportPassword('');
-        setShowImportPassword(false);
-        setImportPasswordError(null);
-        setIsVerifyingPassword(false);
         setImportPasswordModalVisible(true);
         return;
       }
@@ -277,37 +238,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const submitImportPassword = async () => {
-    if (!pendingFileContent) return;
-    if (!importPassword) {
-      setImportPasswordError('Please enter your backup password.');
-      return;
-    }
-
-    setIsVerifyingPassword(true);
-    setImportPasswordError(null);
-    // Give UI thread a moment to show the verifying state
-    await new Promise((resolve) => setTimeout(resolve, 80));
-
-    try {
-      const verified = await verifyBackupContent(pendingFileContent, importPassword);
-      setIsVerifyingPassword(false);
-
-      if (!verified.success || !verified.backup) {
-        setImportPasswordError(verified.message || 'Incorrect password or corrupted backup file.');
-        return;
-      }
-
-      setImportPasswordModalVisible(false);
-      confirmAndRestore(verified.backup);
-    } catch (e) {
-      setIsVerifyingPassword(false);
-      setImportPasswordError(
-        e instanceof Error ? e.message : 'Incorrect password or corrupted backup file.'
-      );
-    }
-  };
-
+  // Called by RestorePasswordModal.onSuccess after successful password verification
   const confirmAndRestore = (backup: any) => {
     const tripCount = backup.data.trips?.length ?? 0;
     const tripInfo = tripCount > 0 ? `\n🗺️ ${tripCount} trip history record(s)` : '';
@@ -322,10 +253,8 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             setOperationModal({
-              visible: true,
               title: 'Restore in Progress',
               subtitle: 'Writing records to database and reconciling reminders. Please do not close the app...',
-              emoji: '📥',
             });
             await new Promise((resolve) => setTimeout(resolve, 80));
 
@@ -365,11 +294,8 @@ export default function SettingsScreen() {
         {
           text: 'Archive It',
           style: 'destructive',
-          onPress: () => {
-            archiveVehicle(vehicle.id);
-            const all = vehicleRepo.getAllVehicles();
-            setArchivedVehicles(all.filter((v) => v.is_archived === 1));
-          },
+          // archiveVehicle automatically refreshes archivedVehicles via store
+          onPress: () => archiveVehicle(vehicle.id),
         },
       ]
     );
@@ -384,12 +310,8 @@ export default function SettingsScreen() {
         { text: 'Nah, Keep Archived', style: 'cancel' },
         {
           text: 'Restore It!',
-          onPress: () => {
-            restoreVehicle(vehicle.id);
-            loadVehicles();
-            const all = vehicleRepo.getAllVehicles();
-            setArchivedVehicles(all.filter((v) => v.is_archived === 1));
-          },
+          // restoreVehicle calls loadVehicles() + loadArchivedVehicles() internally
+          onPress: () => restoreVehicle(vehicle.id),
         },
       ]
     );
@@ -573,26 +495,6 @@ export default function SettingsScreen() {
                   thumbColor="#FFFFFF"
                 />
               </View>
-
-              <TouchableOpacity
-                style={[styles.testNotifButton, { borderColor: colors.primary }]}
-                onPress={async () => {
-                  setIsSendingTestNotif(true);
-                  const sent = await sendTestNotification();
-                  setIsSendingTestNotif(false);
-                  if (sent) {
-                    Alert.alert('Notification Delivered 🔔', 'Test reminder scheduled and delivered to your notification tray.');
-                  } else {
-                    Alert.alert('Permission Needed', 'Please allow notifications in Android Settings for DriveLedger.');
-                  }
-                }}
-                activeOpacity={0.75}
-                disabled={isSendingTestNotif}
-              >
-                <Text style={[Typography.bodySmall, { color: colors.primary, fontWeight: '700' }]}>
-                  {isSendingTestNotif ? 'Checking...' : '🔔 Test & Reconcile Notifications'}
-                </Text>
-              </TouchableOpacity>
             </>
           )}
 
@@ -882,269 +784,45 @@ export default function SettingsScreen() {
       />
 
 
-      {/* ── Checking for Updates Loading Modal ── */}
-      <Modal
+      {/* ── Checking for Updates ── */}
+      <OperationProgressModal
         visible={isCheckingUpdate}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => setIsCheckingUpdate(false)}
-      >
-        <View style={styles.centerModalOverlay}>
-          <View
-            style={[
-              styles.checkingModalCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              },
-            ]}
-          >
-            <View style={[styles.checkingIconContainer, { backgroundColor: colors.primary + '15' }]}>
-              <ActivityIndicator size="large" color={colors.primary} />
-            </View>
-            <Text style={[styles.checkingModalTitle, { color: colors.text }]}>
-              Checking for Updates
-            </Text>
-            <Text style={[styles.checkingModalSubtitle, { color: colors.textSecondary }]}>
-              Connecting to GitHub Releases to check for the latest APK build...
-            </Text>
-          </View>
-        </View>
-      </Modal>
+        title="Checking for Updates"
+        subtitle="Connecting to GitHub Releases to check for the latest APK build..."
+        colors={colors}
+      />
 
-      {/* ── Export Password Modal ── */}
-      <Modal
+      {/* ── Backup Password Modal ── */}
+      <BackupPasswordModal
         visible={exportModalVisible}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => setExportModalVisible(false)}
-      >
-        <View style={styles.centerModalOverlay}>
-          <View
-            style={[
-              styles.passwordModalCard,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            <Text style={[styles.passwordModalTitle, { color: colors.text }]}>
-              Set Backup Password 🔒
-            </Text>
-            <Text style={[styles.passwordModalSubtitle, { color: colors.textSecondary }]}>
-              Choose a password to encrypt this backup with AES-256-GCM. You will need it to restore your data on this or another phone.
-            </Text>
-
-            <View style={styles.passwordWarningBox}>
-              <Text style={styles.passwordWarningText}>
-                ⚠️ Important: DriveLedger is 100% offline. There is no cloud backend and forgotten passwords cannot be recovered.
-              </Text>
-            </View>
-
-            {exportPasswordError ? (
-              <Text style={styles.passwordErrorText}>{exportPasswordError}</Text>
-            ) : null}
-
-            <View
-              style={[
-                styles.passwordInputContainer,
-                {
-                  borderColor: exportPasswordError ? '#EF4444' : colors.border,
-                  backgroundColor: colors.card,
-                },
-              ]}
-            >
-              <TextInput
-                style={[styles.passwordInputFlexible, { color: colors.text }]}
-                placeholder="Enter backup password (min 4 chars)"
-                placeholderTextColor={colors.textSecondary}
-                secureTextEntry={!showExportPassword}
-                autoCapitalize="none"
-                value={exportPassword}
-                onChangeText={(t) => {
-                  setExportPassword(t);
-                  setExportPasswordError(null);
-                }}
-              />
-              <TouchableOpacity
-                style={styles.eyeToggleButton}
-                onPress={() => setShowExportPassword((v) => !v)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={styles.eyeToggleText}>{showExportPassword ? '🙈' : '👁️'}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View
-              style={[
-                styles.passwordInputContainer,
-                {
-                  borderColor: exportPasswordError ? '#EF4444' : colors.border,
-                  backgroundColor: colors.card,
-                },
-              ]}
-            >
-              <TextInput
-                style={[styles.passwordInputFlexible, { color: colors.text }]}
-                placeholder="Confirm backup password"
-                placeholderTextColor={colors.textSecondary}
-                secureTextEntry={!showExportConfirmPassword}
-                autoCapitalize="none"
-                value={exportConfirmPassword}
-                onChangeText={(t) => {
-                  setExportConfirmPassword(t);
-                  setExportPasswordError(null);
-                }}
-              />
-              <TouchableOpacity
-                style={styles.eyeToggleButton}
-                onPress={() => setShowExportConfirmPassword((v) => !v)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={styles.eyeToggleText}>{showExportConfirmPassword ? '🙈' : '👁️'}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.passwordButtonRow}>
-              <TouchableOpacity
-                style={[styles.passwordCancelBtn, { borderColor: colors.border }]}
-                onPress={() => setExportModalVisible(false)}
-              >
-                <Text style={[styles.passwordBtnText, { color: colors.textSecondary }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.passwordSubmitBtn, { backgroundColor: colors.primary }]}
-                onPress={submitExport}
-              >
-                <Text style={[styles.passwordBtnText, { color: '#FFFFFF' }]}>Export</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setExportModalVisible(false)}
+        onSubmit={submitExport}
+        colors={colors}
+      />
 
       {/* ── Restore Password Modal ── */}
-      <Modal
+      <RestorePasswordModal
         visible={importPasswordModalVisible}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => {
-          if (!isVerifyingPassword) {
-            setImportPasswordModalVisible(false);
-            setPendingFileContent(null);
-          }
+        fileContent={pendingFileContent}
+        onClose={() => {
+          setImportPasswordModalVisible(false);
+          setPendingFileContent(null);
         }}
-      >
-        <View style={styles.centerModalOverlay}>
-          <View
-            style={[
-              styles.passwordModalCard,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            <Text style={[styles.passwordModalTitle, { color: colors.text }]}>
-              Enter Backup Password 🔓
-            </Text>
-            <Text style={[styles.passwordModalSubtitle, { color: colors.textSecondary }]}>
-              This backup file is encrypted. Please enter the password that was set when it was exported.
-            </Text>
+        onSuccess={(backup) => {
+          setImportPasswordModalVisible(false);
+          setPendingFileContent(null);
+          confirmAndRestore(backup);
+        }}
+        colors={colors}
+      />
 
-            {importPasswordError ? (
-              <Text style={styles.passwordErrorText}>{importPasswordError}</Text>
-            ) : null}
-
-            <View
-              style={[
-                styles.passwordInputContainer,
-                {
-                  borderColor: importPasswordError ? '#EF4444' : colors.border,
-                  backgroundColor: colors.card,
-                },
-              ]}
-            >
-              <TextInput
-                style={[styles.passwordInputFlexible, { color: colors.text }]}
-                placeholder="Enter backup password"
-                placeholderTextColor={colors.textSecondary}
-                secureTextEntry={!showImportPassword}
-                autoCapitalize="none"
-                value={importPassword}
-                editable={!isVerifyingPassword}
-                onChangeText={(t) => {
-                  setImportPassword(t);
-                  setImportPasswordError(null);
-                }}
-              />
-              <TouchableOpacity
-                style={styles.eyeToggleButton}
-                onPress={() => setShowImportPassword((v) => !v)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                disabled={isVerifyingPassword}
-              >
-                <Text style={styles.eyeToggleText}>{showImportPassword ? '🙈' : '👁️'}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.passwordButtonRow}>
-              <TouchableOpacity
-                style={[styles.passwordCancelBtn, { borderColor: colors.border }]}
-                onPress={() => {
-                  setImportPasswordModalVisible(false);
-                  setPendingFileContent(null);
-                }}
-                disabled={isVerifyingPassword}
-              >
-                <Text style={[styles.passwordBtnText, { color: colors.textSecondary }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.passwordSubmitBtn,
-                  { backgroundColor: colors.primary, opacity: isVerifyingPassword ? 0.75 : 1 },
-                ]}
-                onPress={submitImportPassword}
-                disabled={isVerifyingPassword}
-              >
-                {isVerifyingPassword ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                    <Text style={[styles.passwordBtnText, { color: '#FFFFFF' }]}>Verifying...</Text>
-                  </View>
-                ) : (
-                  <Text style={[styles.passwordBtnText, { color: '#FFFFFF' }]}>Unlock</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── Operation Progress Modal (Backup in progress, Restore in progress, Export in progress) ── */}
-      <Modal
+      {/* ── Operation Progress Modal (Backup / Restore / Export in progress) ── */}
+      <OperationProgressModal
         visible={!!operationModal}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-      >
-        <View style={styles.centerModalOverlay}>
-          <View
-            style={[
-              styles.checkingModalCard,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            <View style={[styles.checkingIconContainer, { backgroundColor: colors.primary + '18' }]}>
-              <ActivityIndicator size="large" color={colors.primary} />
-            </View>
-            <Text style={[styles.checkingModalTitle, { color: colors.text }]}>
-              {operationModal?.title}
-            </Text>
-            <Text style={[styles.checkingModalSubtitle, { color: colors.textSecondary }]}>
-              {operationModal?.subtitle}
-            </Text>
-          </View>
-        </View>
-      </Modal>
+        title={operationModal?.title ?? ''}
+        subtitle={operationModal?.subtitle ?? ''}
+        colors={colors}
+      />
     </>
   );
 }
@@ -1338,15 +1016,6 @@ const styles = StyleSheet.create({
     borderRadius: Sizing.radiusMd,
     borderWidth: 1,
     marginBottom: Spacing.sm,
-  },
-  testNotifButton: {
-    paddingVertical: Spacing.md,
-    borderRadius: Sizing.radiusMd,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: Spacing.xs,
-    marginBottom: Spacing.md,
   },
   dropdownSettingRow: {
     flexDirection: 'row',

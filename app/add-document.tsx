@@ -11,7 +11,7 @@
  * Charter user story: "Carry a digital copy, not physical."
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -34,22 +34,32 @@ import { useVehicleStore } from '@/stores/vehicleStore';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { Typography, Spacing, Sizing } from '@/constants/theme';
-import { DocumentType, DOCUMENT_TYPE_LABELS, DOCUMENT_TYPE_LIST, DOCUMENT_TYPE_ICONS } from '@/constants/documentTypes';
+import { DocumentType, DOCUMENT_TYPE_LABELS, DOCUMENT_TYPE_ICONS, getDocumentTypesForVehicle } from '@/constants/documentTypes';
 import { displayToISO, isoToDisplay, formatDateInput, validateDateDisplay } from '@/utils/dateInput';
 import { FormHeader } from '@/components/FormHeader';
 import { NoVehicleState } from '@/components/NoVehicleState';
-import { VehicleContextHeader } from '@/components/VehicleContextHeader';
 import * as documentRepo from '@/database/repositories/documentRepo';
 
 export default function AddDocumentScreen() {
   const colors = useThemeColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ id?: string; renewFrom?: string; renewType?: string }>();
+  const params = useLocalSearchParams<{ id?: string; renewFrom?: string; renewType?: string; vehicleId?: string }>();
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
+  const selectVehicle = useVehicleStore((s) => s.selectVehicle);
   const addDocument = useDocumentStore((s) => s.addDocument);
   const editDocument = useDocumentStore((s) => s.editDocument);
   const renewDocument = useDocumentStore((s) => s.renewDocument);
+
+  useEffect(() => {
+    if (params.vehicleId && params.vehicleId !== selectedVehicle?.id) {
+      selectVehicle(params.vehicleId);
+    }
+  }, [params.vehicleId]);
+
+  const availableDocTypes = useMemo(() => {
+    return getDocumentTypesForVehicle(selectedVehicle?.fuel_type);
+  }, [selectedVehicle?.fuel_type]);
 
   const isEditMode = !!params.id;
   const isRenewMode = !!params.renewFrom;
@@ -324,8 +334,20 @@ export default function AddDocumentScreen() {
       {/* ── Header ── */}
       <FormHeader title={headerTitle} />
 
-      {/* ── Vehicle Context ── */}
-      <VehicleContextHeader label="For" />
+      {/* ── Locked Vehicle Context Banner ── */}
+      <View style={[styles.vehicleContextBanner, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <Text style={[styles.vehicleContextLabel, { color: colors.textSecondary }]}>
+          For Vehicle:
+        </Text>
+        <Text style={[styles.vehicleContextName, { color: colors.text }]} numberOfLines={1}>
+          {selectedVehicle.nickname}
+        </Text>
+        {selectedVehicle.registration_number ? (
+          <Text style={[styles.vehicleContextReg, { color: colors.textTertiary }]}>
+            • {selectedVehicle.registration_number}
+          </Text>
+        ) : null}
+      </View>
 
       <ScrollView contentContainerStyle={styles.form} showsVerticalScrollIndicator={false}>
         {/* ── Renewal Banner ── */}
@@ -340,7 +362,7 @@ export default function AddDocumentScreen() {
         {/* ── Document Type ── */}
         <Text style={[styles.label, { color: colors.textSecondary }]}>Document Type *</Text>
         <View style={styles.chipGrid}>
-          {DOCUMENT_TYPE_LIST.map((dt) => (
+          {availableDocTypes.map((dt) => (
             <Pressable
               key={dt}
               onPress={() => handleDocTypeChange(dt)}
@@ -656,5 +678,24 @@ const styles = StyleSheet.create({
   saveButton: {
     height: Sizing.primaryButton, borderRadius: Sizing.radiusMd,
     justifyContent: 'center', alignItems: 'center',
+  },
+  vehicleContextBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    gap: Spacing.xs,
+  },
+  vehicleContextLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  vehicleContextName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  vehicleContextReg: {
+    fontSize: 12,
   },
 });
