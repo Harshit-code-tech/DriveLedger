@@ -25,9 +25,75 @@ import {
   processLocationSample,
   buildQualityWarning,
 } from '@/engine/distanceEngine';
+import { getPreferences, type GpsTrackingProfile } from '@/stores/preferencesStore';
 
 
 export const BACKGROUND_LOCATION_TASK = 'DRIVELEDGER_BACKGROUND_LOCATION_TASK';
+
+export interface GpsTrackingRequestOptions {
+  accuracy: Location.LocationAccuracy;
+  timeInterval: number;
+  distanceInterval: number;
+}
+
+export interface GpsTrackingOptions extends GpsTrackingRequestOptions {
+  deferredUpdatesDistance: number;
+  deferredUpdatesInterval: number;
+  deferredTimeout: number;
+}
+
+export function getGpsTrackingRequestOptions(profile: GpsTrackingProfile): GpsTrackingRequestOptions {
+  switch (profile) {
+    case 'balanced':
+      return {
+        accuracy: Location.Accuracy.Balanced,
+        timeInterval: 5000,
+        distanceInterval: 10,
+      };
+    case 'battery_saver':
+      return {
+        accuracy: Location.Accuracy.Balanced,
+        timeInterval: 10000,
+        distanceInterval: 20,
+      };
+    case 'high_accuracy':
+    default:
+      return {
+        accuracy: Location.Accuracy.High,
+        timeInterval: 2000,
+        distanceInterval: 3,
+      };
+  }
+}
+
+export function getGpsTrackingOptions(profile: GpsTrackingProfile): GpsTrackingOptions {
+  const requestOptions = getGpsTrackingRequestOptions(profile);
+
+  switch (profile) {
+    case 'balanced':
+      return {
+        ...requestOptions,
+        deferredUpdatesDistance: 30,
+        deferredUpdatesInterval: 20000,
+        deferredTimeout: 30000,
+      };
+    case 'battery_saver':
+      return {
+        ...requestOptions,
+        deferredUpdatesDistance: 50,
+        deferredUpdatesInterval: 30000,
+        deferredTimeout: 60000,
+      };
+    case 'high_accuracy':
+    default:
+      return {
+        ...requestOptions,
+        deferredUpdatesDistance: 15,
+        deferredUpdatesInterval: 10000,
+        deferredTimeout: 15000,
+      };
+  }
+}
 
 
 /** Flag indicating the next location fix must act as an anchor (e.g. initial start or post-pause resume) */
@@ -99,7 +165,8 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
     return;
   }
 
-  // 2. Load existing persisted locations to determine the last accepted fix
+  // 2. Load only the latest accepted location and aggregate counts.
+  // Do not materialize the complete route for every GPS callback.
   let lastAccepted: FilteredLocationSample | null = null;
   let isAnchorNeeded = needsNewAnchor;
 
@@ -113,10 +180,9 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
   }
 
   if (!isAnchorNeeded) {
-    const storedLocations = tripRepo.getTripLocations(activeTrip.id);
-    const acceptedExisting = storedLocations.filter((l) => l.is_rejected === 0);
-    if (acceptedExisting.length > 0) {
-      const lastRow = acceptedExisting[acceptedExisting.length - 1];
+    const summary = tripRepo.getTripLocationSummary(activeTrip.id);
+    if (summary.latestAccepted) {
+      const lastRow = summary.latestAccepted;
       lastAccepted = {
         latitude: lastRow.latitude,
         longitude: lastRow.longitude,
@@ -134,9 +200,6 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
     needsNewAnchor = false;
   }
 
-  const storedLocations = tripRepo.getTripLocations(activeTrip.id);
-  const acceptedExisting = storedLocations.filter((l) => l.is_rejected === 0);
-
   // Parse existing diagnostics or initialize fresh
   let currentDiagnostics: TripDiagnostics = {
     rejection_counts: {
@@ -148,8 +211,8 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
       implausible_speed: 0,
     },
     total_samples_received: 0,
-    accepted_samples_count: acceptedExisting.length,
-    rejected_samples_count: storedLocations.length - acceptedExisting.length,
+    accepted_samples_count: 0,
+    rejected_samples_count: 0,
     gap_count: 0,
     max_gap_seconds: 0,
     has_gap_warning: false,
@@ -171,6 +234,14 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
     } catch {
       // Use fallback initialized above
     }
+  }
+
+  // Legacy trips may not have complete diagnostics; use cheap aggregate counts
+  // only when the persisted counters are not available.
+  if (currentDiagnostics.accepted_samples_count === 0 && currentDiagnostics.rejected_samples_count === 0) {
+    const summary = tripRepo.getTripLocationSummary(activeTrip.id);
+    currentDiagnostics.accepted_samples_count = summary.acceptedCount;
+    currentDiagnostics.rejected_samples_count = summary.rejectedCount;
   }
 
   const newSamplesToPersist: FilteredLocationSample[] = [];
@@ -326,10 +397,9 @@ export async function startBackgroundLocationUpdates(): Promise<boolean> {
       return true;
     }
 
+    const trackingOptions = getGpsTrackingOptions(getPreferences().gpsTrackingProfile);
     await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
-      accuracy: Location.Accuracy.High,
-      timeInterval: 2000,
-      distanceInterval: 3,
+      ...trackingOptions,
       showsBackgroundLocationIndicator: true,
       foregroundService: {
         notificationTitle: 'DriveLedger Trip Recording',

@@ -159,6 +159,11 @@ describe('Trip Repository', () => {
 
     const updatedTrip = tripRepo.getTripById(trip.id);
     expect(updatedTrip?.sample_count).toBe(2);
+
+    const summary = tripRepo.getTripLocationSummary(trip.id);
+    expect(summary.acceptedCount).toBe(2);
+    expect(summary.rejectedCount).toBe(0);
+    expect(summary.latestAccepted?.timestamp).toBe(1700000005000);
   });
 
   test('recoverInterruptedTrips recovers abandoned/crashed trips on restart with calculated distance from stored locations', () => {

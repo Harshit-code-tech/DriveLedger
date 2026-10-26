@@ -50,6 +50,7 @@
 
 ### 🛰️ Live GPS Cockpit & Offline Trip Recording
 - Real-time speedometer (km/h), live trip distance, elapsed duration, and offline GPS route recorder with background tracking support.
+- GPS Tracking Profile in Settings offers High Accuracy, Balanced, and Battery Saver modes; background updates also use deferred delivery to reduce wakeups.
 - Vehicle-isolated recording ensures trips started on one vehicle never bleed into another.
 - Automatic trip completion modal with odometer sync, trip classification (Personal, Commute, Business), and optional fuel consumption estimation.
 

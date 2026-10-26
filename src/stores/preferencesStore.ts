@@ -24,12 +24,14 @@ export type CurrencyCode    = 'INR' | 'USD' | 'EUR' | 'GBP' | 'AED' | 'SGD';
 export type DistanceUnit    = 'km' | 'miles';
 export type FuelVolumeUnit  = 'litres' | 'gallons';
 export type PressureUnit    = 'PSI' | 'bar' | 'kPa';
+export type GpsTrackingProfile = 'high_accuracy' | 'balanced' | 'battery_saver';
 
 export interface Preferences {
   currency: CurrencyCode;
   distanceUnit: DistanceUnit;
   fuelVolumeUnit: FuelVolumeUnit;
   pressureUnit: PressureUnit;
+  gpsTrackingProfile: GpsTrackingProfile;
   defaultVehicleId: string | null;
   hasCompletedOnboarding: boolean;
   notificationsEnabled: boolean;
@@ -66,6 +68,12 @@ export const PRESSURE_OPTIONS: { value: PressureUnit; label: string }[] = [
   { value: 'kPa', label: 'kPa'        },
 ];
 
+export const GPS_TRACKING_PROFILE_OPTIONS: { value: GpsTrackingProfile; label: string }[] = [
+  { value: 'high_accuracy', label: 'High accuracy (more battery)' },
+  { value: 'balanced', label: 'Balanced' },
+  { value: 'battery_saver', label: 'Battery saver (less frequent updates)' },
+];
+
 export const DOC_LEAD_DAYS_OPTIONS: { value: string; label: string }[] = [
   { value: '7', label: '7 days before expiry' },
   { value: '15', label: '15 days before expiry' },
@@ -80,6 +88,7 @@ const KEYS = {
   distanceUnit:             'pref_distance_unit',
   fuelVolumeUnit:           'pref_fuel_volume_unit',
   pressureUnit:             'pref_pressure_unit',
+  gpsTrackingProfile:       'pref_gps_tracking_profile',
   defaultVehicleId:         'pref_default_vehicle_id',
   hasCompletedOnboarding:   'pref_has_completed_onboarding',
   notificationsEnabled:     'pref_notifications_enabled',
@@ -94,6 +103,7 @@ const DEFAULTS: Preferences = {
   distanceUnit: 'km',
   fuelVolumeUnit: 'litres',
   pressureUnit: 'PSI',
+  gpsTrackingProfile: 'high_accuracy',
   defaultVehicleId: null,
   hasCompletedOnboarding: false,
   notificationsEnabled: true,
@@ -112,6 +122,7 @@ interface PreferencesState extends Preferences {
   setDistanceUnit:            (v: DistanceUnit)   => Promise<void>;
   setFuelVolumeUnit:          (v: FuelVolumeUnit) => Promise<void>;
   setPressureUnit:            (v: PressureUnit)   => Promise<void>;
+  setGpsTrackingProfile:      (v: GpsTrackingProfile) => Promise<void>;
   setDefaultVehicleId:        (v: string | null)  => Promise<void>;
   setHasCompletedOnboarding:  (v: boolean)        => Promise<void>;
   setNotificationsEnabled:    (v: boolean)        => Promise<void>;
@@ -132,6 +143,7 @@ export const usePreferencesStore = create<PreferencesState>((set) => ({
         KEYS.distanceUnit,
         KEYS.fuelVolumeUnit,
         KEYS.pressureUnit,
+        KEYS.gpsTrackingProfile,
         KEYS.defaultVehicleId,
         KEYS.hasCompletedOnboarding,
         KEYS.notificationsEnabled,
@@ -145,6 +157,7 @@ export const usePreferencesStore = create<PreferencesState>((set) => ({
         distanceUnit,
         fuelVolumeUnit,
         pressureUnit,
+        gpsTrackingProfile,
         defaultVehicleId,
         onboarding,
         notifEnabled,
@@ -158,6 +171,7 @@ export const usePreferencesStore = create<PreferencesState>((set) => ({
         distanceUnit:             (distanceUnit[1]     as DistanceUnit)   ?? DEFAULTS.distanceUnit,
         fuelVolumeUnit:           (fuelVolumeUnit[1]   as FuelVolumeUnit) ?? DEFAULTS.fuelVolumeUnit,
         pressureUnit:             (pressureUnit[1]     as PressureUnit)   ?? DEFAULTS.pressureUnit,
+        gpsTrackingProfile:       (gpsTrackingProfile[1] as GpsTrackingProfile) ?? DEFAULTS.gpsTrackingProfile,
         defaultVehicleId:         defaultVehicleId[1] ?? null,
         hasCompletedOnboarding:   onboarding[1] === 'true',
         notificationsEnabled:     notifEnabled[1] !== 'false',
@@ -176,6 +190,10 @@ export const usePreferencesStore = create<PreferencesState>((set) => ({
   setDistanceUnit:    async (v) => { await AsyncStorage.setItem(KEYS.distanceUnit, v);   set({ distanceUnit: v });   },
   setFuelVolumeUnit:  async (v) => { await AsyncStorage.setItem(KEYS.fuelVolumeUnit, v); set({ fuelVolumeUnit: v }); },
   setPressureUnit:    async (v) => { await AsyncStorage.setItem(KEYS.pressureUnit, v);   set({ pressureUnit: v });   },
+  setGpsTrackingProfile: async (v) => {
+    await AsyncStorage.setItem(KEYS.gpsTrackingProfile, v);
+    set({ gpsTrackingProfile: v });
+  },
   setDefaultVehicleId: async (v) => {
     if (v === null) { await AsyncStorage.removeItem(KEYS.defaultVehicleId); }
     else            { await AsyncStorage.setItem(KEYS.defaultVehicleId, v); }

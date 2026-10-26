@@ -39,7 +39,9 @@ import {
   startBackgroundLocationUpdates,
   stopBackgroundLocationUpdates,
   addBackgroundLocationListener,
+  getGpsTrackingRequestOptions,
 } from '@/tasks/backgroundLocationTask';
+import { getPreferences } from '@/stores/preferencesStore';
 
 import { calculateDurableTripDistance } from '@/services/tripCoordinatorService';
 
@@ -119,6 +121,7 @@ let timerInterval: ReturnType<typeof setInterval> | null = null;
 let activeSession: ActiveTripSession | null = null;
 let currentSessionGeneration = 0;
 let isStartingSession = false;
+let lastLiveMetricsPublishAt = 0;
 
 function determineGpsQuality(accuracy: number | null | undefined): 'good' | 'fair' | 'poor' | 'none' {
   if (typeof accuracy !== 'number' || isNaN(accuracy) || !isFinite(accuracy) || accuracy <= 0) {
@@ -136,6 +139,12 @@ function notifyWidgetSync(): void {
     const { syncAllWidgets } = require('@/widgets/widgetDataService');
     syncAllWidgets?.();
   } catch {}
+}
+
+function shouldPublishLiveMetrics(now: number): boolean {
+  if (now - lastLiveMetricsPublishAt < 1000) return false;
+  lastLiveMetricsPublishAt = now;
+  return true;
 }
 
 function handleLocationCallback(
@@ -193,6 +202,10 @@ function handleLocationCallback(
         console.warn('[tripStore] Failed to flush sample buffer to SQLite:', err);
       }
     }
+  }
+
+  if (!shouldPublishLiveMetrics(Date.now())) {
+    return;
   }
 
   set((state) => ({
@@ -340,6 +353,7 @@ export const useTripStore = create<TripState>((set, get) => ({
       const thisGeneration = ++currentSessionGeneration;
       const thisTripId = trip.id;
       const now = Date.now();
+      lastLiveMetricsPublishAt = 0;
 
       activeSession = {
         sessionGeneration: thisGeneration,
@@ -411,11 +425,7 @@ export const useTripStore = create<TripState>((set, get) => ({
         }
 
         locationSubscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 2000,
-            distanceInterval: 3,
-          },
+          getGpsTrackingRequestOptions(getPreferences().gpsTrackingProfile),
           (loc) => {
             // Guard against callbacks from superseded sessions
             if (
@@ -471,6 +481,12 @@ export const useTripStore = create<TripState>((set, get) => ({
         const bgSuccess = await startBackgroundLocationUpdates();
         if (bgSuccess) {
           isBackgroundTracking = true;
+          // BackgroundTask is the authoritative recorder. Keep the foreground
+          // watcher only as a fallback to avoid duplicate GPS processing.
+          if (locationSubscription) {
+            locationSubscription.remove();
+            locationSubscription = null;
+          }
           if (backgroundListenerCleanup) {
             backgroundListenerCleanup();
             backgroundListenerCleanup = null;
@@ -493,6 +509,9 @@ export const useTripStore = create<TripState>((set, get) => ({
             activeSession.hasGaps = event.hasGaps;
             if (event.latestSample) {
               activeSession.lastAcceptedSample = event.latestSample;
+            }
+            if (!shouldPublishLiveMetrics(Date.now())) {
+              return;
             }
             set((state) => ({
               liveMetrics: {
@@ -640,6 +659,7 @@ export const useTripStore = create<TripState>((set, get) => ({
     const thisGeneration = ++currentSessionGeneration;
     const thisTripId = activeTrip.id;
     activeSession.sessionGeneration = thisGeneration;
+    lastLiveMetricsPublishAt = 0;
     // Clear last accepted sample so the next fix establishes a new anchor point
     // without accumulating distance traveled while the trip was paused.
     activeSession.lastAcceptedSample = null;
@@ -692,6 +712,9 @@ export const useTripStore = create<TripState>((set, get) => ({
           if (event.latestSample) {
             activeSession.lastAcceptedSample = event.latestSample;
           }
+          if (!shouldPublishLiveMetrics(Date.now())) {
+            return;
+          }
           set((state) => ({
             liveMetrics: {
               ...state.liveMetrics,
@@ -719,11 +742,7 @@ export const useTripStore = create<TripState>((set, get) => ({
         }
 
         locationSubscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 2000,
-            distanceInterval: 3,
-          },
+          getGpsTrackingRequestOptions(getPreferences().gpsTrackingProfile),
           (loc) => {
             if (
               !activeSession ||

@@ -260,6 +260,9 @@ const CREATE_INDEXES = `
 
   CREATE INDEX IF NOT EXISTS idx_trip_locations_trip
     ON trip_locations(trip_id, timestamp);
+
+  CREATE INDEX IF NOT EXISTS idx_trip_locations_trip_accepted
+    ON trip_locations(trip_id, is_rejected, timestamp);
 `;
 
 // ─── Public API ──────────────────────────────────────────────────────

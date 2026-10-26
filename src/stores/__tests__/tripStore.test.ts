@@ -239,6 +239,7 @@ describe('TripStore Lifecycle & GPS Engine Integration', () => {
       expect(useTripStore.getState().recordingState).toBe('idle');
 
       // Simulate a late callback arriving from trip 1 after finish
+      jest.advanceTimersByTime(1000);
       capturedCallback!({
         coords: {
           latitude: 28.631,
@@ -284,6 +285,7 @@ describe('TripStore Lifecycle & GPS Engine Integration', () => {
       expect(useTripStore.getState().liveMetrics.currentAccuracy).toBeNull();
 
       // Fix with valid high accuracy (10m)
+      jest.advanceTimersByTime(1000);
       capturedCallback!({
         coords: {
           latitude: 28.631,
@@ -310,6 +312,7 @@ describe('TripStore Lifecycle & GPS Engine Integration', () => {
       await useTripStore.getState().startGpsTrip(vehicleA.id, 10000);
 
       // Fix 1: valid anchor
+      jest.advanceTimersByTime(1000);
       capturedCallback!({
         coords: {
           latitude: 28.6310,
@@ -323,6 +326,7 @@ describe('TripStore Lifecycle & GPS Engine Integration', () => {
       });
 
       // Fix 2: 150 seconds later (> 120s gap), valid movement
+      jest.advanceTimersByTime(1000);
       capturedCallback!({
         coords: {
           latitude: 28.6350,

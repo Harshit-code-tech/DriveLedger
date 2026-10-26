@@ -28,9 +28,9 @@ import { checkForAppUpdate, showDataSafetyGuide } from '@/services/updateChecker
 import {
   CURRENCY_OPTIONS, DISTANCE_OPTIONS,
   DOC_LEAD_DAYS_OPTIONS,
-  FUEL_VOLUME_OPTIONS, PRESSURE_OPTIONS,
+  FUEL_VOLUME_OPTIONS, GPS_TRACKING_PROFILE_OPTIONS, PRESSURE_OPTIONS,
   usePreferencesStore,
-  type CurrencyCode, type DistanceUnit, type FuelVolumeUnit, type PressureUnit,
+  type CurrencyCode, type DistanceUnit, type FuelVolumeUnit, type GpsTrackingProfile, type PressureUnit,
 } from '@/stores/preferencesStore';
 import { useVehicleStore } from '@/stores/vehicleStore';
 import type { Vehicle } from '@/types/vehicle';
@@ -77,6 +77,7 @@ export default function SettingsScreen() {
   const distanceUnit = usePreferencesStore((s) => s.distanceUnit);
   const fuelVolumeUnit = usePreferencesStore((s) => s.fuelVolumeUnit);
   const pressureUnit = usePreferencesStore((s) => s.pressureUnit);
+  const gpsTrackingProfile = usePreferencesStore((s) => s.gpsTrackingProfile);
   const defaultVehicleId = usePreferencesStore((s) => s.defaultVehicleId);
   const notificationsEnabled = usePreferencesStore((s) => s.notificationsEnabled);
   const notifyDocumentExpiry = usePreferencesStore((s) => s.notifyDocumentExpiry);
@@ -88,6 +89,7 @@ export default function SettingsScreen() {
   const setDistanceUnit = usePreferencesStore((s) => s.setDistanceUnit);
   const setFuelVolumeUnit = usePreferencesStore((s) => s.setFuelVolumeUnit);
   const setPressureUnit = usePreferencesStore((s) => s.setPressureUnit);
+  const setGpsTrackingProfile = usePreferencesStore((s) => s.setGpsTrackingProfile);
   const setDefaultVehicleId = usePreferencesStore((s) => s.setDefaultVehicleId);
   const setNotificationsEnabled = usePreferencesStore((s) => s.setNotificationsEnabled);
   const setNotifyDocumentExpiry = usePreferencesStore((s) => s.setNotifyDocumentExpiry);
@@ -117,6 +119,7 @@ export default function SettingsScreen() {
   const [pickerDistance, setPickerDistance] = useState(false);
   const [pickerFuel, setPickerFuel] = useState(false);
   const [pickerPressure, setPickerPressure] = useState(false);
+  const [pickerGpsTrackingProfile, setPickerGpsTrackingProfile] = useState(false);
   const [pickerVehicle, setPickerVehicle] = useState(false);
   const [pickerDocLeadDays, setPickerDocLeadDays] = useState(false);
 
@@ -131,6 +134,8 @@ export default function SettingsScreen() {
   // ── Derived display labels ──
   const currencyLabel = CURRENCY_OPTIONS.find((o) => o.value === currency)?.symbol ?? currency;
   const defaultVehicleLabel = vehicles.find((v) => v.id === defaultVehicleId)?.nickname ?? 'First Added';
+  const gpsTrackingProfileLabel =
+    GPS_TRACKING_PROFILE_OPTIONS.find((o) => o.value === gpsTrackingProfile)?.label ?? 'High accuracy';
 
   // ── Vehicle picker options ──
   const vehiclePickerOptions = [
@@ -366,6 +371,14 @@ export default function SettingsScreen() {
             rightText={defaultVehicleLabel}
             colors={colors}
             onPress={() => setPickerVehicle(true)}
+          />
+          <SettingsRow
+            emoji="🔋"
+            title="GPS Tracking Profile"
+            subtitle="Balance route accuracy and battery use"
+            rightText={gpsTrackingProfileLabel}
+            colors={colors}
+            onPress={() => setPickerGpsTrackingProfile(true)}
           />
 
           {/* ── Notifications & Reminders ── */}
@@ -743,6 +756,15 @@ export default function SettingsScreen() {
         selected={pressureUnit}
         onSelect={setPressureUnit}
         onClose={() => setPickerPressure(false)}
+        colors={colors}
+      />
+      <OptionPicker<GpsTrackingProfile>
+        visible={pickerGpsTrackingProfile}
+        title="GPS Tracking Profile"
+        options={GPS_TRACKING_PROFILE_OPTIONS}
+        selected={gpsTrackingProfile}
+        onSelect={setGpsTrackingProfile}
+        onClose={() => setPickerGpsTrackingProfile(false)}
         colors={colors}
       />
 

@@ -452,6 +452,55 @@ export function saveTripLocationsBatch(
 
 export const addTripLocations = saveTripLocationsBatch;
 
+export interface TripLocationSummary {
+  latestAccepted: TripLocation | null;
+  acceptedCount: number;
+  rejectedCount: number;
+}
+
+/**
+ * Reads only the data needed by live GPS processing.
+ * Avoids materializing the complete route on every location callback.
+ */
+export function getTripLocationSummary(tripId: string): TripLocationSummary {
+  const db = getDatabase();
+  const counts = db.getFirstSync<{ accepted_count: number; rejected_count: number }>(
+    `SELECT
+       COALESCE(SUM(CASE WHEN is_rejected = 0 THEN 1 ELSE 0 END), 0) AS accepted_count,
+       COALESCE(SUM(CASE WHEN is_rejected != 0 THEN 1 ELSE 0 END), 0) AS rejected_count
+     FROM trip_locations
+     WHERE trip_id = ?`,
+    [tripId]
+  );
+  const latestAccepted = db.getFirstSync<TripLocation>(
+    `SELECT * FROM trip_locations
+     WHERE trip_id = ? AND is_rejected = 0
+     ORDER BY timestamp DESC
+     LIMIT 1`,
+    [tripId]
+  ) ?? null;
+
+  return {
+    latestAccepted,
+    acceptedCount: counts?.accepted_count ?? 0,
+    rejectedCount: counts?.rejected_count ?? 0,
+  };
+}
+
+/**
+ * Reads the latest accepted point without loading a complete route.
+ */
+export function getLatestAcceptedTripLocation(tripId: string): TripLocation | null {
+  const db = getDatabase();
+  return db.getFirstSync<TripLocation>(
+    `SELECT * FROM trip_locations
+     WHERE trip_id = ? AND is_rejected = 0
+     ORDER BY timestamp DESC
+     LIMIT 1`,
+    [tripId]
+  ) ?? null;
+}
+
 export function getTripLocations(tripId: string): TripLocation[] {
   const db = getDatabase();
   return db.getAllSync<TripLocation>(

@@ -18,7 +18,12 @@ import {
   stopBackgroundLocationUpdates,
   isBackgroundLocationUpdatesActive,
   addBackgroundLocationListener,
+  getGpsTrackingOptions,
 } from '../backgroundLocationTask';
+
+jest.mock('@/widgets/widgetDataService', () => ({
+  syncGpsWidgetState: jest.fn().mockResolvedValue(undefined),
+}));
 
 describe('BackgroundLocationTask (Android 8+ Lifecycle & Persistence)', () => {
   let vehicleId: string;
@@ -202,6 +207,24 @@ describe('BackgroundLocationTask (Android 8+ Lifecycle & Persistence)', () => {
   });
 
   describe('startBackgroundLocationUpdates & stopBackgroundLocationUpdates', () => {
+    test('provides progressively lower-power GPS profiles', () => {
+      expect(getGpsTrackingOptions('high_accuracy')).toMatchObject({
+        accuracy: Location.Accuracy.High,
+        timeInterval: 2000,
+        distanceInterval: 3,
+      });
+      expect(getGpsTrackingOptions('balanced')).toMatchObject({
+        accuracy: Location.Accuracy.Balanced,
+        timeInterval: 5000,
+        distanceInterval: 10,
+      });
+      expect(getGpsTrackingOptions('battery_saver')).toMatchObject({
+        accuracy: Location.Accuracy.Balanced,
+        timeInterval: 10000,
+        distanceInterval: 20,
+      });
+    });
+
     test('starts Location.startLocationUpdatesAsync with Android Foreground Service notification options', async () => {
       const started = await startBackgroundLocationUpdates();
       expect(started).toBe(true);
@@ -212,6 +235,9 @@ describe('BackgroundLocationTask (Android 8+ Lifecycle & Persistence)', () => {
           accuracy: Location.Accuracy.High,
           timeInterval: 2000,
           distanceInterval: 3,
+          deferredUpdatesDistance: 15,
+          deferredUpdatesInterval: 10000,
+          deferredTimeout: 15000,
           showsBackgroundLocationIndicator: true,
           foregroundService: expect.objectContaining({
             notificationTitle: 'DriveLedger Trip Recording',

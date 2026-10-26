@@ -35,6 +35,10 @@ export const GPS_WIDGET_STORAGE_KEY = 'driveledger_gps_widget_data_v1';
 export const GPS_WIDGET_NAME = 'GpsCockpitWidget';
 export const GPS_COMPACT_WIDGET_NAME = 'GpsCockpitCompactWidget';
 
+const WIDGET_SYNC_DEBOUNCE_MS = 1000;
+let widgetSyncPromise: Promise<void> | null = null;
+let gpsWidgetSyncPromise: Promise<void> | null = null;
+
 import { getNextVehicleId } from '@/services/tripCoordinatorService';
 
 export { getNextVehicleId };
@@ -310,7 +314,7 @@ export async function getCachedWidgetData(): Promise<VehicleGlanceWidgetData> {
  * Android-only guard: returns immediately on other platforms.
  * Non-blocking: never throws — errors are logged at debug level.
  */
-export async function syncWidgetState(): Promise<void> {
+async function performWidgetSync(): Promise<void> {
   if (Platform.OS !== 'android') return;
 
   // Re-evaluate reminders whenever vehicle/fuel/service/document data changes.
@@ -346,6 +350,22 @@ export async function syncWidgetState(): Promise<void> {
     // Non-blocking if widget is not pinned to home screen or snapshot building failed
     console.debug('[DriveLedger] Widget sync skipped or not registered:', e);
   }
+}
+
+export function syncWidgetState(): Promise<void> {
+  if (Platform.OS !== 'android') return Promise.resolve();
+  if (widgetSyncPromise) return widgetSyncPromise;
+
+  widgetSyncPromise = new Promise<void>((resolve) => {
+    setTimeout(() => {
+      void performWidgetSync().finally(() => {
+        widgetSyncPromise = null;
+        resolve();
+      });
+    }, WIDGET_SYNC_DEBOUNCE_MS);
+  });
+
+  return widgetSyncPromise;
 }
 
 // ─── GPS Cockpit Widget Snapshot & Sync ───────────────────────────────────────
@@ -391,9 +411,8 @@ export async function getGpsWidgetDataSnapshot(): Promise<GpsCockpitWidgetData> 
       let gpsQuality: 'good' | 'fair' | 'poor' | 'none' = 'none';
 
       try {
-        const storedLocations = tripRepo.getTripLocations(activeTrip.id);
-        if (storedLocations && storedLocations.length > 0) {
-          const latest = storedLocations[storedLocations.length - 1];
+        const latest = tripRepo.getLatestAcceptedTripLocation(activeTrip.id);
+        if (latest) {
           if (typeof latest.speed === 'number' && latest.speed >= 0) {
             speedKmh = Math.round(latest.speed * 3.6);
           }
@@ -541,7 +560,7 @@ export async function getCachedGpsWidgetData(): Promise<GpsCockpitWidgetData> {
  * Android-only guard: returns immediately on other platforms.
  * Non-blocking: never throws.
  */
-export async function syncGpsWidgetState(): Promise<void> {
+async function performGpsWidgetSync(): Promise<void> {
   if (Platform.OS !== 'android') return;
 
   try {
@@ -572,10 +591,25 @@ export async function syncGpsWidgetState(): Promise<void> {
   }
 }
 
+export function syncGpsWidgetState(): Promise<void> {
+  if (Platform.OS !== 'android') return Promise.resolve();
+  if (gpsWidgetSyncPromise) return gpsWidgetSyncPromise;
+
+  gpsWidgetSyncPromise = new Promise<void>((resolve) => {
+    setTimeout(() => {
+      void performGpsWidgetSync().finally(() => {
+        gpsWidgetSyncPromise = null;
+        resolve();
+      });
+    }, WIDGET_SYNC_DEBOUNCE_MS);
+  });
+
+  return gpsWidgetSyncPromise;
+}
+
 /**
  * Pushes updates to all registered Android widgets (VehicleGlance + GPSCockpit).
  */
 export async function syncAllWidgets(): Promise<void> {
   await Promise.allSettled([syncWidgetState(), syncGpsWidgetState()]);
 }
-
