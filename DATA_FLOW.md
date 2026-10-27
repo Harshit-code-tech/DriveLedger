@@ -79,7 +79,7 @@ Screen comes into focus (useFocusEffect)
         ├─► useFuelStore.loadEntries(vehicleId, fuelType)
         │       │
         │       ├─► fuelRepo.getFuelEntriesByVehicle(vehicleId)
-        │       ├─► fuelRepo.getFuelEntriesByVehicleChronological(vehicleId)
+        │       │       └─► derive odometer order in memory for calculations
         │       ├─► mileageEngine.computeMileageStats(entries, fuelType)
         │       └─► set({ entries, stats, partialEstimates })
         │
@@ -147,6 +147,23 @@ backupEngine.restoreFromValidated(backup)
         ├─► UPDATE superseded_by links (documents)
         └─► COMMIT  (or ROLLBACK on any error — existing data is NOT touched)
 ```
+
+## Background GPS Persistence Flow
+
+```
+Location task receives a batch
+        │
+        ├─► read active trip and latest accepted location summary
+        ├─► filter samples and calculate incremental distance in memory
+        ├─► BEGIN TRANSACTION
+        │       ├─► insert accepted locations
+        │       └─► update trip counters, distance, and diagnostics
+        ├─► COMMIT
+        └─► notify listeners and GPS widget only after commit
+```
+
+If the transaction fails, no live update is published and the next callback
+starts from a new persisted anchor.
 
 ---
 

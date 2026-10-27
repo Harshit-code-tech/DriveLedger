@@ -95,6 +95,10 @@ function computePartialEstimates(chronological: FuelEntry[], fuelType?: FuelType
   return map;
 }
 
+function getChronologicalEntries(entries: FuelEntry[]): FuelEntry[] {
+  return [...entries].sort((first, second) => first.odometer - second.odometer);
+}
+
 export const useFuelStore = create<FuelState>((set) => ({
   entries: [],
   partialEstimates: {},
@@ -103,7 +107,7 @@ export const useFuelStore = create<FuelState>((set) => ({
 
   loadEntries: (vehicleId: string, fuelType?: FuelType) => {
     const entries = fuelRepo.getFuelEntriesByVehicle(vehicleId);
-    const chronological = fuelRepo.getFuelEntriesByVehicleChronological(vehicleId);
+    const chronological = getChronologicalEntries(entries);
     // fuelType is provided by the caller (who always has the vehicle object).
     // No store lookup needed — eliminates the circular require.
     const stats = computeMileageStats(entries, fuelType);
@@ -121,7 +125,7 @@ export const useFuelStore = create<FuelState>((set) => ({
 
     // Refresh store state
     const entries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
-    const chronological = fuelRepo.getFuelEntriesByVehicleChronological(vehicle.id);
+    const chronological = getChronologicalEntries(entries);
     const stats = computeMileageStats(entries, vehicle.fuel_type as FuelType);
     const partialEstimates = computePartialEstimates(chronological, vehicle.fuel_type as FuelType);
     set({ entries, stats, partialEstimates });
@@ -147,7 +151,7 @@ export const useFuelStore = create<FuelState>((set) => ({
 
     // Refresh store state
     const entries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
-    const chronological = fuelRepo.getFuelEntriesByVehicleChronological(vehicle.id);
+    const chronological = getChronologicalEntries(entries);
     const stats = computeMileageStats(entries, vehicle.fuel_type as FuelType);
     const partialEstimates = computePartialEstimates(chronological, vehicle.fuel_type as FuelType);
     set({ entries, stats, partialEstimates });
@@ -169,7 +173,7 @@ export const useFuelStore = create<FuelState>((set) => ({
 
     // Refresh store state
     const entries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
-    const chronological = fuelRepo.getFuelEntriesByVehicleChronological(vehicle.id);
+    const chronological = getChronologicalEntries(entries);
     const stats = computeMileageStats(entries, vehicle.fuel_type as FuelType);
     const partialEstimates = computePartialEstimates(chronological, vehicle.fuel_type as FuelType);
     set({ entries, stats, partialEstimates });

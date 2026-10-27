@@ -292,16 +292,8 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
     }
   }
 
-  // 3. Persist new accepted samples to SQLite
-  if (newSamplesToPersist.length > 0) {
-    try {
-      tripRepo.addTripLocations(activeTrip.id, newSamplesToPersist);
-    } catch (err) {
-      console.warn('[BackgroundLocationTask] Failed to persist location samples:', err);
-    }
-  }
-
-  // 4. Update trip totals in SQLite
+  // 3. Persist samples and trip totals atomically. The committed database state
+  // is the source of truth for listeners and widgets below.
   const newDistanceKm = Math.round(((activeTrip.distance_km || 0) + incrementalDistanceMeters / 1000) * 100) / 100;
   const qualityWarning = buildQualityWarning({
     hasGapWarning: currentDiagnostics.has_gap_warning,
@@ -313,17 +305,19 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
   currentDiagnostics.anchor_needed = false;
 
   try {
-    tripRepo.updateTrip(activeTrip.id, {
+    tripRepo.persistTripLocationsAndUpdate(activeTrip.id, newSamplesToPersist, {
       distance_km: newDistanceKm,
       sample_count: currentDiagnostics.accepted_samples_count,
       quality_warning: qualityWarning,
       diagnostics: JSON.stringify(currentDiagnostics),
     });
   } catch (err) {
-    console.warn('[BackgroundLocationTask] Failed to update trip record in SQLite:', err);
+    needsNewAnchor = true;
+    console.warn('[BackgroundLocationTask] Failed to persist location batch:', err);
+    return;
   }
 
-  // 5. Notify in-memory listeners (UI store)
+  // 4. Notify in-memory listeners (UI store)
   const event: BackgroundLocationUpdateEvent = {
     tripId: activeTrip.id,
     totalDistanceKm: newDistanceKm,
@@ -344,7 +338,7 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
     }
   }
 
-  // 6. Throttled update to GPS Cockpit Widget (immediately for initial fixes, or every 50m of displacement or 10s)
+  // 5. Throttled update to GPS Cockpit Widget (immediately for initial fixes, or every 50m of displacement or 10s)
   const now = Date.now();
   if (
     currentDiagnostics.accepted_samples_count <= 2 ||

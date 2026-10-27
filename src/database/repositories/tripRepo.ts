@@ -452,6 +452,22 @@ export function saveTripLocationsBatch(
 
 export const addTripLocations = saveTripLocationsBatch;
 
+export function persistTripLocationsAndUpdate(
+  tripId: string,
+  samples: FilteredLocationSample[],
+  updates: UpdateTripInput
+): Trip | null {
+  const db = getDatabase();
+  let updatedTrip: Trip | null = null;
+
+  db.withTransactionSync(() => {
+    saveTripLocationsBatch(tripId, samples);
+    updatedTrip = updateTrip(tripId, updates);
+  });
+
+  return updatedTrip;
+}
+
 export interface TripLocationSummary {
   latestAccepted: TripLocation | null;
   acceptedCount: number;
