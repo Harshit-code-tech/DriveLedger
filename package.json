@@ -1,7 +1,7 @@
 {
   "name": "driveledger",
   "main": "index.js",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "dependencies": {
     "@expo/ui": "~58.0.23",
     "@noble/hashes": "^2.4.0",
@@ -51,11 +51,14 @@
   "devDependencies": {
     "@types/jest": "30.0.0",
     "@types/react": "~19.3.0",
-    "eslint": "^9.0.0",
+    "eslint": "^9.39.5",
     "eslint-config-expo": "~58.0.4",
     "jest": "~30.5.2",
-    "ts-jest": "^29.4.12",
+    "ts-jest": "^29.4.15",
     "typescript": "~6.0.3"
+  },
+  "overrides": {
+    "glob": "^13.0.6"
   },
   "scripts": {
     "start": "expo start",

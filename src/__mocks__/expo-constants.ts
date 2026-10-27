@@ -1,6 +1,6 @@
 export default {
   expoConfig: {
-    version: '1.0.0',
-    name: 'DriveLedger',
+    version: "0.1.0",
+    name: "DriveLedger",
   },
 };

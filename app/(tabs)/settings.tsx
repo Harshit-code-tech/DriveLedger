@@ -9,34 +9,44 @@
  * 5. About — version info, update check, data safety guide
  */
 
-import { BackupPasswordModal } from '@/components/BackupPasswordModal';
-import { OperationProgressModal } from '@/components/OperationProgressModal';
-import { OptionPicker } from '@/components/OptionPicker';
-import { RestorePasswordModal } from '@/components/RestorePasswordModal';
-import { SettingsRow } from '@/components/SettingsRow';
-import { FUEL_TYPE_SHORT_LABELS } from '@/constants/fuelTypes';
-import { Sizing, Spacing, Typography } from '@/constants/theme';
+import { BackupPasswordModal } from "@/components/BackupPasswordModal";
+import { OperationProgressModal } from "@/components/OperationProgressModal";
+import { OptionPicker } from "@/components/OptionPicker";
+import { RestorePasswordModal } from "@/components/RestorePasswordModal";
+import { SettingsRow } from "@/components/SettingsRow";
+import { FUEL_TYPE_SHORT_LABELS } from "@/constants/fuelTypes";
+import { Sizing, Spacing, Typography } from "@/constants/theme";
 import {
   exportCsvFile,
   exportToFile,
   pickAndVerifyBackup,
   restoreFromValidated,
-} from '@/engine/backupEngine';
-import { useThemeColors } from '@/hooks/useThemeColors';
-import { refreshReminders } from '@/services/notificationService';
-import { checkForAppUpdate, showDataSafetyGuide } from '@/services/updateChecker';
+} from "@/engine/backupEngine";
+import { useThemeColors } from "@/hooks/useThemeColors";
+import { refreshReminders } from "@/services/notificationService";
 import {
-  CURRENCY_OPTIONS, DISTANCE_OPTIONS,
+  checkForAppUpdate,
+  showDataSafetyGuide,
+} from "@/services/updateChecker";
+import {
+  CURRENCY_OPTIONS,
+  DISTANCE_OPTIONS,
   DOC_LEAD_DAYS_OPTIONS,
-  FUEL_VOLUME_OPTIONS, GPS_TRACKING_PROFILE_OPTIONS, PRESSURE_OPTIONS,
+  FUEL_VOLUME_OPTIONS,
+  GPS_TRACKING_PROFILE_OPTIONS,
+  PRESSURE_OPTIONS,
   usePreferencesStore,
-  type CurrencyCode, type DistanceUnit, type FuelVolumeUnit, type GpsTrackingProfile, type PressureUnit,
-} from '@/stores/preferencesStore';
-import { useVehicleStore } from '@/stores/vehicleStore';
-import type { Vehicle } from '@/types/vehicle';
-import { syncWidgetState } from '@/widgets/widgetDataService';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+  type CurrencyCode,
+  type DistanceUnit,
+  type FuelVolumeUnit,
+  type GpsTrackingProfile,
+  type PressureUnit,
+} from "@/stores/preferencesStore";
+import { useVehicleStore } from "@/stores/vehicleStore";
+import type { Vehicle } from "@/types/vehicle";
+import { syncWidgetState } from "@/widgets/widgetDataService";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   Alert,
   Platform,
@@ -45,24 +55,22 @@ import {
   Switch,
   Text,
   TouchableOpacity,
-  View
-} from 'react-native';
-
+  View,
+} from "react-native";
 
 // OptionPicker — see src/components/OptionPicker.tsx
 // SettingsRow  — see src/components/SettingsRow.tsx
 
 /** Sentinel value for "no explicit default — use the first-added vehicle". */
-const FIRST_VEHICLE_OPTION = '__first__';
+const FIRST_VEHICLE_OPTION = "__first__";
 
 const GPS_PROFILE_SHORT_LABELS: Record<GpsTrackingProfile, string> = {
-  high_accuracy: 'High Accuracy',
-  balanced: 'Balanced',
-  battery_saver: 'Battery Saver',
+  high_accuracy: "High Accuracy",
+  balanced: "Balanced",
+  battery_saver: "Battery Saver",
 };
 
 // ─── Main Screen ──────────────────────────────────────────────────────────
-
 
 export default function SettingsScreen() {
   const colors = useThemeColors();
@@ -85,23 +93,39 @@ export default function SettingsScreen() {
   const pressureUnit = usePreferencesStore((s) => s.pressureUnit);
   const gpsTrackingProfile = usePreferencesStore((s) => s.gpsTrackingProfile);
   const defaultVehicleId = usePreferencesStore((s) => s.defaultVehicleId);
-  const notificationsEnabled = usePreferencesStore((s) => s.notificationsEnabled);
-  const notifyDocumentExpiry = usePreferencesStore((s) => s.notifyDocumentExpiry);
+  const notificationsEnabled = usePreferencesStore(
+    (s) => s.notificationsEnabled,
+  );
+  const notifyDocumentExpiry = usePreferencesStore(
+    (s) => s.notifyDocumentExpiry,
+  );
   const notifyServiceDue = usePreferencesStore((s) => s.notifyServiceDue);
-  const notifyMaintenanceTargets = usePreferencesStore((s) => s.notifyMaintenanceTargets);
+  const notifyMaintenanceTargets = usePreferencesStore(
+    (s) => s.notifyMaintenanceTargets,
+  );
   const docExpiryLeadDays = usePreferencesStore((s) => s.docExpiryLeadDays);
 
   const setCurrency = usePreferencesStore((s) => s.setCurrency);
   const setDistanceUnit = usePreferencesStore((s) => s.setDistanceUnit);
   const setFuelVolumeUnit = usePreferencesStore((s) => s.setFuelVolumeUnit);
   const setPressureUnit = usePreferencesStore((s) => s.setPressureUnit);
-  const setGpsTrackingProfile = usePreferencesStore((s) => s.setGpsTrackingProfile);
+  const setGpsTrackingProfile = usePreferencesStore(
+    (s) => s.setGpsTrackingProfile,
+  );
   const setDefaultVehicleId = usePreferencesStore((s) => s.setDefaultVehicleId);
-  const setNotificationsEnabled = usePreferencesStore((s) => s.setNotificationsEnabled);
-  const setNotifyDocumentExpiry = usePreferencesStore((s) => s.setNotifyDocumentExpiry);
+  const setNotificationsEnabled = usePreferencesStore(
+    (s) => s.setNotificationsEnabled,
+  );
+  const setNotifyDocumentExpiry = usePreferencesStore(
+    (s) => s.setNotifyDocumentExpiry,
+  );
   const setNotifyServiceDue = usePreferencesStore((s) => s.setNotifyServiceDue);
-  const setNotifyMaintenanceTargets = usePreferencesStore((s) => s.setNotifyMaintenanceTargets);
-  const setDocExpiryLeadDays = usePreferencesStore((s) => s.setDocExpiryLeadDays);
+  const setNotifyMaintenanceTargets = usePreferencesStore(
+    (s) => s.setNotifyMaintenanceTargets,
+  );
+  const setDocExpiryLeadDays = usePreferencesStore(
+    (s) => s.setDocExpiryLeadDays,
+  );
 
   // Local UI state
   const [showArchived, setShowArchived] = useState(false);
@@ -117,15 +141,19 @@ export default function SettingsScreen() {
   const [exportModalVisible, setExportModalVisible] = useState(false);
 
   // Restore modal + pending encrypted file content (state lives inside RestorePasswordModal)
-  const [importPasswordModalVisible, setImportPasswordModalVisible] = useState(false);
-  const [pendingFileContent, setPendingFileContent] = useState<string | null>(null);
+  const [importPasswordModalVisible, setImportPasswordModalVisible] =
+    useState(false);
+  const [pendingFileContent, setPendingFileContent] = useState<string | null>(
+    null,
+  );
 
   // Option picker visibility
   const [pickerCurrency, setPickerCurrency] = useState(false);
   const [pickerDistance, setPickerDistance] = useState(false);
   const [pickerFuel, setPickerFuel] = useState(false);
   const [pickerPressure, setPickerPressure] = useState(false);
-  const [pickerGpsTrackingProfile, setPickerGpsTrackingProfile] = useState(false);
+  const [pickerGpsTrackingProfile, setPickerGpsTrackingProfile] =
+    useState(false);
   const [pickerVehicle, setPickerVehicle] = useState(false);
   const [pickerDocLeadDays, setPickerDocLeadDays] = useState(false);
 
@@ -134,19 +162,24 @@ export default function SettingsScreen() {
     useCallback(() => {
       loadVehicles();
       loadArchivedVehicles();
-    }, [])
+    }, []),
   );
 
   // ── Derived display labels ──
-  const currencyLabel = CURRENCY_OPTIONS.find((o) => o.value === currency)?.symbol ?? currency;
-  const defaultVehicleLabel = vehicles.find((v) => v.id === defaultVehicleId)?.nickname ?? 'First Added';
+  const currencyLabel =
+    CURRENCY_OPTIONS.find((o) => o.value === currency)?.symbol ?? currency;
+  const defaultVehicleLabel =
+    vehicles.find((v) => v.id === defaultVehicleId)?.nickname ?? "First Added";
   const gpsTrackingProfileShortLabel =
-    GPS_PROFILE_SHORT_LABELS[gpsTrackingProfile] ?? 'High Accuracy';
+    GPS_PROFILE_SHORT_LABELS[gpsTrackingProfile] ?? "High Accuracy";
 
   // ── Vehicle picker options ──
   const vehiclePickerOptions = [
-    { value: FIRST_VEHICLE_OPTION, label: 'First Added (auto)' },
-    ...vehicles.map((v) => ({ value: v.id, label: `${v.nickname} · ${v.registration_number}` })),
+    { value: FIRST_VEHICLE_OPTION, label: "First Added (auto)" },
+    ...vehicles.map((v) => ({
+      value: v.id,
+      label: `${v.nickname} · ${v.registration_number}`,
+    })),
   ];
 
   // ── Export — opens BackupPasswordModal; actual export triggered by onSubmit callback ──
@@ -156,8 +189,8 @@ export default function SettingsScreen() {
   const submitExport = async (password: string) => {
     setExportModalVisible(false);
     setOperationModal({
-      title: 'Backup in Progress',
-      subtitle: 'Encrypting your database with AES-256-GCM. Please wait...',
+      title: "Backup in Progress",
+      subtitle: "Encrypting your database with AES-256-GCM. Please wait...",
     });
     // Allow UI thread to paint the progress modal
     await new Promise((resolve) => setTimeout(resolve, 80));
@@ -166,15 +199,17 @@ export default function SettingsScreen() {
       const result = await exportToFile(password);
       setOperationModal(null);
       if (result.success) {
-        Alert.alert('🎉 Backup Created!', result.message);
+        Alert.alert("🎉 Backup Created!", result.message);
       } else {
-        Alert.alert('😨 Backup Failed', result.message);
+        Alert.alert("😨 Backup Failed", result.message);
       }
     } catch (e) {
       setOperationModal(null);
       Alert.alert(
-        '😨 Backup Failed',
-        e instanceof Error ? e.message : 'An unexpected error occurred while creating backup.'
+        "😨 Backup Failed",
+        e instanceof Error
+          ? e.message
+          : "An unexpected error occurred while creating backup.",
       );
     }
   };
@@ -182,8 +217,8 @@ export default function SettingsScreen() {
   // ── CSV export — creates and exports a real .csv file ──
   const handleExportCsv = async () => {
     setOperationModal({
-      title: 'Export in Progress',
-      subtitle: 'Generating your ledger spreadsheet file. Please wait...',
+      title: "Export in Progress",
+      subtitle: "Generating your ledger spreadsheet file. Please wait...",
     });
     await new Promise((resolve) => setTimeout(resolve, 80));
 
@@ -191,15 +226,17 @@ export default function SettingsScreen() {
       const result = await exportCsvFile();
       setOperationModal(null);
       if (result.success) {
-        Alert.alert('🎉 CSV Exported!', result.message);
+        Alert.alert("🎉 CSV Exported!", result.message);
       } else {
-        Alert.alert('😨 Export Failed', result.message);
+        Alert.alert("😨 Export Failed", result.message);
       }
     } catch (e) {
       setOperationModal(null);
       Alert.alert(
-        '😨 Export Failed',
-        e instanceof Error ? e.message : 'An unexpected error occurred during CSV export.'
+        "😨 Export Failed",
+        e instanceof Error
+          ? e.message
+          : "An unexpected error occurred during CSV export.",
       );
     }
   };
@@ -225,8 +262,8 @@ export default function SettingsScreen() {
       const verified = await pickAndVerifyBackup();
 
       if (!verified.success && !verified.requiresPassword) {
-        if (verified.message !== 'No file selected.') {
-          Alert.alert('🚫 Cannot Restore', verified.message);
+        if (verified.message !== "No file selected.") {
+          Alert.alert("🚫 Cannot Restore", verified.message);
         }
         return;
       }
@@ -243,8 +280,10 @@ export default function SettingsScreen() {
       }
     } catch (e) {
       Alert.alert(
-        '🚫 Cannot Restore',
-        e instanceof Error ? e.message : 'Could not read the selected backup file.'
+        "🚫 Cannot Restore",
+        e instanceof Error
+          ? e.message
+          : "Could not read the selected backup file.",
       );
     }
   };
@@ -252,20 +291,22 @@ export default function SettingsScreen() {
   // Called by RestorePasswordModal.onSuccess after successful password verification
   const confirmAndRestore = (backup: any) => {
     const tripCount = backup.data.trips?.length ?? 0;
-    const tripInfo = tripCount > 0 ? `\n🗺️ ${tripCount} trip history record(s)` : '';
+    const tripInfo =
+      tripCount > 0 ? `\n🗺️ ${tripCount} trip history record(s)` : "";
 
     Alert.alert(
-      '⚠️ Replace All Data?',
+      "⚠️ Replace All Data?",
       `This will PERMANENTLY WIPE your current data and restore from the selected backup.\n\nBackup contains:\n🚗 ${backup.data.vehicles.length} vehicle(s)\n⛽ ${backup.data.fuel_entries.length} fuel entries\n🔧 ${backup.data.service_records.length} service records\n💸 ${backup.data.expenses.length} expenses\n📄 ${backup.data.documents.length} documents${tripInfo}\n\nThere is NO UNDO. Continue?`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: "Cancel", style: "cancel" },
         {
-          text: 'Yes, Restore!',
-          style: 'destructive',
+          text: "Yes, Restore!",
+          style: "destructive",
           onPress: async () => {
             setOperationModal({
-              title: 'Restore in Progress',
-              subtitle: 'Writing records to database and reconciling reminders. Please do not close the app...',
+              title: "Restore in Progress",
+              subtitle:
+                "Writing records to database and reconciling reminders. Please do not close the app...",
             });
             await new Promise((resolve) => setTimeout(resolve, 80));
 
@@ -274,69 +315,74 @@ export default function SettingsScreen() {
               setOperationModal(null);
               if (result.success && result.counts) {
                 loadVehicles();
-                const restoredTrips = result.counts.trips ? `\n🗺️ ${result.counts.trips} trip(s)` : '';
+                const restoredTrips = result.counts.trips
+                  ? `\n🗺️ ${result.counts.trips} trip(s)`
+                  : "";
                 Alert.alert(
-                  '🎉 Data Restored!',
-                  `Everything's back!\n\n🚗 ${result.counts.vehicles} vehicle(s)\n⛽ ${result.counts.fuel_entries} fuel entries\n🔧 ${result.counts.service_records} service records\n💸 ${result.counts.expenses} expenses\n📄 ${result.counts.documents} documents${restoredTrips}\n\nWelcome back! 😄`
+                  "🎉 Data Restored!",
+                  `Everything's back!\n\n🚗 ${result.counts.vehicles} vehicle(s)\n⛽ ${result.counts.fuel_entries} fuel entries\n🔧 ${result.counts.service_records} service records\n💸 ${result.counts.expenses} expenses\n📄 ${result.counts.documents} documents${restoredTrips}\n\nWelcome back! 😄`,
                 );
               } else {
-                Alert.alert('😨 Restore Failed', result.message);
+                Alert.alert("😨 Restore Failed", result.message);
               }
             } catch (e) {
               setOperationModal(null);
               Alert.alert(
-                '😨 Restore Failed',
-                e instanceof Error ? e.message : 'An unexpected error occurred while restoring data.'
+                "😨 Restore Failed",
+                e instanceof Error
+                  ? e.message
+                  : "An unexpected error occurred while restoring data.",
               );
             }
           },
         },
-      ]
+      ],
     );
   };
 
   // ── Archive vehicle ──
   const handleArchive = (vehicle: Vehicle) => {
     Alert.alert(
-      'Archive This Ride? 🏎️',
+      "Archive This Ride? 🏎️",
       `"${vehicle.nickname}" will take a break from your active list.\n\nAll its history stays safe. You can bring it back anytime!`,
       [
-        { text: 'Keep It Active', style: 'cancel' },
+        { text: "Keep It Active", style: "cancel" },
         {
-          text: 'Archive It',
-          style: 'destructive',
+          text: "Archive It",
+          style: "destructive",
           // archiveVehicle automatically refreshes archivedVehicles via store
           onPress: () => archiveVehicle(vehicle.id),
         },
-      ]
+      ],
     );
   };
 
   // ── Restore archived vehicle ──
   const handleRestoreVehicle = (vehicle: Vehicle) => {
     Alert.alert(
-      'Welcome Back! 🎉',
+      "Welcome Back! 🎉",
       `"${vehicle.nickname}" is ready to roll again!`,
       [
-        { text: 'Nah, Keep Archived', style: 'cancel' },
+        { text: "Nah, Keep Archived", style: "cancel" },
         {
-          text: 'Restore It!',
+          text: "Restore It!",
           // restoreVehicle calls loadVehicles() + loadArchivedVehicles() internally
           onPress: () => restoreVehicle(vehicle.id),
         },
-      ]
+      ],
     );
   };
 
-
-
   return (
     <>
-      <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
         <View style={styles.content}>
-
           {/* ── Preferences ── */}
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Preferences</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            Preferences
+          </Text>
 
           <SettingsRow
             emoji="💰"
@@ -350,7 +396,7 @@ export default function SettingsScreen() {
             emoji="📏"
             title="Distance Unit"
             subtitle="Odometer and trip distance display"
-            rightText={distanceUnit === 'km' ? 'km' : 'mi'}
+            rightText={distanceUnit === "km" ? "km" : "mi"}
             colors={colors}
             onPress={() => setPickerDistance(true)}
           />
@@ -358,7 +404,7 @@ export default function SettingsScreen() {
             emoji="⛽"
             title="Fuel Volume Unit"
             subtitle="How fuel quantity is displayed"
-            rightText={fuelVolumeUnit === 'litres' ? 'L' : 'gal'}
+            rightText={fuelVolumeUnit === "litres" ? "L" : "gal"}
             colors={colors}
             onPress={() => setPickerFuel(true)}
           />
@@ -389,10 +435,20 @@ export default function SettingsScreen() {
             <View style={styles.dropdownSettingLeft}>
               <Text style={styles.dropdownSettingEmoji}>🔋</Text>
               <View style={{ flex: 1, marginRight: Spacing.sm }}>
-                <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>
+                <Text
+                  style={[
+                    Typography.body,
+                    { color: colors.text, fontWeight: "600" },
+                  ]}
+                >
                   GPS Tracking Profile
                 </Text>
-                <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
+                <Text
+                  style={[
+                    Typography.caption,
+                    { color: colors.textSecondary, marginTop: 2 },
+                  ]}
+                >
                   Balance route accuracy and battery use
                 </Text>
               </View>
@@ -403,30 +459,58 @@ export default function SettingsScreen() {
               style={[
                 styles.enclosedDropdownTrigger,
                 {
-                  backgroundColor: colors.primaryLight ?? (colors.primary + '18'),
-                  borderColor: colors.primary + '40',
+                  backgroundColor: colors.primaryLight ?? colors.primary + "18",
+                  borderColor: colors.primary + "40",
                 },
               ]}
             >
-              <Text style={[styles.enclosedDropdownText, { color: colors.primary }]}>
+              <Text
+                style={[styles.enclosedDropdownText, { color: colors.primary }]}
+              >
                 {gpsTrackingProfileShortLabel}
               </Text>
-              <Text style={[styles.enclosedDropdownArrow, { color: colors.primary }]}>
+              <Text
+                style={[
+                  styles.enclosedDropdownArrow,
+                  { color: colors.primary },
+                ]}
+              >
                 ▼
               </Text>
             </View>
           </TouchableOpacity>
 
           {/* ── Notifications & Reminders ── */}
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Notifications & Reminders</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            Notifications & Reminders
+          </Text>
 
-          <View style={[styles.settingSwitchRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View
+            style={[
+              styles.settingSwitchRow,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
             <View style={{ flex: 1, marginRight: Spacing.md }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
                 <Text style={{ fontSize: 18 }}>🔔</Text>
-                <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>Enable Reminders</Text>
+                <Text
+                  style={[
+                    Typography.body,
+                    { color: colors.text, fontWeight: "600" },
+                  ]}
+                >
+                  Enable Reminders
+                </Text>
               </View>
-              <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, marginLeft: 26 }]}>
+              <Text
+                style={[
+                  Typography.caption,
+                  { color: colors.textSecondary, marginTop: 2, marginLeft: 26 },
+                ]}
+              >
                 Local Android push notifications for upcoming dues
               </Text>
             </View>
@@ -443,13 +527,43 @@ export default function SettingsScreen() {
 
           {notificationsEnabled && (
             <>
-              <View style={[styles.settingSwitchRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View
+                style={[
+                  styles.settingSwitchRow,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
                 <View style={{ flex: 1, marginRight: Spacing.md }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
                     <Text style={{ fontSize: 18 }}>📄</Text>
-                    <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>Document Expiry Alerts</Text>
+                    <Text
+                      style={[
+                        Typography.body,
+                        { color: colors.text, fontWeight: "600" },
+                      ]}
+                    >
+                      Document Expiry Alerts
+                    </Text>
                   </View>
-                  <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, marginLeft: 26 }]}>
+                  <Text
+                    style={[
+                      Typography.caption,
+                      {
+                        color: colors.textSecondary,
+                        marginTop: 2,
+                        marginLeft: 26,
+                      },
+                    ]}
+                  >
                     PUC, Insurance & FASTag fine avoidance warnings
                   </Text>
                 </View>
@@ -467,7 +581,10 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={[
                   styles.dropdownSettingRow,
-                  { backgroundColor: colors.surface, borderColor: colors.border },
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
                 ]}
                 onPress={() => setPickerDocLeadDays(true)}
                 activeOpacity={0.7}
@@ -475,10 +592,20 @@ export default function SettingsScreen() {
                 <View style={styles.dropdownSettingLeft}>
                   <Text style={styles.dropdownSettingEmoji}>📅</Text>
                   <View style={{ flex: 1, marginRight: Spacing.sm }}>
-                    <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>
+                    <Text
+                      style={[
+                        Typography.body,
+                        { color: colors.text, fontWeight: "600" },
+                      ]}
+                    >
                       Document Notice Window
                     </Text>
-                    <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
+                    <Text
+                      style={[
+                        Typography.caption,
+                        { color: colors.textSecondary, marginTop: 2 },
+                      ]}
+                    >
                       Lead time before renewal warnings begin
                     </Text>
                   </View>
@@ -489,27 +616,68 @@ export default function SettingsScreen() {
                   style={[
                     styles.enclosedDropdownTrigger,
                     {
-                      backgroundColor: colors.primaryLight ?? (colors.primary + '18'),
-                      borderColor: colors.primary + '40',
+                      backgroundColor:
+                        colors.primaryLight ?? colors.primary + "18",
+                      borderColor: colors.primary + "40",
                     },
                   ]}
                 >
-                  <Text style={[styles.enclosedDropdownText, { color: colors.primary }]}>
+                  <Text
+                    style={[
+                      styles.enclosedDropdownText,
+                      { color: colors.primary },
+                    ]}
+                  >
                     {docExpiryLeadDays} days
                   </Text>
-                  <Text style={[styles.enclosedDropdownArrow, { color: colors.primary }]}>
+                  <Text
+                    style={[
+                      styles.enclosedDropdownArrow,
+                      { color: colors.primary },
+                    ]}
+                  >
                     ▼
                   </Text>
                 </View>
               </TouchableOpacity>
 
-              <View style={[styles.settingSwitchRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View
+                style={[
+                  styles.settingSwitchRow,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
                 <View style={{ flex: 1, marginRight: Spacing.md }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
                     <Text style={{ fontSize: 18 }}>🔧</Text>
-                    <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>Service Due Reminders</Text>
+                    <Text
+                      style={[
+                        Typography.body,
+                        { color: colors.text, fontWeight: "600" },
+                      ]}
+                    >
+                      Service Due Reminders
+                    </Text>
                   </View>
-                  <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, marginLeft: 26 }]}>
+                  <Text
+                    style={[
+                      Typography.caption,
+                      {
+                        color: colors.textSecondary,
+                        marginTop: 2,
+                        marginLeft: 26,
+                      },
+                    ]}
+                  >
                     Odometer and calendar-based service intervals
                   </Text>
                 </View>
@@ -524,13 +692,43 @@ export default function SettingsScreen() {
                 />
               </View>
 
-              <View style={[styles.settingSwitchRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View
+                style={[
+                  styles.settingSwitchRow,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
                 <View style={{ flex: 1, marginRight: Spacing.md }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
                     <Text style={{ fontSize: 18 }}>🎯</Text>
-                    <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>Maintenance Target Warnings</Text>
+                    <Text
+                      style={[
+                        Typography.body,
+                        { color: colors.text, fontWeight: "600" },
+                      ]}
+                    >
+                      Maintenance Target Warnings
+                    </Text>
                   </View>
-                  <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, marginLeft: 26 }]}>
+                  <Text
+                    style={[
+                      Typography.caption,
+                      {
+                        color: colors.textSecondary,
+                        marginTop: 2,
+                        marginLeft: 26,
+                      },
+                    ]}
+                  >
                     User-defined targets (Engine oil, brakes, tyres)
                   </Text>
                 </View>
@@ -555,47 +753,113 @@ export default function SettingsScreen() {
           {vehicles.map((v) => (
             <View
               key={v.id}
-              style={[styles.vehicleCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              style={[
+                styles.vehicleCard,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
             >
               <View style={styles.vehicleInfo}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={[Typography.body, { color: colors.text, fontWeight: '700' }]}>
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                >
+                  <Text
+                    style={[
+                      Typography.body,
+                      { color: colors.text, fontWeight: "700" },
+                    ]}
+                  >
                     {v.nickname}
                   </Text>
-                  {(v.id === defaultVehicleId || (!defaultVehicleId && vehicles[0]?.id === v.id)) && (
-                    <View style={{ backgroundColor: colors.primary + '20', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
-                      <Text style={{ fontSize: 10, fontWeight: '700', color: colors.primary }}>
+                  {(v.id === defaultVehicleId ||
+                    (!defaultVehicleId && vehicles[0]?.id === v.id)) && (
+                    <View
+                      style={{
+                        backgroundColor: colors.primary + "20",
+                        paddingHorizontal: 6,
+                        paddingVertical: 1,
+                        borderRadius: 4,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          fontWeight: "700",
+                          color: colors.primary,
+                        }}
+                      >
                         DEFAULT
                       </Text>
                     </View>
                   )}
                 </View>
-                <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
-                  {v.registration_number} · {FUEL_TYPE_SHORT_LABELS[v.fuel_type as keyof typeof FUEL_TYPE_SHORT_LABELS] || v.fuel_type}
+                <Text
+                  style={[
+                    Typography.bodySmall,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  {v.registration_number} ·{" "}
+                  {FUEL_TYPE_SHORT_LABELS[
+                    v.fuel_type as keyof typeof FUEL_TYPE_SHORT_LABELS
+                  ] || v.fuel_type}
                 </Text>
                 {(v.front_tyre_pressure || v.rear_tyre_pressure) && (
-                  <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2 }]}>
-                    🚨 Tyre: {v.front_tyre_pressure ? `F ${v.front_tyre_pressure} ${pressureUnit}` : ''}
-                    {v.front_tyre_pressure && v.rear_tyre_pressure ? '  ·  ' : ''}
-                    {v.rear_tyre_pressure ? `R ${v.rear_tyre_pressure} ${pressureUnit}` : ''}
+                  <Text
+                    style={[
+                      Typography.caption,
+                      { color: colors.textTertiary, marginTop: 2 },
+                    ]}
+                  >
+                    🚨 Tyre:{" "}
+                    {v.front_tyre_pressure
+                      ? `F ${v.front_tyre_pressure} ${pressureUnit}`
+                      : ""}
+                    {v.front_tyre_pressure && v.rear_tyre_pressure
+                      ? "  ·  "
+                      : ""}
+                    {v.rear_tyre_pressure
+                      ? `R ${v.rear_tyre_pressure} ${pressureUnit}`
+                      : ""}
                   </Text>
                 )}
               </View>
 
               <View style={styles.vehicleActions}>
                 <TouchableOpacity
-                  style={[styles.vehicleAction, { borderColor: colors.primary }]}
-                  onPress={() => router.push({ pathname: '/edit-vehicle', params: { id: v.id } })}
+                  style={[
+                    styles.vehicleAction,
+                    { borderColor: colors.primary },
+                  ]}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/edit-vehicle",
+                      params: { id: v.id },
+                    })
+                  }
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.vehicleActionText, { color: colors.primary }]}>Edit</Text>
+                  <Text
+                    style={[
+                      styles.vehicleActionText,
+                      { color: colors.primary },
+                    ]}
+                  >
+                    Edit
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.vehicleAction, { borderColor: colors.border }]}
                   onPress={() => handleArchive(v)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.vehicleActionText, { color: colors.textSecondary }]}>Archive</Text>
+                  <Text
+                    style={[
+                      styles.vehicleActionText,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
+                    Archive
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -603,10 +867,15 @@ export default function SettingsScreen() {
 
           <TouchableOpacity
             style={[styles.addVehicleButton, { borderColor: colors.primary }]}
-            onPress={() => router.push('/add-vehicle')}
+            onPress={() => router.push("/add-vehicle")}
             activeOpacity={0.7}
           >
-            <Text style={[Typography.body, { color: colors.primary, fontWeight: '600' }]}>
+            <Text
+              style={[
+                Typography.body,
+                { color: colors.primary, fontWeight: "600" },
+              ]}
+            >
               + Add Another Vehicle
             </Text>
           </TouchableOpacity>
@@ -619,54 +888,115 @@ export default function SettingsScreen() {
                 onPress={() => setShowArchived(!showArchived)}
                 activeOpacity={0.7}
               >
-                <Text style={[Typography.bodySmall, { color: colors.textSecondary, fontWeight: '600' }]}>
-                  {showArchived ? '▲' : '▼'}  Archived Vehicles ({archivedVehicles.length})
+                <Text
+                  style={[
+                    Typography.bodySmall,
+                    { color: colors.textSecondary, fontWeight: "600" },
+                  ]}
+                >
+                  {showArchived ? "▲" : "▼"} Archived Vehicles (
+                  {archivedVehicles.length})
                 </Text>
               </TouchableOpacity>
 
-              {showArchived && archivedVehicles.map((v) => (
-                <View
-                  key={v.id}
-                  style={[styles.vehicleCard, { backgroundColor: colors.surface, borderColor: colors.border, opacity: 0.65 }]}
-                >
-                  <View style={styles.vehicleInfo}>
-                    <Text style={[Typography.body, { color: colors.text, fontWeight: '700' }]}>{v.nickname}</Text>
-                    <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
-                      {v.registration_number} · Archived
-                    </Text>
-                    <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2 }]}>
-                      All history is preserved.
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={[styles.vehicleAction, { borderColor: colors.success }]}
-                    onPress={() => handleRestoreVehicle(v)}
-                    activeOpacity={0.7}
+              {showArchived &&
+                archivedVehicles.map((v) => (
+                  <View
+                    key={v.id}
+                    style={[
+                      styles.vehicleCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                        opacity: 0.65,
+                      },
+                    ]}
                   >
-                    <Text style={[styles.vehicleActionText, { color: colors.success }]}>Restore</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
+                    <View style={styles.vehicleInfo}>
+                      <Text
+                        style={[
+                          Typography.body,
+                          { color: colors.text, fontWeight: "700" },
+                        ]}
+                      >
+                        {v.nickname}
+                      </Text>
+                      <Text
+                        style={[
+                          Typography.bodySmall,
+                          { color: colors.textSecondary },
+                        ]}
+                      >
+                        {v.registration_number} · Archived
+                      </Text>
+                      <Text
+                        style={[
+                          Typography.caption,
+                          { color: colors.textTertiary, marginTop: 2 },
+                        ]}
+                      >
+                        All history is preserved.
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[
+                        styles.vehicleAction,
+                        { borderColor: colors.success },
+                      ]}
+                      onPress={() => handleRestoreVehicle(v)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.vehicleActionText,
+                          { color: colors.success },
+                        ]}
+                      >
+                        Restore
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
             </>
           )}
 
           {/* ── Data & Backup ── */}
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Data & Backup</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            Data & Backup
+          </Text>
 
           {/* Export */}
           <TouchableOpacity
-            style={[styles.dataRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            style={[
+              styles.dataRow,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
             onPress={handleBackup}
             activeOpacity={0.75}
             disabled={!!operationModal}
           >
             <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
                 <Text style={{ fontSize: 20 }}>💾</Text>
-                <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>Download Backup</Text>
+                <Text
+                  style={[
+                    Typography.body,
+                    { color: colors.text, fontWeight: "600" },
+                  ]}
+                >
+                  Download Backup
+                </Text>
               </View>
-              <Text style={[Typography.bodySmall, { color: colors.textSecondary, marginTop: 2, marginLeft: 28 }]}>
-                Saves an encrypted .dlbak file - password protected with AES-256-GCM
+              <Text
+                style={[
+                  Typography.bodySmall,
+                  { color: colors.textSecondary, marginTop: 2, marginLeft: 28 },
+                ]}
+              >
+                Saves an encrypted .dlbak file - password protected with
+                AES-256-GCM
               </Text>
             </View>
             <Text style={{ color: colors.primary, fontSize: 20 }}>⬇️</Text>
@@ -674,18 +1004,36 @@ export default function SettingsScreen() {
 
           {/* CSV Export */}
           <TouchableOpacity
-            style={[styles.dataRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            style={[
+              styles.dataRow,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
             onPress={handleExportCsv}
             activeOpacity={0.75}
             disabled={!!operationModal}
           >
             <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
                 <Text style={{ fontSize: 20 }}>📊</Text>
-                <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>Export as CSV</Text>
+                <Text
+                  style={[
+                    Typography.body,
+                    { color: colors.text, fontWeight: "600" },
+                  ]}
+                >
+                  Export as CSV
+                </Text>
               </View>
-              <Text style={[Typography.bodySmall, { color: colors.textSecondary, marginTop: 2, marginLeft: 28 }]}>
-                Creates and saves a .csv file of your complete fuel, service & expense ledger
+              <Text
+                style={[
+                  Typography.bodySmall,
+                  { color: colors.textSecondary, marginTop: 2, marginLeft: 28 },
+                ]}
+              >
+                Creates and saves a .csv file of your complete fuel, service &
+                expense ledger
               </Text>
             </View>
             <Text style={{ color: colors.primary, fontSize: 20 }}>📄</Text>
@@ -693,32 +1041,57 @@ export default function SettingsScreen() {
 
           {/* Import */}
           <TouchableOpacity
-            style={[styles.dataRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            style={[
+              styles.dataRow,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
             onPress={handleImport}
             activeOpacity={0.75}
             disabled={!!operationModal}
           >
             <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
                 <Text style={{ fontSize: 20 }}>📥</Text>
-                <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>Restore from Backup</Text>
+                <Text
+                  style={[
+                    Typography.body,
+                    { color: colors.text, fontWeight: "600" },
+                  ]}
+                >
+                  Restore from Backup
+                </Text>
               </View>
-              <Text style={[Typography.bodySmall, { color: colors.textSecondary, marginTop: 2, marginLeft: 28 }]}>
+              <Text
+                style={[
+                  Typography.bodySmall,
+                  { color: colors.textSecondary, marginTop: 2, marginLeft: 28 },
+                ]}
+              >
                 Browse & pick a .dlbak file - decrypted with your password
               </Text>
             </View>
-            <Text style={{ color: colors.textSecondary, fontSize: 18 }}>📂</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 18 }}>
+              📂
+            </Text>
           </TouchableOpacity>
 
-
           {/* ── Help & Guidance ── */}
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Help & Guidance</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            Help & Guidance
+          </Text>
           <SettingsRow
             emoji="✨"
             title="Replay App Walkthrough"
             subtitle="Learn about weighted mileage, targets & features"
             colors={colors}
-            onPress={() => router.push({ pathname: '/onboarding', params: { mode: 'replay' } })}
+            onPress={() =>
+              router.push({
+                pathname: "/onboarding",
+                params: { mode: "replay" },
+              })
+            }
           />
           <SettingsRow
             emoji="🛡️"
@@ -736,17 +1109,19 @@ export default function SettingsScreen() {
           />
 
           {/* ── About ── */}
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>About</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            About
+          </Text>
           <SettingsRow
             emoji="ℹ️"
-            title="DriveLedger  v1.0.0"
+            title="DriveLedger  v0.1.0"
             subtitle="Offline · Private · No account needed"
             colors={colors}
             onPress={() =>
               Alert.alert(
-                'DriveLedger v1.0.0 🚗',
-                'Fuel, mileage, services, documents - all tracked, all offline, zero drama.\n\nNo account. No cloud. Your data stays on your phone, where it belongs. 🔐',
-                [{ text: 'Love it! ❤️' }]
+                "DriveLedger v0.1.0 🚗",
+                "Fuel, mileage, services, documents - all tracked, all offline, zero drama.\n\nNo account. No cloud. Your data stays on your phone, where it belongs. 🔐",
+                [{ text: "Love it! ❤️" }],
               )
             }
           />
@@ -820,8 +1195,8 @@ export default function SettingsScreen() {
           } else if (vehicles[0]) {
             selectVehicle(vehicles[0].id);
           }
-          if (Platform.OS === 'android') {
-            syncWidgetState().catch(() => { });
+          if (Platform.OS === "android") {
+            syncWidgetState().catch(() => {});
           }
         }}
         onClose={() => setPickerVehicle(false)}
@@ -840,7 +1215,6 @@ export default function SettingsScreen() {
         onClose={() => setPickerDocLeadDays(false)}
         colors={colors}
       />
-
 
       {/* ── Checking for Updates ── */}
       <OperationProgressModal
@@ -877,8 +1251,8 @@ export default function SettingsScreen() {
       {/* ── Operation Progress Modal (Backup / Restore / Export in progress) ── */}
       <OperationProgressModal
         visible={!!operationModal}
-        title={operationModal?.title ?? ''}
-        subtitle={operationModal?.subtitle ?? ''}
+        title={operationModal?.title ?? ""}
+        subtitle={operationModal?.subtitle ?? ""}
         colors={colors}
       />
     </>
@@ -889,63 +1263,102 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: Spacing.lg, paddingBottom: Spacing.section },
   sectionTitle: {
-    fontSize: 12, fontWeight: '600', textTransform: 'uppercase',
-    letterSpacing: 1, marginTop: Spacing.xxl, marginBottom: Spacing.sm, marginLeft: Spacing.xs,
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginTop: Spacing.xxl,
+    marginBottom: Spacing.sm,
+    marginLeft: Spacing.xs,
   },
   row: {
-    flexDirection: 'row', alignItems: 'center', padding: Spacing.lg,
-    borderRadius: Sizing.radiusMd, borderWidth: 1, marginBottom: Spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.lg,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
     minHeight: Sizing.primaryButton,
   },
-  rowEmoji: { fontSize: 22, marginRight: Spacing.md, width: 32, textAlign: 'center' },
+  rowEmoji: {
+    fontSize: 22,
+    marginRight: Spacing.md,
+    width: 32,
+    textAlign: "center",
+  },
   rowText: { flex: 1 },
   vehicleCard: {
-    flexDirection: 'row', alignItems: 'center', padding: Spacing.lg,
-    borderRadius: Sizing.radiusMd, borderWidth: 1, marginBottom: Spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.lg,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
   },
   vehicleInfo: { flex: 1 },
-  vehicleActions: { flexDirection: 'row', gap: Spacing.sm, marginLeft: Spacing.sm },
+  vehicleActions: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginLeft: Spacing.sm,
+  },
   vehicleAction: {
-    borderWidth: 1.5, borderRadius: Sizing.radiusMd,
-    paddingHorizontal: Spacing.md, paddingVertical: 6,
-    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1.5,
+    borderRadius: Sizing.radiusMd,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  vehicleActionText: { fontSize: 13, fontWeight: '600' },
+  vehicleActionText: { fontSize: 13, fontWeight: "600" },
   addVehicleButton: {
-    padding: Spacing.lg, borderRadius: Sizing.radiusMd,
-    borderWidth: 2, borderStyle: 'dashed',
-    alignItems: 'center', justifyContent: 'center',
-    minHeight: Sizing.primaryButton, marginBottom: Spacing.sm,
+    padding: Spacing.lg,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: Sizing.primaryButton,
+    marginBottom: Spacing.sm,
   },
-  archivedToggle: { paddingVertical: Spacing.md, paddingHorizontal: Spacing.sm, marginBottom: Spacing.sm },
+  archivedToggle: {
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
   // ── Data rows (export / import cards) ──
   dataRow: {
-    flexDirection: 'row', alignItems: 'center', padding: Spacing.lg,
-    borderRadius: Sizing.radiusMd, borderWidth: 1, marginBottom: Spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.lg,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
     minHeight: Sizing.primaryButton,
   },
   // ── Modal (kept for vehicle picker overlay etc.) ──
-  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, justifyContent: "flex-end" },
   modalContent: {
-    borderTopLeftRadius: Sizing.radiusXl, borderTopRightRadius: Sizing.radiusXl,
-    padding: Spacing.xxl, paddingBottom: Spacing.section,
-    maxHeight: '85%',
+    borderTopLeftRadius: Sizing.radiusXl,
+    borderTopRightRadius: Sizing.radiusXl,
+    padding: Spacing.xxl,
+    paddingBottom: Spacing.section,
+    maxHeight: "85%",
   },
   centerModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    justifyContent: "center",
+    alignItems: "center",
     padding: Spacing.xl,
   },
   checkingModalCard: {
-    width: '100%',
+    width: "100%",
     maxWidth: 320,
     borderRadius: Sizing.radiusLg,
     borderWidth: 1,
     padding: Spacing.xl,
-    alignItems: 'center',
-    shadowColor: '#000',
+    alignItems: "center",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
@@ -955,29 +1368,29 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: Spacing.md,
   },
   checkingModalTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: "700",
     marginBottom: Spacing.xs,
-    textAlign: 'center',
+    textAlign: "center",
   },
   checkingModalSubtitle: {
     fontSize: 13,
     lineHeight: 18,
-    textAlign: 'center',
+    textAlign: "center",
   },
   // ── Password Modal Styles ──
   passwordModalCard: {
-    width: '100%',
+    width: "100%",
     maxWidth: 360,
     borderRadius: Sizing.radiusLg,
     borderWidth: 1,
     padding: Spacing.xl,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
@@ -985,34 +1398,34 @@ const styles = StyleSheet.create({
   },
   passwordModalTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: "700",
     marginBottom: Spacing.xs,
-    textAlign: 'center',
+    textAlign: "center",
   },
   passwordModalSubtitle: {
     fontSize: 13,
     lineHeight: 18,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: Spacing.md,
   },
   passwordWarningBox: {
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
     borderRadius: Sizing.radiusSm,
     padding: Spacing.sm,
     marginBottom: Spacing.md,
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
+    borderColor: "rgba(245, 158, 11, 0.3)",
   },
   passwordWarningText: {
     fontSize: 11,
-    color: '#D97706',
+    color: "#D97706",
     lineHeight: 15,
   },
   passwordErrorText: {
     fontSize: 12,
-    color: '#EF4444',
+    color: "#EF4444",
     marginBottom: Spacing.sm,
-    textAlign: 'center',
+    textAlign: "center",
   },
   passwordInput: {
     borderWidth: 1,
@@ -1023,7 +1436,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   passwordButtonRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: Spacing.sm,
     marginTop: Spacing.sm,
   },
@@ -1032,23 +1445,23 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     borderRadius: Sizing.radiusMd,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   passwordSubmitBtn: {
     flex: 1,
     padding: Spacing.md,
     borderRadius: Sizing.radiusMd,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   passwordBtnText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   passwordInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
     borderRadius: Sizing.radiusMd,
     paddingHorizontal: Spacing.md,
@@ -1067,37 +1480,37 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   settingSwitchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     padding: Spacing.lg,
     borderRadius: Sizing.radiusMd,
     borderWidth: 1,
     marginBottom: Spacing.sm,
   },
   dropdownSettingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     padding: Spacing.lg,
     borderRadius: Sizing.radiusMd,
     borderWidth: 1,
     marginBottom: Spacing.sm,
   },
   dropdownSettingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
   },
   dropdownSettingEmoji: {
     fontSize: 20,
     marginRight: Spacing.md,
     width: 26,
-    textAlign: 'center',
+    textAlign: "center",
   },
   enclosedDropdownTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 7,
@@ -1106,10 +1519,10 @@ const styles = StyleSheet.create({
   },
   enclosedDropdownText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   enclosedDropdownArrow: {
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: "800",
   },
 });

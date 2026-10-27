@@ -1,328 +1,505 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DriveLedger — Know Your Vehicle Inside Out</title>
+    <meta
+      name="description"
+      content="Track fuel efficiency, maintenance, running costs, tyre pressure and documents for every vehicle you own. Log fill-ups by amount paid or litres, with a home-screen widget. Private, offline-first, zero accounts."
+    />
 
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DriveLedger — Know Your Vehicle Inside Out</title>
-  <meta name="description"
-    content="Track fuel efficiency, maintenance, running costs, tyre pressure and documents for every vehicle you own. Log fill-ups by amount paid or litres, with a home-screen widget. Private, offline-first, zero accounts." />
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="assets/images/favicon.png" />
+    <link rel="apple-touch-icon" href="assets/images/icon.png" />
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="assets/images/favicon.png" />
-  <link rel="apple-touch-icon" href="assets/images/icon.png" />
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
 
-  <!-- Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap"
-    rel="stylesheet" />
+    <!-- External Stylesheet -->
+    <link rel="stylesheet" href="css/style.css" />
 
-  <!-- External Stylesheet -->
-  <link rel="stylesheet" href="css/style.css" />
+    <!-- External JavaScript -->
+    <script src="js/script.js" defer></script>
+  </head>
 
-  <!-- External JavaScript -->
-  <script src="js/script.js" defer></script>
-</head>
-
-<body>
-
-  <!-- ── Navigation ── -->
-  <nav>
-    <div class="container nav-inner">
-      <div class="logo-mark" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">
-        <div class="logo-badge">🚗</div>
-        DriveLedger
-      </div>
-      <div class="nav-ctas">
-        <a href="#features" class="btn-ghost">Features</a>
-        <a href="#install" class="btn-ghost">Install</a>
-        <a href="https://github.com/JyotikaJayani-08/DriveLedger" target="_blank" rel="noopener" class="btn-solid">
-          GitHub ↗
-        </a>
-      </div>
-    </div>
-  </nav>
-
-  <!-- ── Hero ── -->
-  <section class="container hero">
-    <div>
-      <div class="hero-kicker">
-        <span class="tag"><span class="dot"></span> <span class="app-version-badge">v1.0.0 · Free & Open
-            Source</span></span>
-      </div>
-      <h1 class="hero-title">Know your<br /><em>vehicle</em><br />inside out.</h1>
-      <p class="hero-desc">
-        DriveLedger tracks fuel mileage, maintenance visits, running costs, tyre pressure, and document expiry for every
-        vehicle you own. Fully offline. Zero accounts. Your data never leaves your phone.
-      </p>
-      <div class="hero-btns">
-        <a href="https://github.com/JyotikaJayani-08/DriveLedger/releases/latest" target="_blank" rel="noopener"
-          class="btn-solid download-apk-btn"
-          style="background: var(--blue); padding: 14px 28px; font-size: 16px; border-radius: 12px;">
-          📲 Download v1.0.0 APK
-        </a>
-        <a href="https://github.com/JyotikaJayani-08/DriveLedger" target="_blank" rel="noopener" class="btn-outline"
-          style="padding: 14px 24px; font-size: 15px; border-radius: 12px;">
-          ⭐ Star on GitHub
-        </a>
-      </div>
-      <div class="hero-proof">
-        <span>✓ Android 8.0+</span>
-        <span>✓ No Sign-Up</span>
-        <span>✓ SQLite — Offline First</span>
-        <span>✓ No Ads</span>
-      </div>
-    </div>
-
-    <!-- Receipt mockup -->
-    <div style="position: relative;">
-      <div class="receipt-card">
-        <div class="sticker sticker-1">🛡️ 100% Private</div>
-        <div class="sticker sticker-2">⚡ Offline First</div>
-
-        <div class="receipt-header">
-          <div class="receipt-title">DriveLedger</div>
-          <div class="vehicle-chip" id="vehicleChip" title="Click to switch vehicle preview">🚗 Honda City ▾</div>
+  <body>
+    <!-- ── Navigation ── -->
+    <nav>
+      <div class="container nav-inner">
+        <div
+          class="logo-mark"
+          onclick="window.scrollTo({ top: 0, behavior: 'smooth' })"
+        >
+          <div class="logo-badge">🚗</div>
+          DriveLedger
         </div>
-
-        <div class="big-stat">
-          <div class="big-stat-label">Last Fill Mileage</div>
-          <div class="big-stat-value" id="statMileage">16.4 <span style="font-size:18px; opacity:0.7;">km/L</span></div>
-          <div class="big-stat-sub" id="statAvg">⚡ Running avg: 15.8 km/L</div>
-        </div>
-
-        <div class="mini-row">
-          <div class="mini-card">
-            <div class="mini-card-label">Odometer</div>
-            <div class="mini-card-value" id="statOdometer">34,250 km</div>
-          </div>
-          <div class="mini-card">
-            <div class="mini-card-label">This Month</div>
-            <div class="mini-card-value" id="statSpend" style="color: var(--amber);">₹4,820</div>
-          </div>
-        </div>
-
-        <div class="tyre-strip">
-          <div>
-            <div class="tyre-strip-label">🚨 Tyre Pressure (PSI)</div>
-            <div class="tyre-strip-vals" id="statTyres">Front: 32 &nbsp;·&nbsp; Rear: 30</div>
-          </div>
-          <div style="font-size: 22px;">🔧</div>
+        <div class="nav-ctas">
+          <a href="#features" class="btn-ghost">Features</a>
+          <a href="#install" class="btn-ghost">Install</a>
+          <a
+            href="https://github.com/Harshit-code-tech/DriveLedger"
+            target="_blank"
+            rel="noopener"
+            class="btn-solid"
+          >
+            GitHub ↗
+          </a>
         </div>
       </div>
-    </div>
-  </section>
+    </nav>
 
-  <!-- ── Stats Belt ── -->
-  <section class="belt">
-    <div class="container">
-      <div class="belt-inner">
-        <div class="belt-item">
-          <div class="belt-num">100%</div>
-          <div class="belt-label">Offline & Private</div>
-        </div>
-        <div class="belt-item">
-          <div class="belt-num">km/L</div>
-          <div class="belt-label">Tank-to-Tank Mileage</div>
-        </div>
-        <div class="belt-item">
-          <div class="belt-num">PSI</div>
-          <div class="belt-label">Per-Vehicle Tyre Pressure</div>
-        </div>
-        <div class="belt-item">
-          <div class="belt-num">₹0</div>
-          <div class="belt-label">Cost to Use. Forever.</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── Features ── -->
-  <section class="container features" id="features">
-    <div class="features-header">
-      <span class="tag tag-green"><span class="dot"></span> Features</span>
-      <h2 class="features-heading">Built around how you actually drive.</h2>
-    </div>
-
-    <div class="feature-grid">
-      <div class="feature-cell">
-        <div class="feature-glyph">⛽</div>
-        <h3>Multi-Fuel & EV Efficiency</h3>
-        <p>Tank-to-tank calculations for Petrol, Diesel, CNG (km/kg), plus charge-to-charge efficiency for Electric
-          Vehicles (km/kWh). Live estimates for partial fills and battery % calculation.</p>
-      </div>
-      <div class="feature-cell">
-        <div class="feature-glyph">🔧</div>
-        <h3>Record Maintenance</h3>
-        <p>Track oil changes, brake pads, and garage bills. Kilometer countdown to your next scheduled service.</p>
-      </div>
-      <div class="feature-cell">
-        <div class="feature-glyph">🚨</div>
-        <h3>Tyre Pressure Card</h3>
-        <p>Store factory PSI for front and rear tyres per vehicle. Check at petrol pumps right from your home screen.
-        </p>
-      </div>
-      <div class="feature-cell">
-        <div class="feature-glyph">🚗</div>
-        <h3>Multi-Vehicle</h3>
-        <p>Cars, bikes, scooters, and commercial vehicles. Instant switcher chips on every screen — no back-button
-          navigation.</p>
-      </div>
-      <div class="feature-cell">
-        <div class="feature-glyph">📄</div>
-        <h3>Document Alerts</h3>
-        <p>Store expiry dates for Insurance, PUC, RC, and Road Tax. Dashboard banner warns you before renewals lapse.
-        </p>
-      </div>
-      <div class="feature-cell">
-        <div class="feature-glyph">💾</div>
-        <h3>AES-256-GCM Backup</h3>
-        <p>Export your complete vehicle history and receipt attachments as a password-protected, encrypted .dlbak file anytime.</p>
-      </div>
-      <div class="feature-cell">
-        <div class="feature-glyph">🛰️</div>
-        <h3>Live GPS Cockpit & Trips</h3>
-        <p>Offline digital speedometer, live distance, and route recording with automatic odometer sync and trip logs.</p>
-      </div>
-      <div class="feature-cell">
-        <div class="feature-glyph">📱</div>
-        <h3>3 Home-Screen Widgets</h3>
-        <p>Quick Glance, live GPS Cockpit HUD, and minimal 1-row GPS Strip widgets right on your Android home screen.</p>
-      </div>
-      <div class="feature-cell">
-        <div class="feature-glyph">🧮</div>
-        <h3>Pay-by-Amount Fuel Entry</h3>
-        <p>Just say "₹1,000 of petrol". Enter the amount paid or the litres — the other is calculated instantly, with
-          quick-pick chips and your last price pre-filled.</p>
-      </div>
-      <div class="feature-cell">
-        <div class="feature-glyph">🔋</div>
-        <h3>Petrol, CNG, EV & Bi-Fuel</h3>
-        <p>Per-fuel units and formulas — km/L, km/kg and km/kWh — with separate tracking for each tank on bi-fuel
-          vehicles.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── Install ── -->
-  <section class="container install" id="install">
-    <div class="install-layout">
+    <!-- ── Hero ── -->
+    <section class="container hero">
       <div>
-        <span class="tag tag-amber"><span class="dot"></span> Install Guide</span>
-        <h2 style="font-size: 34px; font-weight: 700; letter-spacing: -0.025em; margin: 12px 0 36px;">Three
-          steps,<br />five minutes.</h2>
-
-        <ol class="steps-list">
-          <li>
-            <div class="step-num">1</div>
-            <div class="step-body">
-              <h4>Download the APK</h4>
-              <p>Click the button below to grab the latest <code>DriveLedger.apk</code> from GitHub Releases.</p>
-            </div>
-          </li>
-          <li>
-            <div class="step-num">2</div>
-            <div class="step-body">
-              <h4>Install on Android</h4>
-              <p>Open the file, tap <strong>Install</strong>. Android may ask to allow "unknown sources" — approve it
-                for this once.</p>
-            </div>
-          </li>
-          <li>
-            <div class="step-num">3</div>
-            <div class="step-body">
-              <h4>Add your first vehicle</h4>
-              <p>The onboarding screen launches automatically. Add a nickname, fuel type, and registration number —
-                you're in.</p>
-            </div>
-          </li>
-        </ol>
-
-        <div class="warning-box">
-          <strong>⚠️ When updating later:</strong>
-          <p>Never uninstall before updating! Simply install the new APK <em>over</em> the existing app. Android
-            replaces the code and keeps your entire database untouched.</p>
+        <div class="hero-kicker">
+          <span class="tag"
+            ><span class="dot"></span>
+            <span class="app-version-badge"
+              >v0.1.0 · Free & Open Source</span
+            ></span
+          >
         </div>
-
-        <div style="margin-top: 32px; display: flex; gap: 12px; flex-wrap: wrap;">
-          <a href="https://github.com/JyotikaJayani-08/DriveLedger/releases/latest" target="_blank" rel="noopener"
+        <h1 class="hero-title">
+          Know your<br /><em>vehicle</em><br />inside out.
+        </h1>
+        <p class="hero-desc">
+          DriveLedger tracks fuel mileage, maintenance visits, running costs,
+          tyre pressure, and document expiry for every vehicle you own. Fully
+          offline. Zero accounts. Your data never leaves your phone.
+        </p>
+        <div class="hero-btns">
+          <a
+            href="https://github.com/Harshit-code-tech/DriveLedger/releases/latest"
+            target="_blank"
+            rel="noopener"
             class="btn-solid download-apk-btn"
-            style="background: var(--blue); padding: 15px 28px; font-size: 15px; border-radius: 12px;">
-            📲 Download v1.0.0 APK
+            style="
+              background: var(--blue);
+              padding: 14px 28px;
+              font-size: 16px;
+              border-radius: 12px;
+            "
+          >
+            📲 Download v0.1.0 APK
           </a>
-          <a href="https://github.com/JyotikaJayani-08/DriveLedger/releases" target="_blank" rel="noopener"
-            class="btn-outline" style="padding: 15px 20px; font-size: 14px; border-radius: 12px;">
-            All Releases →
+          <a
+            href="https://github.com/Harshit-code-tech/DriveLedger"
+            target="_blank"
+            rel="noopener"
+            class="btn-outline"
+            style="padding: 14px 24px; font-size: 15px; border-radius: 12px"
+          >
+            ⭐ Star on GitHub
           </a>
+        </div>
+        <div class="hero-proof">
+          <span>✓ Android 8.0+</span>
+          <span>✓ No Sign-Up</span>
+          <span>✓ SQLite — Offline First</span>
+          <span>✓ No Ads</span>
         </div>
       </div>
 
-      <!-- Terminal visual -->
-      <div class="install-visual">
-        <div class="install-card">
-          <div class="install-card-header">
-            <span>DriveLedger · In-App Auto Update Check</span>
-            <span style="opacity: 0.5;">v1.0.2</span>
+      <!-- Receipt mockup -->
+      <div style="position: relative">
+        <div class="receipt-card">
+          <div class="sticker sticker-1">🛡️ 100% Private</div>
+          <div class="sticker sticker-2">⚡ Offline First</div>
+
+          <div class="receipt-header">
+            <div class="receipt-title">DriveLedger</div>
+            <div
+              class="vehicle-chip"
+              id="vehicleChip"
+              title="Click to switch vehicle preview"
+            >
+              🚗 Honda City ▾
+            </div>
           </div>
 
-          <div class="cmd-block" title="Click to copy command">
-            <span class="cmd-comment"># Settings → Check for Updates</span><br />
-            <span class="cmd-amber">GET</span> <span class="cmd-blue">api.github.com</span><span
-              class="cmd-green">/repos/JyotikaJayani-08/<br />&nbsp;&nbsp;&nbsp;&nbsp;DriveLedger/releases/latest</span>
+          <div class="big-stat">
+            <div class="big-stat-label">Last Fill Mileage</div>
+            <div class="big-stat-value" id="statMileage">
+              16.4 <span style="font-size: 18px; opacity: 0.7">km/L</span>
+            </div>
+            <div class="big-stat-sub" id="statAvg">
+              ⚡ Running avg: 15.8 km/L
+            </div>
           </div>
 
-          <div class="cmd-block" title="Click to copy JSON response">
-            <span class="cmd-comment">// Sample GitHub Release Response</span><br />
-            <span class="cmd-blue">{</span><br />
-            &nbsp;&nbsp;<span class="cmd-green">"tag_name"</span>: <span class="cmd-amber"
-              id="terminalVersionTag">"v1.0.0"</span>,<br />
-            &nbsp;&nbsp;<span class="cmd-green">"body"</span>: <span class="cmd-amber">"Added tyre pressure, improved
-              auto-slash dates..."</span>,<br />
-            &nbsp;&nbsp;<span class="cmd-green">"assets"</span>: [{ <span class="cmd-green">"name"</span>: <span
-              class="cmd-amber">"DriveLedger.apk"</span> }]<br />
-            <span class="cmd-blue">}</span>
+          <div class="mini-row">
+            <div class="mini-card">
+              <div class="mini-card-label">Odometer</div>
+              <div class="mini-card-value" id="statOdometer">34,250 km</div>
+            </div>
+            <div class="mini-card">
+              <div class="mini-card-label">This Month</div>
+              <div
+                class="mini-card-value"
+                id="statSpend"
+                style="color: var(--amber)"
+              >
+                ₹4,820
+              </div>
+            </div>
+          </div>
+
+          <div class="tyre-strip">
+            <div>
+              <div class="tyre-strip-label">🚨 Tyre Pressure (PSI)</div>
+              <div class="tyre-strip-vals" id="statTyres">
+                Front: 32 &nbsp;·&nbsp; Rear: 30
+              </div>
+            </div>
+            <div style="font-size: 22px">🔧</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Stats Belt ── -->
+    <section class="belt">
+      <div class="container">
+        <div class="belt-inner">
+          <div class="belt-item">
+            <div class="belt-num">100%</div>
+            <div class="belt-label">Offline & Private</div>
+          </div>
+          <div class="belt-item">
+            <div class="belt-num">km/L</div>
+            <div class="belt-label">Tank-to-Tank Mileage</div>
+          </div>
+          <div class="belt-item">
+            <div class="belt-num">PSI</div>
+            <div class="belt-label">Per-Vehicle Tyre Pressure</div>
+          </div>
+          <div class="belt-item">
+            <div class="belt-num">₹0</div>
+            <div class="belt-label">Cost to Use. Forever.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Features ── -->
+    <section class="container features" id="features">
+      <div class="features-header">
+        <span class="tag tag-green"><span class="dot"></span> Features</span>
+        <h2 class="features-heading">Built around how you actually drive.</h2>
+      </div>
+
+      <div class="feature-grid">
+        <div class="feature-cell">
+          <div class="feature-glyph">⛽</div>
+          <h3>Multi-Fuel & EV Efficiency</h3>
+          <p>
+            Tank-to-tank calculations for Petrol, Diesel, CNG (km/kg), plus
+            charge-to-charge efficiency for Electric Vehicles (km/kWh). Live
+            estimates for partial fills and battery % calculation.
+          </p>
+        </div>
+        <div class="feature-cell">
+          <div class="feature-glyph">🔧</div>
+          <h3>Record Maintenance</h3>
+          <p>
+            Track oil changes, brake pads, and garage bills. Kilometer countdown
+            to your next scheduled service.
+          </p>
+        </div>
+        <div class="feature-cell">
+          <div class="feature-glyph">🚨</div>
+          <h3>Tyre Pressure Card</h3>
+          <p>
+            Store factory PSI for front and rear tyres per vehicle. Check at
+            petrol pumps right from your home screen.
+          </p>
+        </div>
+        <div class="feature-cell">
+          <div class="feature-glyph">🚗</div>
+          <h3>Multi-Vehicle</h3>
+          <p>
+            Cars, bikes, scooters, and commercial vehicles. Instant switcher
+            chips on every screen — no back-button navigation.
+          </p>
+        </div>
+        <div class="feature-cell">
+          <div class="feature-glyph">📄</div>
+          <h3>Document Alerts</h3>
+          <p>
+            Store expiry dates for Insurance, PUC, RC, and Road Tax. Dashboard
+            banner warns you before renewals lapse.
+          </p>
+        </div>
+        <div class="feature-cell">
+          <div class="feature-glyph">💾</div>
+          <h3>AES-256-GCM Backup</h3>
+          <p>
+            Export your complete vehicle history and receipt attachments as a
+            password-protected, encrypted .dlbak file anytime.
+          </p>
+        </div>
+        <div class="feature-cell">
+          <div class="feature-glyph">🛰️</div>
+          <h3>Live GPS Cockpit & Trips</h3>
+          <p>
+            Offline digital speedometer, live distance, and route recording with
+            automatic odometer sync and trip logs.
+          </p>
+        </div>
+        <div class="feature-cell">
+          <div class="feature-glyph">📱</div>
+          <h3>3 Home-Screen Widgets</h3>
+          <p>
+            Quick Glance, live GPS Cockpit HUD, and minimal 1-row GPS Strip
+            widgets right on your Android home screen.
+          </p>
+        </div>
+        <div class="feature-cell">
+          <div class="feature-glyph">🧮</div>
+          <h3>Pay-by-Amount Fuel Entry</h3>
+          <p>
+            Just say "₹1,000 of petrol". Enter the amount paid or the litres —
+            the other is calculated instantly, with quick-pick chips and your
+            last price pre-filled.
+          </p>
+        </div>
+        <div class="feature-cell">
+          <div class="feature-glyph">🔋</div>
+          <h3>Petrol, CNG, EV & Bi-Fuel</h3>
+          <p>
+            Per-fuel units and formulas — km/L, km/kg and km/kWh — with separate
+            tracking for each tank on bi-fuel vehicles.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Install ── -->
+    <section class="container install" id="install">
+      <div class="install-layout">
+        <div>
+          <span class="tag tag-amber"
+            ><span class="dot"></span> Install Guide</span
+          >
+          <h2
+            style="
+              font-size: 34px;
+              font-weight: 700;
+              letter-spacing: -0.025em;
+              margin: 12px 0 36px;
+            "
+          >
+            Three steps,<br />five minutes.
+          </h2>
+
+          <ol class="steps-list">
+            <li>
+              <div class="step-num">1</div>
+              <div class="step-body">
+                <h4>Download the APK</h4>
+                <p>
+                  Click the button below to grab the latest
+                  <code>DriveLedger.apk</code> from GitHub Releases.
+                </p>
+              </div>
+            </li>
+            <li>
+              <div class="step-num">2</div>
+              <div class="step-body">
+                <h4>Install on Android</h4>
+                <p>
+                  Open the file, tap <strong>Install</strong>. Android may ask
+                  to allow "unknown sources" — approve it for this once.
+                </p>
+              </div>
+            </li>
+            <li>
+              <div class="step-num">3</div>
+              <div class="step-body">
+                <h4>Add your first vehicle</h4>
+                <p>
+                  The onboarding screen launches automatically. Add a nickname,
+                  fuel type, and registration number — you're in.
+                </p>
+              </div>
+            </li>
+          </ol>
+
+          <div class="warning-box">
+            <strong>⚠️ When updating later:</strong>
+            <p>
+              Never uninstall before updating! Simply install the new APK
+              <em>over</em> the existing app. Android replaces the code and
+              keeps your entire database untouched.
+            </p>
           </div>
 
           <div
-            style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.25); border-radius: 10px; padding: 12px 14px; margin-top: 4px;">
-            <div style="color: #34D399; font-size: 12px; font-weight: 700; margin-bottom: 4px;"
-              id="terminalStatusBadge">✓ Latest Release (v1.0.2)</div>
-            <div style="color: rgba(255,255,255,0.6); font-size: 12px;">Offline vehicle tracker, tyre pressure, expense
-              logs</div>
-            <div style="display: flex; gap: 8px; margin-top: 10px;">
-              <a href="https://github.com/JyotikaJayani-08/DriveLedger/releases/latest" target="_blank" rel="noopener"
-                style="background: var(--blue); border-radius: 7px; padding: 6px 14px; font-size: 11px; color: #FFF; font-weight: 600; display: inline-block;">Download
-                APK →</a>
-              <a href="https://github.com/JyotikaJayani-08/DriveLedger" target="_blank" rel="noopener"
-                style="background: rgba(255,255,255,0.08); border-radius: 7px; padding: 6px 12px; font-size: 11px; color: rgba(255,255,255,0.7); display: inline-block;">View
-                Repo</a>
+            style="margin-top: 32px; display: flex; gap: 12px; flex-wrap: wrap"
+          >
+            <a
+              href="https://github.com/Harshit-code-tech/DriveLedger/releases/latest"
+              target="_blank"
+              rel="noopener"
+              class="btn-solid download-apk-btn"
+              style="
+                background: var(--blue);
+                padding: 15px 28px;
+                font-size: 15px;
+                border-radius: 12px;
+              "
+            >
+              📲 Download v0.1.0 APK
+            </a>
+            <a
+              href="https://github.com/Harshit-code-tech/DriveLedger/releases"
+              target="_blank"
+              rel="noopener"
+              class="btn-outline"
+              style="padding: 15px 20px; font-size: 14px; border-radius: 12px"
+            >
+              All Releases →
+            </a>
+          </div>
+        </div>
+
+        <!-- Terminal visual -->
+        <div class="install-visual">
+          <div class="install-card">
+            <div class="install-card-header">
+              <span>DriveLedger · In-App Auto Update Check</span>
+              <span style="opacity: 0.5">v1.0.2</span>
+            </div>
+
+            <div class="cmd-block" title="Click to copy command">
+              <span class="cmd-comment"># Settings → Check for Updates</span
+              ><br />
+              <span class="cmd-amber">GET</span>
+              <span class="cmd-blue">api.github.com</span
+              ><span class="cmd-green"
+                >/repos/Harshit-code-tech/<br />&nbsp;&nbsp;&nbsp;&nbsp;DriveLedger/releases/latest</span
+              >
+            </div>
+
+            <div class="cmd-block" title="Click to copy JSON response">
+              <span class="cmd-comment">// Sample GitHub Release Response</span
+              ><br />
+              <span class="cmd-blue">{</span><br />
+              &nbsp;&nbsp;<span class="cmd-green">"tag_name"</span>:
+              <span class="cmd-amber" id="terminalVersionTag">"v0.1.0"</span
+              >,<br />
+              &nbsp;&nbsp;<span class="cmd-green">"body"</span>:
+              <span class="cmd-amber"
+                >"Added tyre pressure, improved auto-slash dates..."</span
+              >,<br />
+              &nbsp;&nbsp;<span class="cmd-green">"assets"</span>: [{
+              <span class="cmd-green">"name"</span>:
+              <span class="cmd-amber">"DriveLedger.apk"</span> }]<br />
+              <span class="cmd-blue">}</span>
+            </div>
+
+            <div
+              style="
+                background: rgba(16, 185, 129, 0.12);
+                border: 1px solid rgba(16, 185, 129, 0.25);
+                border-radius: 10px;
+                padding: 12px 14px;
+                margin-top: 4px;
+              "
+            >
+              <div
+                style="
+                  color: #34d399;
+                  font-size: 12px;
+                  font-weight: 700;
+                  margin-bottom: 4px;
+                "
+                id="terminalStatusBadge"
+              >
+                ✓ Latest Release (v1.0.2)
+              </div>
+              <div style="color: rgba(255, 255, 255, 0.6); font-size: 12px">
+                Offline vehicle tracker, tyre pressure, expense logs
+              </div>
+              <div style="display: flex; gap: 8px; margin-top: 10px">
+                <a
+                  href="https://github.com/Harshit-code-tech/DriveLedger/releases/latest"
+                  target="_blank"
+                  rel="noopener"
+                  style="
+                    background: var(--blue);
+                    border-radius: 7px;
+                    padding: 6px 14px;
+                    font-size: 11px;
+                    color: #fff;
+                    font-weight: 600;
+                    display: inline-block;
+                  "
+                  >Download APK →</a
+                >
+                <a
+                  href="https://github.com/Harshit-code-tech/DriveLedger"
+                  target="_blank"
+                  rel="noopener"
+                  style="
+                    background: rgba(255, 255, 255, 0.08);
+                    border-radius: 7px;
+                    padding: 6px 12px;
+                    font-size: 11px;
+                    color: rgba(255, 255, 255, 0.7);
+                    display: inline-block;
+                  "
+                  >View Repo</a
+                >
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ── Footer ── -->
-  <footer>
-    <div class="container footer-inner">
-      <div>
-        <div class="footer-brand">DriveLedger</div>
-        <div style="font-size: 13px; color: #9CA3AF; margin-top: 4px;">MIT License · Built with React Native & Expo
+    <!-- ── Footer ── -->
+    <footer>
+      <div class="container footer-inner">
+        <div>
+          <div class="footer-brand">DriveLedger</div>
+          <div style="font-size: 13px; color: #9ca3af; margin-top: 4px">
+            MIT License · Built with React Native & Expo
+          </div>
+        </div>
+        <div class="footer-links">
+          <a
+            href="https://github.com/Harshit-code-tech/DriveLedger"
+            target="_blank"
+            rel="noopener"
+            >GitHub</a
+          >
+          <a
+            href="https://github.com/Harshit-code-tech/DriveLedger/releases"
+            target="_blank"
+            rel="noopener"
+            >Releases</a
+          >
+          <a
+            href="https://github.com/Harshit-code-tech/DriveLedger/blob/master/LICENSE"
+            target="_blank"
+            rel="noopener"
+            >License</a
+          >
+          <a
+            href="https://github.com/Harshit-code-tech"
+            target="_blank"
+            rel="noopener"
+            >@Harshit-code-tech</a
+          >
         </div>
       </div>
-      <div class="footer-links">
-        <a href="https://github.com/JyotikaJayani-08/DriveLedger" target="_blank" rel="noopener">GitHub</a>
-        <a href="https://github.com/JyotikaJayani-08/DriveLedger/releases" target="_blank" rel="noopener">Releases</a>
-        <a href="https://github.com/JyotikaJayani-08/DriveLedger/blob/master/LICENSE" target="_blank"
-          rel="noopener">License</a>
-        <a href="https://github.com/JyotikaJayani-08" target="_blank" rel="noopener">@JyotikaJayani-08</a>
-      </div>
-    </div>
-  </footer>
-
-</body>
-
+    </footer>
+  </body>
 </html>
