@@ -13,22 +13,24 @@
  * - Safe lifecycle management: automatically stops tracking if no recording trip exists in SQLite
  */
 
-import * as TaskManager from 'expo-task-manager';
-import * as Location from 'expo-location';
-import type {
-  RawLocationSample,
-  FilteredLocationSample,
-  TripDiagnostics,
-} from '@/types/trip';
-import * as tripRepo from '@/database/repositories/tripRepo';
+import * as tripRepo from "@/database/repositories/tripRepo";
 import {
-  processLocationSample,
-  buildQualityWarning,
-} from '@/engine/distanceEngine';
-import { getPreferences, type GpsTrackingProfile } from '@/stores/preferencesStore';
+    buildQualityWarning,
+    processLocationSample,
+} from "@/engine/distanceEngine";
+import {
+    getPreferences,
+    type GpsTrackingProfile,
+} from "@/stores/preferencesStore";
+import type {
+    FilteredLocationSample,
+    RawLocationSample,
+    TripDiagnostics,
+} from "@/types/trip";
+import * as Location from "expo-location";
+import * as TaskManager from "expo-task-manager";
 
-
-export const BACKGROUND_LOCATION_TASK = 'DRIVELEDGER_BACKGROUND_LOCATION_TASK';
+export const BACKGROUND_LOCATION_TASK = "DRIVELEDGER_BACKGROUND_LOCATION_TASK";
 
 export interface GpsTrackingRequestOptions {
   accuracy: Location.LocationAccuracy;
@@ -42,21 +44,23 @@ export interface GpsTrackingOptions extends GpsTrackingRequestOptions {
   deferredTimeout: number;
 }
 
-export function getGpsTrackingRequestOptions(profile: GpsTrackingProfile): GpsTrackingRequestOptions {
+export function getGpsTrackingRequestOptions(
+  profile: GpsTrackingProfile,
+): GpsTrackingRequestOptions {
   switch (profile) {
-    case 'balanced':
+    case "balanced":
       return {
         accuracy: Location.Accuracy.Balanced,
         timeInterval: 5000,
         distanceInterval: 10,
       };
-    case 'battery_saver':
+    case "battery_saver":
       return {
         accuracy: Location.Accuracy.Balanced,
         timeInterval: 10000,
         distanceInterval: 20,
       };
-    case 'high_accuracy':
+    case "high_accuracy":
     default:
       return {
         accuracy: Location.Accuracy.High,
@@ -66,25 +70,27 @@ export function getGpsTrackingRequestOptions(profile: GpsTrackingProfile): GpsTr
   }
 }
 
-export function getGpsTrackingOptions(profile: GpsTrackingProfile): GpsTrackingOptions {
+export function getGpsTrackingOptions(
+  profile: GpsTrackingProfile,
+): GpsTrackingOptions {
   const requestOptions = getGpsTrackingRequestOptions(profile);
 
   switch (profile) {
-    case 'balanced':
+    case "balanced":
       return {
         ...requestOptions,
         deferredUpdatesDistance: 30,
         deferredUpdatesInterval: 20000,
         deferredTimeout: 30000,
       };
-    case 'battery_saver':
+    case "battery_saver":
       return {
         ...requestOptions,
         deferredUpdatesDistance: 50,
         deferredUpdatesInterval: 30000,
         deferredTimeout: 60000,
       };
-    case 'high_accuracy':
+    case "high_accuracy":
     default:
       return {
         ...requestOptions,
@@ -94,7 +100,6 @@ export function getGpsTrackingOptions(profile: GpsTrackingProfile): GpsTrackingO
       };
   }
 }
-
 
 /** Flag indicating the next location fix must act as an anchor (e.g. initial start or post-pause resume) */
 let needsNewAnchor = true;
@@ -111,32 +116,43 @@ export interface BackgroundLocationUpdateEvent {
   rejectedSamplesCount: number;
   currentSpeed: number | null;
   currentAccuracy: number | null;
-  gpsQuality: 'good' | 'fair' | 'poor' | 'none';
+  gpsQuality: "good" | "fair" | "poor" | "none";
   hasGaps: boolean;
   latestSample: FilteredLocationSample | null;
 }
 
-type BackgroundLocationListener = (event: BackgroundLocationUpdateEvent) => void;
+type BackgroundLocationListener = (
+  event: BackgroundLocationUpdateEvent,
+) => void;
 const listeners = new Set<BackgroundLocationListener>();
 
 /**
  * Registers an in-memory listener to receive updates when background locations are processed.
  * Used by tripStore to keep UI metrics updated in real time when app is in foreground.
  */
-export function addBackgroundLocationListener(listener: BackgroundLocationListener): () => void {
+export function addBackgroundLocationListener(
+  listener: BackgroundLocationListener,
+): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
   };
 }
 
-function determineGpsQuality(accuracy: number | null | undefined): 'good' | 'fair' | 'poor' | 'none' {
-  if (typeof accuracy !== 'number' || isNaN(accuracy) || !isFinite(accuracy) || accuracy <= 0) {
-    return 'none';
+function determineGpsQuality(
+  accuracy: number | null | undefined,
+): "good" | "fair" | "poor" | "none" {
+  if (
+    typeof accuracy !== "number" ||
+    isNaN(accuracy) ||
+    !isFinite(accuracy) ||
+    accuracy <= 0
+  ) {
+    return "none";
   }
-  if (accuracy > 35) return 'poor';
-  if (accuracy > 15) return 'fair';
-  return 'good';
+  if (accuracy > 35) return "poor";
+  if (accuracy > 15) return "fair";
+  return "good";
 }
 
 interface LocationTaskData {
@@ -147,20 +163,27 @@ interface LocationTaskData {
  * Core processing logic for background location fixes.
  * Exposed for testing and executed by TaskManager.
  */
-export async function handleBackgroundLocations(locations: Location.LocationObject[]): Promise<void> {
+export async function handleBackgroundLocations(
+  locations: Location.LocationObject[],
+): Promise<void> {
   if (!locations || locations.length === 0) return;
 
   // 1. Durable check: get the current active trip from SQLite
   const activeTrip = tripRepo.getActiveTrip();
-  if (!activeTrip || activeTrip.status !== 'recording') {
+  if (!activeTrip || activeTrip.status !== "recording") {
     // If no trip is actively recording in SQLite, stop background updates
     try {
-      const isRunning = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+      const isRunning = await Location.hasStartedLocationUpdatesAsync(
+        BACKGROUND_LOCATION_TASK,
+      );
       if (isRunning) {
         await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
       }
     } catch (e) {
-      console.warn('[BackgroundLocationTask] Failed to stop updates for inactive trip:', e);
+      console.warn(
+        "[BackgroundLocationTask] Failed to stop updates for inactive trip:",
+        e,
+      );
     }
     return;
   }
@@ -221,7 +244,7 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
   if (activeTrip.diagnostics) {
     try {
       const parsed = JSON.parse(activeTrip.diagnostics);
-      if (parsed && typeof parsed === 'object') {
+      if (parsed && typeof parsed === "object") {
         currentDiagnostics = {
           ...currentDiagnostics,
           ...parsed,
@@ -238,7 +261,10 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
 
   // Legacy trips may not have complete diagnostics; use cheap aggregate counts
   // only when the persisted counters are not available.
-  if (currentDiagnostics.accepted_samples_count === 0 && currentDiagnostics.rejected_samples_count === 0) {
+  if (
+    currentDiagnostics.accepted_samples_count === 0 &&
+    currentDiagnostics.rejected_samples_count === 0
+  ) {
     const summary = tripRepo.getTripLocationSummary(activeTrip.id);
     currentDiagnostics.accepted_samples_count = summary.acceptedCount;
     currentDiagnostics.rejected_samples_count = summary.rejectedCount;
@@ -248,7 +274,7 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
   let incrementalDistanceMeters = 0;
   let latestSpeed: number | null = null;
   let latestAccuracy: number | null = null;
-  let latestQuality: 'good' | 'fair' | 'poor' | 'none' = 'none';
+  let latestQuality: "good" | "fair" | "poor" | "none" = "none";
   let latestAcceptedSample: FilteredLocationSample | null = lastAccepted;
 
   for (const loc of locations) {
@@ -263,8 +289,14 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
     };
 
     currentDiagnostics.total_samples_received++;
-    latestAccuracy = typeof raw.accuracy === 'number' && isFinite(raw.accuracy) ? raw.accuracy : null;
-    latestSpeed = raw.speed !== null && raw.speed !== undefined && raw.speed >= 0 ? raw.speed : null;
+    latestAccuracy =
+      typeof raw.accuracy === "number" && isFinite(raw.accuracy)
+        ? raw.accuracy
+        : null;
+    latestSpeed =
+      raw.speed !== null && raw.speed !== undefined && raw.speed >= 0
+        ? raw.speed
+        : null;
     latestQuality = determineGpsQuality(raw.accuracy);
 
     const result = processLocationSample(raw, lastAccepted);
@@ -272,7 +304,10 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
     if (result.gapDetected) {
       currentDiagnostics.has_gap_warning = true;
       currentDiagnostics.gap_count++;
-      if (result.gapDurationSeconds && result.gapDurationSeconds > currentDiagnostics.max_gap_seconds) {
+      if (
+        result.gapDurationSeconds &&
+        result.gapDurationSeconds > currentDiagnostics.max_gap_seconds
+      ) {
         currentDiagnostics.max_gap_seconds = result.gapDurationSeconds;
       }
     }
@@ -294,7 +329,10 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
 
   // 3. Persist samples and trip totals atomically. The committed database state
   // is the source of truth for listeners and widgets below.
-  const newDistanceKm = Math.round(((activeTrip.distance_km || 0) + incrementalDistanceMeters / 1000) * 100) / 100;
+  const newDistanceKm =
+    Math.round(
+      ((activeTrip.distance_km || 0) + incrementalDistanceMeters / 1000) * 100,
+    ) / 100;
   const qualityWarning = buildQualityWarning({
     hasGapWarning: currentDiagnostics.has_gap_warning,
     totalReceived: currentDiagnostics.total_samples_received,
@@ -313,7 +351,10 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
     });
   } catch (err) {
     needsNewAnchor = true;
-    console.warn('[BackgroundLocationTask] Failed to persist location batch:', err);
+    console.warn(
+      "[BackgroundLocationTask] Failed to persist location batch:",
+      err,
+    );
     return;
   }
 
@@ -334,7 +375,7 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
     try {
       listener(event);
     } catch (err) {
-      console.warn('[BackgroundLocationTask] Listener error:', err);
+      console.warn("[BackgroundLocationTask] Listener error:", err);
     }
   }
 
@@ -348,10 +389,10 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
     lastWidgetSyncTime = now;
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { syncGpsWidgetState } = require('@/widgets/widgetDataService');
+      const { syncGpsWidgetState } = require("@/widgets/widgetDataService");
       syncGpsWidgetState?.();
     } catch (err) {
-      console.debug('[BackgroundLocationTask] Widget sync error:', err);
+      console.debug("[BackgroundLocationTask] Widget sync error:", err);
     }
   }
 }
@@ -360,18 +401,23 @@ export async function handleBackgroundLocations(locations: Location.LocationObje
 try {
   TaskManager.defineTask(
     BACKGROUND_LOCATION_TASK,
-    async ({ data, error }: TaskManager.TaskManagerTaskBody<LocationTaskData>) => {
+    async ({
+      data,
+      error,
+    }: TaskManager.TaskManagerTaskBody<LocationTaskData>) => {
       if (error) {
-        console.warn(`[BackgroundLocationTask] TaskManager error: ${error.message}`);
+        console.warn(
+          `[BackgroundLocationTask] TaskManager error: ${error.message}`,
+        );
         return;
       }
       if (data && data.locations) {
         await handleBackgroundLocations(data.locations);
       }
-    }
+    },
   );
 } catch (e) {
-  console.warn('[BackgroundLocationTask] Error defining TaskManager task:', e);
+  console.warn("[BackgroundLocationTask] Error defining TaskManager task:", e);
 }
 
 /**
@@ -382,30 +428,39 @@ export async function startBackgroundLocationUpdates(): Promise<boolean> {
   try {
     const isAvailable = await Location.isBackgroundLocationAvailableAsync();
     if (!isAvailable) {
-      console.warn('[BackgroundLocationTask] Background location not available on device');
+      console.warn(
+        "[BackgroundLocationTask] Background location not available on device",
+      );
       return false;
     }
 
-    const isRunning = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+    const isRunning = await Location.hasStartedLocationUpdatesAsync(
+      BACKGROUND_LOCATION_TASK,
+    );
     if (isRunning) {
       return true;
     }
 
-    const trackingOptions = getGpsTrackingOptions(getPreferences().gpsTrackingProfile);
+    const trackingOptions = getGpsTrackingOptions(
+      getPreferences().gpsTrackingProfile,
+    );
     await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
       ...trackingOptions,
       showsBackgroundLocationIndicator: true,
       foregroundService: {
-        notificationTitle: 'DriveLedger Trip Recording',
-        notificationBody: 'Recording vehicle route in the background...',
-        notificationColor: '#084CB4',
+        notificationTitle: "DriveLedger Trip Recording",
+        notificationBody: "Recording vehicle route in the background...",
+        notificationColor: "#084CB4",
         killServiceOnDestroy: false,
       },
     });
 
     return true;
   } catch (err) {
-    console.warn('[BackgroundLocationTask] Failed to start background location updates:', err);
+    console.warn(
+      "[BackgroundLocationTask] Failed to start background location updates:",
+      err,
+    );
     return false;
   }
 }
@@ -415,12 +470,17 @@ export async function startBackgroundLocationUpdates(): Promise<boolean> {
  */
 export async function stopBackgroundLocationUpdates(): Promise<void> {
   try {
-    const isRunning = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+    const isRunning = await Location.hasStartedLocationUpdatesAsync(
+      BACKGROUND_LOCATION_TASK,
+    );
     if (isRunning) {
       await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
     }
   } catch (err) {
-    console.warn('[BackgroundLocationTask] Failed to stop background location updates:', err);
+    console.warn(
+      "[BackgroundLocationTask] Failed to stop background location updates:",
+      err,
+    );
   }
 }
 
@@ -429,7 +489,9 @@ export async function stopBackgroundLocationUpdates(): Promise<void> {
  */
 export async function isBackgroundLocationUpdatesActive(): Promise<boolean> {
   try {
-    return await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+    return await Location.hasStartedLocationUpdatesAsync(
+      BACKGROUND_LOCATION_TASK,
+    );
   } catch {
     return false;
   }

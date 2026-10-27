@@ -14,23 +14,27 @@
  * 7. State is refreshed.
  */
 
-import { create } from 'zustand';
-import { Platform } from 'react-native';
-import type { FuelEntry, CreateFuelEntryInput, UpdateFuelEntryInput } from '@/types/fuel';
-import type { Vehicle } from '@/types/vehicle';
-import * as fuelRepo from '@/database/repositories/fuelRepo';
-import { syncWidgetState } from '@/widgets/widgetDataService';
-import { storeRegistry } from '@/stores/storeRegistry';
-import { refreshReminders } from '@/services/notificationService';
+import type { VehicleType } from "@/constants/fuelTypes";
+import { FuelType } from "@/constants/fuelTypes";
+import * as fuelRepo from "@/database/repositories/fuelRepo";
 import {
   calculatePartialEstimate,
   computeMileageStats,
+  type MileageResult,
   type MileageStats,
   type MileageWarning,
-  type MileageResult,
-} from '@/engine/mileageEngine';
-import { FuelType } from '@/constants/fuelTypes';
-import type { VehicleType } from '@/constants/fuelTypes';
+} from "@/engine/mileageEngine";
+import { refreshReminders } from "@/services/notificationService";
+import { storeRegistry } from "@/stores/storeRegistry";
+import type {
+  CreateFuelEntryInput,
+  FuelEntry,
+  UpdateFuelEntryInput,
+} from "@/types/fuel";
+import type { Vehicle } from "@/types/vehicle";
+import { syncWidgetState } from "@/widgets/widgetDataService";
+import { Platform } from "react-native";
+import { create } from "zustand";
 
 interface FuelState {
   /** Fuel entries for the currently selected vehicle (date DESC for display) */
@@ -58,7 +62,10 @@ interface FuelState {
    */
   loadEntries: (vehicleId: string, fuelType?: FuelType) => void;
   /** Create a new fuel entry with mileage calculation (atomic transaction) */
-  addFuelEntry: (input: CreateFuelEntryInput, vehicle: Vehicle) => {
+  addFuelEntry: (
+    input: CreateFuelEntryInput,
+    vehicle: Vehicle,
+  ) => {
     entry: FuelEntry;
     warning: MileageWarning | null;
   };
@@ -66,7 +73,7 @@ interface FuelState {
   updateFuelEntry: (
     entryId: string,
     input: UpdateFuelEntryInput,
-    vehicle: Vehicle
+    vehicle: Vehicle,
   ) => FuelEntry | null;
   /** Delete a fuel entry and recalculate downstream mileage (atomic transaction) */
   deleteFuelEntry: (entryId: string, vehicle: Vehicle) => void;
@@ -84,7 +91,10 @@ const emptyStats: MileageStats = {
  * Computes partial-fill estimated mileage for all entries in a chronological list.
  * Returns a map of entryId → MileageResult (isEstimate: true).
  */
-function computePartialEstimates(chronological: FuelEntry[], fuelType?: FuelType): Record<string, MileageResult> {
+function computePartialEstimates(
+  chronological: FuelEntry[],
+  fuelType?: FuelType,
+): Record<string, MileageResult> {
   const map: Record<string, MileageResult> = {};
   chronological.forEach((_, index) => {
     const result = calculatePartialEstimate(chronological, index, fuelType);
@@ -120,18 +130,21 @@ export const useFuelStore = create<FuelState>((set) => ({
     const { entry, warning } = fuelRepo.createFuelEntryAtomic(
       input,
       vehicle.fuel_type as FuelType,
-      vehicle.vehicle_type as VehicleType
+      vehicle.vehicle_type as VehicleType,
     );
 
     // Refresh store state
     const entries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
     const chronological = getChronologicalEntries(entries);
     const stats = computeMileageStats(entries, vehicle.fuel_type as FuelType);
-    const partialEstimates = computePartialEstimates(chronological, vehicle.fuel_type as FuelType);
+    const partialEstimates = computePartialEstimates(
+      chronological,
+      vehicle.fuel_type as FuelType,
+    );
     set({ entries, stats, partialEstimates });
 
     storeRegistry.refreshVehicles();
-    if (Platform.OS === 'android') syncWidgetState();
+    if (Platform.OS === "android") syncWidgetState();
     refreshReminders();
 
     return { entry, warning };
@@ -140,24 +153,27 @@ export const useFuelStore = create<FuelState>((set) => ({
   updateFuelEntry: (
     entryId: string,
     input: UpdateFuelEntryInput,
-    vehicle: Vehicle
+    vehicle: Vehicle,
   ) => {
     // Atomically update entry, recalculate mileage chain, and update vehicle odometer
     const updated = fuelRepo.updateFuelEntryAtomic(
       entryId,
       input,
-      vehicle.fuel_type as FuelType
+      vehicle.fuel_type as FuelType,
     );
 
     // Refresh store state
     const entries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
     const chronological = getChronologicalEntries(entries);
     const stats = computeMileageStats(entries, vehicle.fuel_type as FuelType);
-    const partialEstimates = computePartialEstimates(chronological, vehicle.fuel_type as FuelType);
+    const partialEstimates = computePartialEstimates(
+      chronological,
+      vehicle.fuel_type as FuelType,
+    );
     set({ entries, stats, partialEstimates });
 
     storeRegistry.refreshVehicles();
-    if (Platform.OS === 'android') syncWidgetState();
+    if (Platform.OS === "android") syncWidgetState();
     refreshReminders();
 
     return updated;
@@ -168,18 +184,21 @@ export const useFuelStore = create<FuelState>((set) => ({
     fuelRepo.deleteFuelEntryAtomic(
       entryId,
       vehicle.id,
-      vehicle.fuel_type as FuelType
+      vehicle.fuel_type as FuelType,
     );
 
     // Refresh store state
     const entries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
     const chronological = getChronologicalEntries(entries);
     const stats = computeMileageStats(entries, vehicle.fuel_type as FuelType);
-    const partialEstimates = computePartialEstimates(chronological, vehicle.fuel_type as FuelType);
+    const partialEstimates = computePartialEstimates(
+      chronological,
+      vehicle.fuel_type as FuelType,
+    );
     set({ entries, stats, partialEstimates });
 
     storeRegistry.refreshVehicles();
-    if (Platform.OS === 'android') syncWidgetState();
+    if (Platform.OS === "android") syncWidgetState();
     refreshReminders();
   },
 }));

@@ -10,20 +10,20 @@
  * - Atomic persistence of GPS samples
  */
 
-import { getDatabase } from '../connection';
-import { buildSafeUpdate } from '../safeUpdate';
-import { generateUUID } from '@/utils/uuid';
-import { nowISO } from '@/utils/date';
-import { haversineDistance } from '@/engine/distanceEngine';
+import { haversineDistance } from "@/engine/distanceEngine";
 import type {
-  Trip,
-  TripLocation,
-  CreateTripInput,
   CreateManualTripInput,
-  UpdateTripInput,
+  CreateTripInput,
   FilteredLocationSample,
+  Trip,
   TripDiagnostics,
-} from '@/types/trip';
+  TripLocation,
+  UpdateTripInput,
+} from "@/types/trip";
+import { nowISO } from "@/utils/date";
+import { generateUUID } from "@/utils/uuid";
+import { getDatabase } from "../connection";
+import { buildSafeUpdate } from "../safeUpdate";
 
 // ─── CREATE ──────────────────────────────────────────────────────────
 
@@ -39,10 +39,11 @@ export function createTrip(input: CreateTripInput): Trip {
     id,
     vehicle_id: input.vehicle_id,
     trip_type: input.trip_type,
-    status: 'recording',
+    status: "recording",
     start_time: input.start_time || now,
     end_time: null,
-    start_odometer: typeof input.start_odometer === 'number' ? input.start_odometer : null,
+    start_odometer:
+      typeof input.start_odometer === "number" ? input.start_odometer : null,
     end_odometer: null,
     distance_km: 0,
     duration_seconds: 0,
@@ -82,7 +83,7 @@ export function createTrip(input: CreateTripInput): Trip {
       trip.created_at,
       trip.updated_at,
       trip.deleted_at,
-    ]
+    ],
   );
 
   return trip;
@@ -101,28 +102,28 @@ export function createManualTrip(input: CreateManualTripInput): Trip {
   const endOdo = Number(input.end_odometer);
 
   if (isNaN(startOdo) || isNaN(endOdo) || startOdo < 0 || endOdo < 0) {
-    throw new Error('Odometer readings must be valid positive numbers.');
+    throw new Error("Odometer readings must be valid positive numbers.");
   }
 
   if (endOdo < startOdo) {
-    throw new Error('Ending odometer cannot be lower than starting odometer.');
+    throw new Error("Ending odometer cannot be lower than starting odometer.");
   }
 
   const distanceKm = Math.round((endOdo - startOdo) * 10) / 10;
-  const tripDate = input.date || now.split('T')[0];
+  const tripDate = input.date || now.split("T")[0];
 
   const trip: Trip = {
     id,
     vehicle_id: input.vehicle_id,
-    trip_type: 'manual',
-    status: 'completed',
+    trip_type: "manual",
+    status: "completed",
     start_time: `${tripDate}T00:00:00Z`,
     end_time: `${tripDate}T23:59:59Z`,
     start_odometer: startOdo,
     end_odometer: endOdo,
     distance_km: distanceKm,
     duration_seconds:
-      typeof input.duration_minutes === 'number' && input.duration_minutes > 0
+      typeof input.duration_minutes === "number" && input.duration_minutes > 0
         ? input.duration_minutes * 60
         : 0,
     purpose: input.purpose?.trim() || null,
@@ -161,7 +162,7 @@ export function createManualTrip(input: CreateManualTripInput): Trip {
       trip.created_at,
       trip.updated_at,
       trip.deleted_at,
-    ]
+    ],
   );
 
   return trip;
@@ -175,15 +176,15 @@ export function getTripsByVehicle(vehicleId: string): Trip[] {
     `SELECT * FROM trips
      WHERE vehicle_id = ? AND deleted_at IS NULL AND status != 'discarded'
      ORDER BY start_time DESC`,
-    [vehicleId]
+    [vehicleId],
   );
 }
 
 export function getTripById(id: string): Trip | null {
   const db = getDatabase();
   return db.getFirstSync<Trip>(
-    'SELECT * FROM trips WHERE id = ? AND deleted_at IS NULL',
-    [id]
+    "SELECT * FROM trips WHERE id = ? AND deleted_at IS NULL",
+    [id],
   );
 }
 
@@ -197,13 +198,13 @@ export function getActiveTrip(vehicleId?: string): Trip | null {
       `SELECT * FROM trips
        WHERE vehicle_id = ? AND status IN ('recording', 'paused') AND deleted_at IS NULL
        ORDER BY start_time DESC LIMIT 1`,
-      [vehicleId]
+      [vehicleId],
     );
   }
   return db.getFirstSync<Trip>(
     `SELECT * FROM trips
      WHERE status IN ('recording', 'paused') AND deleted_at IS NULL
-     ORDER BY start_time DESC LIMIT 1`
+     ORDER BY start_time DESC LIMIT 1`,
   );
 }
 
@@ -214,24 +215,24 @@ export function updateTrip(id: string, input: UpdateTripInput): Trip | null {
   const now = nowISO();
 
   const ALLOWED_COLUMNS = new Set([
-    'status',
-    'end_time',
-    'start_odometer',
-    'end_odometer',
-    'distance_km',
-    'duration_seconds',
-    'purpose',
-    'notes',
-    'sample_count',
-    'quality_warning',
-    'diagnostics',
+    "status",
+    "end_time",
+    "start_odometer",
+    "end_odometer",
+    "distance_km",
+    "duration_seconds",
+    "purpose",
+    "notes",
+    "sample_count",
+    "quality_warning",
+    "diagnostics",
   ]);
 
   const { fields, values } = buildSafeUpdate(
     input as Record<string, unknown>,
-    ALLOWED_COLUMNS
+    ALLOWED_COLUMNS,
   );
-  fields.push('updated_at = ?');
+  fields.push("updated_at = ?");
   values.push(now);
   values.push(id);
 
@@ -239,13 +240,13 @@ export function updateTrip(id: string, input: UpdateTripInput): Trip | null {
     return getTripById(id);
   }
 
-  db.runSync(`UPDATE trips SET ${fields.join(', ')} WHERE id = ?`, values);
+  db.runSync(`UPDATE trips SET ${fields.join(", ")} WHERE id = ?`, values);
   return getTripById(id);
 }
 
 export interface CreateActiveTripOptions {
   vehicle_id: string;
-  recording_method?: 'gps' | 'manual';
+  recording_method?: "gps" | "manual";
   start_odometer?: number | null;
   purpose?: string | null;
   notes?: string | null;
@@ -254,20 +255,21 @@ export interface CreateActiveTripOptions {
 export function createActiveTrip(options: CreateActiveTripOptions): Trip {
   return createTrip({
     vehicle_id: options.vehicle_id,
-    trip_type: options.recording_method || 'gps',
+    trip_type: options.recording_method || "gps",
     start_odometer: options.start_odometer,
     purpose: options.purpose,
     notes: options.notes,
   });
 }
 
-export function updateTripStatus(id: string, status: Trip['status']): void {
+export function updateTripStatus(id: string, status: Trip["status"]): void {
   const db = getDatabase();
   const now = nowISO();
-  db.runSync(
-    'UPDATE trips SET status = ?, updated_at = ? WHERE id = ?',
-    [status, now, id]
-  );
+  db.runSync("UPDATE trips SET status = ?, updated_at = ? WHERE id = ?", [
+    status,
+    now,
+    id,
+  ]);
 }
 
 export interface FinalizeTripOptions {
@@ -290,7 +292,7 @@ export function finalizeTrip(
   id: string,
   arg2: number | FinalizeTripOptions,
   arg3?: number,
-  arg4?: string | null
+  arg4?: string | null,
 ): Trip | null {
   const db = getDatabase();
   const now = nowISO();
@@ -303,17 +305,24 @@ export function finalizeTrip(
   let endOdo: number | null | undefined;
   let diagnostics: string | null | undefined;
 
-  if (typeof arg2 === 'object') {
+  if (typeof arg2 === "object") {
     distanceKm = arg2.distance_km;
-    durationSeconds = arg2.duration_seconds ?? (arg2.duration_minutes ? arg2.duration_minutes * 60 : 0);
-    qualityWarning = arg2.quality_notes ?? (arg2.has_quality_warnings ? 'GPS signal gaps detected during trip' : null);
+    durationSeconds =
+      arg2.duration_seconds ??
+      (arg2.duration_minutes ? arg2.duration_minutes * 60 : 0);
+    qualityWarning =
+      arg2.quality_notes ??
+      (arg2.has_quality_warnings
+        ? "GPS signal gaps detected during trip"
+        : null);
     notes = arg2.notes ?? undefined;
     purpose = arg2.purpose ?? undefined;
     endOdo = arg2.end_odometer;
     if (arg2.diagnostics !== undefined) {
-      diagnostics = typeof arg2.diagnostics === 'object' && arg2.diagnostics !== null
-        ? JSON.stringify(arg2.diagnostics)
-        : arg2.diagnostics;
+      diagnostics =
+        typeof arg2.diagnostics === "object" && arg2.diagnostics !== null
+          ? JSON.stringify(arg2.diagnostics)
+          : arg2.diagnostics;
     }
   } else {
     distanceKm = arg2;
@@ -323,11 +332,11 @@ export function finalizeTrip(
 
   const updates: string[] = [
     "status = 'completed'",
-    'end_time = ?',
-    'distance_km = ?',
-    'duration_seconds = ?',
-    'quality_warning = ?',
-    'updated_at = ?',
+    "end_time = ?",
+    "distance_km = ?",
+    "duration_seconds = ?",
+    "quality_warning = ?",
+    "updated_at = ?",
   ];
   const params: (string | number | null)[] = [
     now,
@@ -338,25 +347,25 @@ export function finalizeTrip(
   ];
 
   if (notes !== undefined) {
-    updates.push('notes = ?');
+    updates.push("notes = ?");
     params.push(notes);
   }
   if (purpose !== undefined) {
-    updates.push('purpose = ?');
+    updates.push("purpose = ?");
     params.push(purpose);
   }
   if (endOdo !== undefined) {
-    updates.push('end_odometer = ?');
+    updates.push("end_odometer = ?");
     params.push(endOdo);
   }
   if (diagnostics !== undefined) {
-    updates.push('diagnostics = ?');
+    updates.push("diagnostics = ?");
     params.push(diagnostics);
   }
 
   params.push(id);
 
-  db.runSync(`UPDATE trips SET ${updates.join(', ')} WHERE id = ?`, params);
+  db.runSync(`UPDATE trips SET ${updates.join(", ")} WHERE id = ?`, params);
   return getTripById(id);
 }
 
@@ -365,7 +374,7 @@ export function finalizeTrip(
 export function softDeleteTrip(id: string): void {
   const db = getDatabase();
   const now = nowISO();
-  db.runSync('UPDATE trips SET deleted_at = ?, updated_at = ? WHERE id = ?', [
+  db.runSync("UPDATE trips SET deleted_at = ?, updated_at = ? WHERE id = ?", [
     now,
     now,
     id,
@@ -376,7 +385,7 @@ export function softDeleteTrip(id: string): void {
 
 export function saveTripLocation(
   tripId: string,
-  sample: FilteredLocationSample
+  sample: FilteredLocationSample,
 ): TripLocation {
   const db = getDatabase();
   const now = nowISO();
@@ -415,13 +424,13 @@ export function saveTripLocation(
       loc.is_rejected,
       loc.rejection_reason,
       loc.created_at,
-    ]
+    ],
   );
 
   // Update trip sample count
   db.runSync(
-    'UPDATE trips SET sample_count = sample_count + 1, updated_at = ? WHERE id = ?',
-    [now, tripId]
+    "UPDATE trips SET sample_count = sample_count + 1, updated_at = ? WHERE id = ?",
+    [now, tripId],
   );
 
   return loc;
@@ -429,7 +438,7 @@ export function saveTripLocation(
 
 export function saveTripLocationsBatch(
   tripId: string,
-  samples: FilteredLocationSample[]
+  samples: FilteredLocationSample[],
 ): void {
   if (samples.length === 0) return;
   const db = getDatabase();
@@ -441,7 +450,7 @@ export function saveTripLocationsBatch(
   };
 
   const isAlreadyInTransaction =
-    typeof db.isInTransactionSync === 'function' && db.isInTransactionSync();
+    typeof db.isInTransactionSync === "function" && db.isInTransactionSync();
 
   if (isAlreadyInTransaction) {
     runBatch();
@@ -455,7 +464,7 @@ export const addTripLocations = saveTripLocationsBatch;
 export function persistTripLocationsAndUpdate(
   tripId: string,
   samples: FilteredLocationSample[],
-  updates: UpdateTripInput
+  updates: UpdateTripInput,
 ): Trip | null {
   const db = getDatabase();
   let updatedTrip: Trip | null = null;
@@ -480,21 +489,25 @@ export interface TripLocationSummary {
  */
 export function getTripLocationSummary(tripId: string): TripLocationSummary {
   const db = getDatabase();
-  const counts = db.getFirstSync<{ accepted_count: number; rejected_count: number }>(
+  const counts = db.getFirstSync<{
+    accepted_count: number;
+    rejected_count: number;
+  }>(
     `SELECT
        COALESCE(SUM(CASE WHEN is_rejected = 0 THEN 1 ELSE 0 END), 0) AS accepted_count,
        COALESCE(SUM(CASE WHEN is_rejected != 0 THEN 1 ELSE 0 END), 0) AS rejected_count
      FROM trip_locations
      WHERE trip_id = ?`,
-    [tripId]
+    [tripId],
   );
-  const latestAccepted = db.getFirstSync<TripLocation>(
-    `SELECT * FROM trip_locations
+  const latestAccepted =
+    db.getFirstSync<TripLocation>(
+      `SELECT * FROM trip_locations
      WHERE trip_id = ? AND is_rejected = 0
      ORDER BY timestamp DESC
      LIMIT 1`,
-    [tripId]
-  ) ?? null;
+      [tripId],
+    ) ?? null;
 
   return {
     latestAccepted,
@@ -506,22 +519,26 @@ export function getTripLocationSummary(tripId: string): TripLocationSummary {
 /**
  * Reads the latest accepted point without loading a complete route.
  */
-export function getLatestAcceptedTripLocation(tripId: string): TripLocation | null {
+export function getLatestAcceptedTripLocation(
+  tripId: string,
+): TripLocation | null {
   const db = getDatabase();
-  return db.getFirstSync<TripLocation>(
-    `SELECT * FROM trip_locations
+  return (
+    db.getFirstSync<TripLocation>(
+      `SELECT * FROM trip_locations
      WHERE trip_id = ? AND is_rejected = 0
      ORDER BY timestamp DESC
      LIMIT 1`,
-    [tripId]
-  ) ?? null;
+      [tripId],
+    ) ?? null
+  );
 }
 
 export function getTripLocations(tripId: string): TripLocation[] {
   const db = getDatabase();
   return db.getAllSync<TripLocation>(
-    'SELECT * FROM trip_locations WHERE trip_id = ? ORDER BY timestamp ASC',
-    [tripId]
+    "SELECT * FROM trip_locations WHERE trip_id = ? ORDER BY timestamp ASC",
+    [tripId],
   );
 }
 
@@ -536,14 +553,22 @@ export function recoverInterruptedTrips(): number {
   const db = getDatabase();
   const now = nowISO();
 
-  const dangling = db.getAllSync<{ id: string; start_time: string; distance_km: number }>(
-    "SELECT id, start_time, distance_km FROM trips WHERE status = 'recording' AND deleted_at IS NULL"
+  const dangling = db.getAllSync<{
+    id: string;
+    start_time: string;
+    distance_km: number;
+  }>(
+    "SELECT id, start_time, distance_km FROM trips WHERE status = 'recording' AND deleted_at IS NULL",
   );
 
   for (const d of dangling) {
-    const storedLocs = db.getAllSync<{ latitude: number; longitude: number; timestamp: number }>(
-      'SELECT latitude, longitude, timestamp FROM trip_locations WHERE trip_id = ? AND is_rejected = 0 ORDER BY timestamp ASC',
-      [d.id]
+    const storedLocs = db.getAllSync<{
+      latitude: number;
+      longitude: number;
+      timestamp: number;
+    }>(
+      "SELECT latitude, longitude, timestamp FROM trip_locations WHERE trip_id = ? AND is_rejected = 0 ORDER BY timestamp ASC",
+      [d.id],
     );
 
     let calculatedDistKm = d.distance_km || 0;
@@ -556,7 +581,7 @@ export function recoverInterruptedTrips(): number {
           storedLocs[i - 1].latitude,
           storedLocs[i - 1].longitude,
           storedLocs[i].latitude,
-          storedLocs[i].longitude
+          storedLocs[i].longitude,
         );
       }
       calculatedDistKm = Math.round((totalMeters / 1000) * 100) / 100;
@@ -585,7 +610,7 @@ export function recoverInterruptedTrips(): number {
            quality_warning = 'Trip recording was interrupted before completion (app closed or restarted).',
            updated_at = ?
        WHERE id = ?`,
-      [now, calculatedDistKm, approxDuration, storedLocs.length, now, d.id]
+      [now, calculatedDistKm, approxDuration, storedLocs.length, now, d.id],
     );
   }
 
