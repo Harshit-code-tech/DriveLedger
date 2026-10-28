@@ -144,15 +144,26 @@ See [`mileage_calculation_guide.md`](./mileage_calculation_guide.md) for full de
 
 ## Backup Security Model
 
-Every `.dlbak` file is:
-1. Signed with **HMAC-SHA256** (using a bundle-compiled key) — proves the file came from DriveLedger and was not tampered with.
-2. Encrypted with **AES-256-GCM** — protects user data at rest.
+Every `.dlbak` file (v3 format) is protected with authenticated encryption:
+1. **Key Derivation**: **PBKDF2-HMAC-SHA256** with 100,000 iterations and a cryptographically secure 16-byte salt derived per backup from the user's password.
+2. **Authenticated Encryption**: **AES-256-GCM** with a unique 12-byte IV and a 16-byte authentication tag that cryptographically verifies ciphertext integrity and envelope metadata (app ID, version, timestamp).
 
 On restore:
-1. AES decryption
-2. HMAC verification (constant-time comparison prevents timing attacks)
-3. Schema validation (row-level field checks via `src/engine/backup/schema.ts`)
-4. Atomic SQL transaction (ROLLBACK on any failure)
+1. PBKDF2 key re-derivation from salt and user password.
+2. AES-256-GCM decryption with hardware-accelerated WebCrypto / SubtleCrypto.
+3. Strict schema validation (row-level field checks via `src/engine/backup/schema.ts`).
+4. Atomic SQL transaction (`withTransactionSync`) ensuring zero partial state on failure.
+5. Post-commit asynchronous attachment restoration and reminder reconciliation.
+
+---
+
+## Performance & Optimization Architecture
+
+- **Data Invalidation**: `dataRevisionTracker` maintains monotonic per-dataset revision counters, preventing unnecessary re-queries on tab focus or store transitions.
+- **Evidence-Based Indexing**: Partial composite SQLite indexes (`idx_fuel_entries_active_date`, `idx_service_records_active_date`, etc.) cover `(vehicle_id, date DESC, id DESC) WHERE deleted_at IS NULL`, eliminating temporary B-tree sorting in query plans.
+- **History Virtualization**: `FlatList` cursor-based pagination with search and date pushdowns bounds memory and query duration.
+- **Report Snapshot Caching**: `ReportExportModal` caches a single-session snapshot of vehicle data across multiple export/share formats, eliminating redundant synchronous table scans.
+- **Observability**: `perfObserver` provides zero-cost in-memory diagnostic telemetry for queries, GPS batches, widget evaluations, and notification reconciliation.
 
 ---
 

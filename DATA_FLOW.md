@@ -104,21 +104,21 @@ User taps "Backup Data" in Settings
 backupEngine.exportToFile()
         │
         ├─1─► createBackup()
-        │       └─► SQLite SELECT * from all 5 tables (in a READ TRANSACTION)
+        │       └─► SQLite SELECT * from all tables (in a READ TRANSACTION)
+        │       └─► Bounded attachments collection (<=15MB per file)
         │
-        ├─2─► hmacSign(JSON.stringify(data))
-        │       └─► HMAC-SHA256 over the raw data field
+        ├─2─► deriveKey(password, salt)
+        │       └─► PBKDF2-HMAC-SHA256 (100,000 iterations, 16-byte random salt)
         │
-        ├─3─► encryptBackup(JSON.stringify(signedBackup))
-        │       └─► AES-256-GCM (key derived from APP_ID + SIGNING_KEY)
+        ├─3─► encryptBackupV3(JSON.stringify(backup), password, metadata)
+        │       └─► AES-256-GCM (12-byte IV, 16-byte auth tag verifying payload & metadata)
         │
-        ├─4─► Write encrypted .dlbak to app's private documentDirectory
+        ├─4─► Write encrypted .dlbak to app's private cache/document directory
         │
-        ├─5─► Directory.pickDirectoryAsync()   ← OS folder picker
+        ├─5─► Directory.pickDirectoryAsync()   ← OS folder picker (SAF)
         │       │  cancelled? → share via OS share sheet (fallback)
         │       ▼
         └─6─► Directory.createFile(filename) → write encrypted content
-                └─► verifyEncryptedBackup(readBack)  (integrity check)
 ```
 
 ---
@@ -133,11 +133,11 @@ backupEngine.pickAndVerifyBackup()
         │
         ├─1─► File.pickFileAsync()              ← OS file picker
         ├─2─► pickedFile.text()                 ← read raw content
-        ├─3─► JSON.parse(rawContent)
-        ├─4─► isEncryptedBackupEnvelope?  → decryptBackup()  (AES-256-GCM)
-        ├─5─► app_id check                (must equal 'com.driveledger.app')
-        ├─6─► HMAC verification           (safeEqual, constant-time)
-        └─7─► validateSchema()            (row-level field checks)
+        ├─3─► JSON.parse(rawContent)            ← parse envelope
+        ├─4─► app_id & version check            (com.driveledger.app, v3 envelope)
+        ├─5─► decryptBackupV3(envelope, password)
+        │       └─► PBKDF2 key re-derivation + AES-256-GCM authenticated decryption
+        └─6─► validateSchema()                  (row-level field checks)
                     │
                     ▼  { success: true, backup }
         │
