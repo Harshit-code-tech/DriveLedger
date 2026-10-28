@@ -162,6 +162,34 @@ describe('P0.2 — Atomic SQLite Mutations & Transaction Safety', () => {
       const vehicle = vehicleRepo.getVehicleById(testVehicleId);
       expect(vehicle?.current_odometer).toBe(1700);
     });
+
+    it('skips mileage recalculation when editing non-mileage fields (e.g. notes)', () => {
+      const { entry: entry1 } = fuelRepo.createFuelEntryAtomic(
+        {
+          vehicle_id: testVehicleId,
+          date: '2026-03-01',
+          odometer: 1200,
+          fuel_amount: 30,
+          fuel_unit: FuelUnit.LITRES,
+          price_per_unit: 100,
+          is_full_tank: 1,
+        },
+        FuelType.PETROL,
+        VehicleType.CAR
+      );
+
+      const updateSpy = jest.spyOn(fuelRepo, 'updateFuelEntryMileage');
+
+      const updated = fuelRepo.updateFuelEntryAtomic(
+        entry1.id,
+        { notes: 'Updated petrol pump notes' },
+        FuelType.PETROL
+      );
+
+      expect(updated?.notes).toBe('Updated petrol pump notes');
+      expect(updateSpy).not.toHaveBeenCalled();
+      updateSpy.mockRestore();
+    });
   });
 
   describe('Fuel Entry Deletion Atomicity', () => {

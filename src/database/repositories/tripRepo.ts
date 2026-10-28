@@ -250,16 +250,32 @@ export interface CreateActiveTripOptions {
   start_odometer?: number | null;
   purpose?: string | null;
   notes?: string | null;
+  diagnostics?: string | null;
 }
 
 export function createActiveTrip(options: CreateActiveTripOptions): Trip {
-  return createTrip({
-    vehicle_id: options.vehicle_id,
-    trip_type: options.recording_method || "gps",
-    start_odometer: options.start_odometer,
-    purpose: options.purpose,
-    notes: options.notes,
+  const db = getDatabase();
+  let trip!: Trip;
+
+  db.withTransactionSync(() => {
+    const existing = getActiveTrip();
+    if (existing) {
+      throw new Error(
+        `A trip is already ${existing.status} on vehicle ${existing.vehicle_id}. Only one active trip can exist globally.`,
+      );
+    }
+
+    trip = createTrip({
+      vehicle_id: options.vehicle_id,
+      trip_type: options.recording_method || "gps",
+      start_odometer: options.start_odometer,
+      purpose: options.purpose,
+      notes: options.notes,
+      diagnostics: options.diagnostics,
+    });
   });
+
+  return trip;
 }
 
 export function updateTripStatus(id: string, status: Trip["status"]): void {
@@ -383,16 +399,14 @@ export function softDeleteTrip(id: string): void {
 
 // ─── GPS SAMPLES PERSISTENCE ─────────────────────────────────────────
 
-export function saveTripLocation(
+function insertTripLocation(
+  db: ReturnType<typeof getDatabase>,
   tripId: string,
   sample: FilteredLocationSample,
+  now: string,
 ): TripLocation {
-  const db = getDatabase();
-  const now = nowISO();
-  const id = generateUUID();
-
   const loc: TripLocation = {
-    id,
+    id: generateUUID(),
     trip_id: tripId,
     latitude: sample.latitude,
     longitude: sample.longitude,
@@ -427,13 +441,37 @@ export function saveTripLocation(
     ],
   );
 
-  // Update trip sample count
-  db.runSync(
-    "UPDATE trips SET sample_count = sample_count + 1, updated_at = ? WHERE id = ?",
-    [now, tripId],
-  );
+  return loc;
+}
+
+export function saveTripLocation(
+  tripId: string,
+  sample: FilteredLocationSample,
+): TripLocation {
+  const db = getDatabase();
+  const now = nowISO();
+  let loc!: TripLocation;
+
+  db.withTransactionSync(() => {
+    loc = insertTripLocation(db, tripId, sample, now);
+    db.runSync(
+      "UPDATE trips SET sample_count = sample_count + 1, updated_at = ? WHERE id = ?",
+      [now, tripId],
+    );
+  });
 
   return loc;
+}
+
+function insertTripLocationsBatch(
+  db: ReturnType<typeof getDatabase>,
+  tripId: string,
+  samples: FilteredLocationSample[],
+  now: string,
+): void {
+  for (const sample of samples) {
+    insertTripLocation(db, tripId, sample, now);
+  }
 }
 
 export function saveTripLocationsBatch(
@@ -442,21 +480,15 @@ export function saveTripLocationsBatch(
 ): void {
   if (samples.length === 0) return;
   const db = getDatabase();
+  const now = nowISO();
 
-  const runBatch = () => {
-    for (const sample of samples) {
-      saveTripLocation(tripId, sample);
-    }
-  };
-
-  const isAlreadyInTransaction =
-    typeof db.isInTransactionSync === "function" && db.isInTransactionSync();
-
-  if (isAlreadyInTransaction) {
-    runBatch();
-  } else {
-    db.withTransactionSync(runBatch);
-  }
+  db.withTransactionSync(() => {
+    insertTripLocationsBatch(db, tripId, samples, now);
+    db.runSync(
+      "UPDATE trips SET sample_count = sample_count + ?, updated_at = ? WHERE id = ?",
+      [samples.length, now, tripId],
+    );
+  });
 }
 
 export const addTripLocations = saveTripLocationsBatch;
@@ -468,9 +500,19 @@ export function persistTripLocationsAndUpdate(
 ): Trip | null {
   const db = getDatabase();
   let updatedTrip: Trip | null = null;
+  const now = nowISO();
 
   db.withTransactionSync(() => {
-    saveTripLocationsBatch(tripId, samples);
+    if (samples.length > 0) {
+      insertTripLocationsBatch(db, tripId, samples, now);
+      // Only perform an intermediate update if the updates payload doesn't already specify sample_count
+      if (updates.sample_count === undefined) {
+        db.runSync(
+          "UPDATE trips SET sample_count = sample_count + ?, updated_at = ? WHERE id = ?",
+          [samples.length, now, tripId],
+        );
+      }
+    }
     updatedTrip = updateTrip(tripId, updates);
   });
 

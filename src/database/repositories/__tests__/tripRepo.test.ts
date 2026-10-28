@@ -273,4 +273,52 @@ describe('Trip Repository', () => {
     expect(globalActive?.id).toBe(trip.id);
     expect(globalActive?.vehicle_id).toBe(testVehicle.id);
   });
+
+  test('persistTripLocationsAndUpdate persists locations and updates trip atomically', () => {
+    const trip = tripRepo.createActiveTrip({
+      vehicle_id: testVehicle.id,
+    });
+
+    const samples: FilteredLocationSample[] = [
+      {
+        latitude: 28.61,
+        longitude: 77.21,
+        accuracy: 10,
+        altitude: 200,
+        speed: 15,
+        heading: 90,
+        timestamp: 1700000000000,
+        isAccepted: true,
+        stepDistanceMeters: 50,
+      },
+    ];
+
+    const updated = tripRepo.persistTripLocationsAndUpdate(trip.id, samples, {
+      distance_km: 1.5,
+      sample_count: 1,
+      quality_warning: null,
+    });
+
+    expect(updated).not.toBeNull();
+    expect(updated?.distance_km).toBe(1.5);
+    expect(updated?.sample_count).toBe(1);
+
+    const storedLocations = tripRepo.getTripLocations(trip.id);
+    expect(storedLocations.length).toBe(1);
+    expect(storedLocations[0].latitude).toBe(28.61);
+  });
+
+  test('createActiveTrip throws error if an active trip already exists', () => {
+    tripRepo.createActiveTrip({
+      vehicle_id: testVehicle.id,
+    });
+
+    expect(() => {
+      tripRepo.createActiveTrip({
+        vehicle_id: testVehicle.id,
+      });
+    }).toThrow('Only one active trip can exist globally');
+  });
 });
+
+

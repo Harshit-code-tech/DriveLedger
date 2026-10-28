@@ -324,6 +324,35 @@ function calculateEVEfficiency(
 // ─── Batch Recalculation ────────────────────────────────────────────
 
 /**
+ * Recalculates mileage for entries from startIndex to the end of the chronological chain.
+ * Entries before startIndex are guaranteed to be unaffected because tank-to-tank
+ * calculation only walks backwards.
+ *
+ * @param entries - ALL non-deleted fuel entries for the vehicle, sorted by odometer ASC
+ * @param startIndex - The earliest index affected by a creation, edit, or deletion
+ * @param fuelType - The vehicle's fuel type
+ * @returns Array of { entryId, mileage, index } pairs for indices >= startIndex
+ */
+export function recalculateDownstreamMileage(
+  entries: FuelEntry[],
+  startIndex: number,
+  fuelType: FuelType
+): Array<{ entryId: string; mileage: MileageResult | null; index: number }> {
+  const safeStart = Math.max(0, startIndex);
+  const results: Array<{ entryId: string; mileage: MileageResult | null; index: number }> = [];
+
+  for (let i = safeStart; i < entries.length; i++) {
+    results.push({
+      entryId: entries[i].id,
+      mileage: calculateMileageForEntry(entries, i, fuelType),
+      index: i,
+    });
+  }
+
+  return results;
+}
+
+/**
  * Recalculates mileage for ALL entries of a vehicle.
  * Called when a fuel entry is edited or deleted, which may affect
  * downstream calculations in the chain.
@@ -336,9 +365,9 @@ export function recalculateAllMileage(
   entries: FuelEntry[],
   fuelType: FuelType
 ): Array<{ entryId: string; mileage: MileageResult | null }> {
-  return entries.map((entry, index) => ({
-    entryId: entry.id,
-    mileage: calculateMileageForEntry(entries, index, fuelType),
+  return recalculateDownstreamMileage(entries, 0, fuelType).map(({ entryId, mileage }) => ({
+    entryId,
+    mileage,
   }));
 }
 

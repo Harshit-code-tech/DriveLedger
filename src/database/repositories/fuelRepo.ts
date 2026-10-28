@@ -22,7 +22,7 @@ import type { FuelEntry, CreateFuelEntryInput, UpdateFuelEntryInput } from '@/ty
 import { updateVehicleOdometer, getVehicleById } from './vehicleRepo';
 import {
   calculateMileageForEntry,
-  recalculateAllMileage,
+  recalculateDownstreamMileage,
   checkMileageReasonableness,
   type MileageWarning,
 } from '@/engine/mileageEngine';
@@ -325,12 +325,7 @@ export function createFuelEntryAtomic(
 
     // 3. Recalculate any downstream entry if backdated
     if (entryIndex >= 0 && entryIndex < chronological.length - 1) {
-      const recalculated = recalculateAllMileage(chronological, fuelType);
-      for (const { entryId: id, mileage } of recalculated) {
-        if (id !== createdEntry!.id) {
-          updateFuelEntryMileage(id, mileage?.value ?? null, mileage?.unit ?? null);
-        }
-      }
+      syncDownstreamMileage(chronological, entryIndex + 1, fuelType, createdEntry!.id);
     }
 
     // 4. Update vehicle's current_odometer safely
@@ -338,10 +333,7 @@ export function createFuelEntryAtomic(
     // (e.g., from a newer confirmed trip reading)
     const vehicle = getVehicleById(input.vehicle_id);
     const existingVehicleOdo = vehicle?.current_odometer ?? null;
-    const highestFuelOdometer = chronological.reduce(
-      (max, e) => Math.max(max, e.odometer),
-      0
-    );
+    const highestFuelOdometer = chronological[chronological.length - 1]?.odometer ?? 0;
     const targetOdo = existingVehicleOdo !== null
       ? Math.max(existingVehicleOdo, highestFuelOdometer)
       : highestFuelOdometer;
@@ -352,8 +344,39 @@ export function createFuelEntryAtomic(
 }
 
 /**
- * Atomically updates a fuel entry, recomputes total_cost, recalculates all
- * affected mileage in the vehicle chain, and updates vehicle odometer.
+ * Synchronizes recalculated mileage from a given startIndex onwards.
+ * Only executes SQLite UPDATE statements for entries whose calculated_mileage
+ * or mileage_unit actually changed, avoiding full-history write amplification.
+ */
+function syncDownstreamMileage(
+  chronological: FuelEntry[],
+  startIndex: number,
+  fuelType: FuelType,
+  excludeEntryId?: string
+): void {
+  if (startIndex >= chronological.length) return;
+  const recalculated = recalculateDownstreamMileage(chronological, startIndex, fuelType);
+
+  for (const { entryId, mileage, index } of recalculated) {
+    if (excludeEntryId && entryId === excludeEntryId) continue;
+    const existing = chronological[index];
+    const newMileageVal = mileage?.value ?? null;
+    const newMileageUnit = mileage?.unit ?? null;
+
+    if (
+      existing.calculated_mileage !== newMileageVal ||
+      existing.mileage_unit !== newMileageUnit
+    ) {
+      updateFuelEntryMileage(entryId, newMileageVal, newMileageUnit);
+      existing.calculated_mileage = newMileageVal;
+      existing.mileage_unit = newMileageUnit;
+    }
+  }
+}
+
+/**
+ * Atomically updates a fuel entry, recomputes total_cost, recalculates only
+ * affected downstream mileage in the vehicle chain, and updates vehicle odometer.
  *
  * If any step fails, the entire transaction rolls back.
  */
@@ -366,25 +389,45 @@ export function updateFuelEntryAtomic(
   let updatedEntry: FuelEntry | null = null;
 
   db.withTransactionSync(() => {
+    const preUpdateEntry = getFuelEntryById(id);
+    const prevOdometer = preUpdateEntry?.odometer;
+
     // 1. Update the entry
     updatedEntry = updateFuelEntry(id, input);
     if (!updatedEntry) return;
 
-    // 2. Recalculate ALL mileage in the chain
-    const chronological = getFuelEntriesByVehicleChronological(updatedEntry.vehicle_id);
-    const recalculated = recalculateAllMileage(chronological, fuelType);
+    // 2. Only recalculate mileage if mileage-affecting fields were provided
+    const mileageFieldsAffected =
+      input.odometer !== undefined ||
+      input.fuel_amount !== undefined ||
+      input.is_full_tank !== undefined ||
+      input.fuel_unit !== undefined;
 
-    for (const { entryId, mileage } of recalculated) {
-      updateFuelEntryMileage(
-        entryId,
-        mileage?.value ?? null,
-        mileage?.unit ?? null
-      );
+    const chronological = getFuelEntriesByVehicleChronological(updatedEntry.vehicle_id);
+
+    if (mileageFieldsAffected && chronological.length > 0) {
+      const newIndex = chronological.findIndex((e) => e.id === updatedEntry!.id);
+      let startIndex = newIndex >= 0 ? newIndex : 0;
+
+      // If odometer changed, entry may have moved in chronological order.
+      // Recalculation must start from the earliest affected position.
+      if (
+        prevOdometer !== undefined &&
+        input.odometer !== undefined &&
+        input.odometer !== prevOdometer
+      ) {
+        const oldPos = chronological.findIndex((e) => e.odometer >= prevOdometer);
+        if (oldPos >= 0 && oldPos < startIndex) {
+          startIndex = oldPos;
+        }
+      }
+
+      syncDownstreamMileage(chronological, startIndex, fuelType);
     }
 
     // 3. Update vehicle odometer safely to the highest confirmed reading
     if (chronological.length > 0) {
-      const highestFuelOdometer = Math.max(...chronological.map((e) => e.odometer));
+      const highestFuelOdometer = chronological[chronological.length - 1].odometer;
       const row = db.getFirstSync<{ max_odometer: number | null }>(
         `SELECT MAX(end_odometer) AS max_odometer FROM trips
          WHERE vehicle_id = ? AND deleted_at IS NULL AND status = 'completed' AND end_odometer IS NOT NULL`,
@@ -424,22 +467,20 @@ export function deleteFuelEntryAtomic(
 
   db.withTransactionSync(() => {
     const entryToDelete = getFuelEntryById(id);
+    const deletedOdo = entryToDelete?.odometer;
     const vehicle = getVehicleById(vehicleId);
     const existingVehicleOdo = vehicle?.current_odometer ?? null;
 
     // 1. Soft delete the entry
     softDeleteFuelEntry(id);
 
-    // 2. Recalculate all remaining mileage
+    // 2. Recalculate affected downstream mileage starting at deleted position
     const chronological = getFuelEntriesByVehicleChronological(vehicleId);
-    const recalculated = recalculateAllMileage(chronological, fuelType);
-
-    for (const { entryId, mileage } of recalculated) {
-      updateFuelEntryMileage(
-        entryId,
-        mileage?.value ?? null,
-        mileage?.unit ?? null
-      );
+    if (deletedOdo !== undefined && chronological.length > 0) {
+      const startIndex = chronological.findIndex((e) => e.odometer >= deletedOdo);
+      if (startIndex >= 0) {
+        syncDownstreamMileage(chronological, startIndex, fuelType);
+      }
     }
 
     // 3. Safely determine remaining highest odometer across fuel entries and completed trips

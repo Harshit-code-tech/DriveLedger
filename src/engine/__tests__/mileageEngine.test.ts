@@ -6,6 +6,7 @@ import {
   computeMileageStats,
   checkMileageReasonableness,
   recalculateAllMileage,
+  recalculateDownstreamMileage,
 } from '../mileageEngine';
 import { validateFuelEntry } from '../validationEngine';
 import type { FuelEntry } from '@/types/fuel';
@@ -381,5 +382,24 @@ describe('Mileage Engine — Multi-Fuel & Non-Liquid Calculations', () => {
       ];
       expect(calculateMileageForEntry(allPartial, 1, FuelType.PETROL)).toBeNull();
     });
+
+    it('recalculateDownstreamMileage only processes entries from startIndex onwards', () => {
+      const entries: FuelEntry[] = [
+        createMockEntry({ id: 'e1', odometer: 10000, fuel_amount: 40, is_full_tank: 1 }),
+        createMockEntry({ id: 'e2', odometer: 10300, fuel_amount: 20, is_full_tank: 1 }),
+        createMockEntry({ id: 'e3', odometer: 10600, fuel_amount: 20, is_full_tank: 1 }),
+        createMockEntry({ id: 'e4', odometer: 10900, fuel_amount: 20, is_full_tank: 1 }),
+      ];
+
+      const downstream = recalculateDownstreamMileage(entries, 2, FuelType.PETROL);
+      expect(downstream.length).toBe(2);
+      expect(downstream[0].entryId).toBe('e3');
+      expect(downstream[0].index).toBe(2);
+      expect(downstream[0].mileage?.value).toBe(15.0);
+      expect(downstream[1].entryId).toBe('e4');
+      expect(downstream[1].index).toBe(3);
+      expect(downstream[1].mileage?.value).toBe(15.0);
+    });
   });
 });
+

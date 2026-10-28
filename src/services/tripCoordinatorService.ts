@@ -153,6 +153,12 @@ export async function startGpsTripCoordinator(
   // 1. Invariant: Check if ANY trip is actively recording or paused globally
   const existingActive = tripRepo.getActiveTrip();
   if (existingActive) {
+    if (
+      (!targetVehicleId || String(existingActive.vehicle_id) === String(targetVehicleId)) &&
+      existingActive.status === 'recording'
+    ) {
+      return { success: true, data: existingActive };
+    }
     return {
       success: false,
       error: `A trip is already ${existingActive.status} on vehicle ${existingActive.vehicle_id}. Only one active trip can exist globally.`,
@@ -183,7 +189,7 @@ export async function startGpsTripCoordinator(
     return { success: false, error: 'Location permission is required to start GPS tracking.' };
   }
 
-  // 4. Create trip in SQLite
+  // 4. Create trip in SQLite atomically
   const startOdo = resolvedVehicle.current_odometer ?? null;
   const initialDiagnostics: TripDiagnostics = {
     rejection_counts: {
@@ -203,12 +209,17 @@ export async function startGpsTripCoordinator(
     anchor_needed: true,
   };
 
-  const trip = tripRepo.createTrip({
-    vehicle_id: resolvedVehicle.id,
-    trip_type: 'gps',
-    start_odometer: startOdo,
-    diagnostics: JSON.stringify(initialDiagnostics),
-  });
+  let trip: Trip;
+  try {
+    trip = tripRepo.createActiveTrip({
+      vehicle_id: resolvedVehicle.id,
+      recording_method: 'gps',
+      start_odometer: startOdo,
+      diagnostics: JSON.stringify(initialDiagnostics),
+    });
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to create active trip' };
+  }
 
   resetBackgroundLocationAnchor();
 
@@ -221,13 +232,20 @@ export async function startGpsTripCoordinator(
 
     const isStale = !lastKnown || (Date.now() - lastKnown.timestamp > 60000);
     if (isStale) {
+      let timeoutId: any;
       const freshPromise = Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
-      const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 2500));
-      const freshFix = await Promise.race([freshPromise, timeoutPromise]);
-      if (freshFix) {
-        initialFix = freshFix;
+      const timeoutPromise = new Promise((resolve) => {
+        timeoutId = setTimeout(() => resolve(null), 2500);
+      });
+      try {
+        const freshFix = await Promise.race([freshPromise, timeoutPromise]);
+        if (freshFix) {
+          initialFix = freshFix;
+        }
+      } finally {
+        clearTimeout(timeoutId);
       }
     }
 
@@ -288,7 +306,13 @@ export async function pauseGpsTripCoordinator(
   }
 
   const activeTrip = tripRepo.getActiveTrip();
-  if (!activeTrip || activeTrip.status !== 'recording') {
+  if (!activeTrip) {
+    return { success: false, error: 'No active recording trip to pause.' };
+  }
+  if (activeTrip.status === 'paused') {
+    return { success: true, data: activeTrip };
+  }
+  if (activeTrip.status !== 'recording') {
     return { success: false, error: 'No active recording trip to pause.' };
   }
   if (tripId && activeTrip.id !== tripId) {
@@ -360,7 +384,13 @@ export async function resumeGpsTripCoordinator(
   }
 
   const activeTrip = tripRepo.getActiveTrip();
-  if (!activeTrip || activeTrip.status !== 'paused') {
+  if (!activeTrip) {
+    return { success: false, error: 'No paused trip to resume.' };
+  }
+  if (activeTrip.status === 'recording') {
+    return { success: true, data: activeTrip };
+  }
+  if (activeTrip.status !== 'paused') {
     return { success: false, error: 'No paused trip to resume.' };
   }
   if (tripId && activeTrip.id !== tripId) {
@@ -442,6 +472,12 @@ export async function finishGpsTripCoordinator(
 
   const activeTrip = tripRepo.getActiveTrip();
   if (!activeTrip) {
+    if (tripId) {
+      const existing = tripRepo.getTripById(tripId);
+      if (existing && existing.status === 'completed') {
+        return { success: true, data: existing };
+      }
+    }
     return { success: false, error: 'No active trip to finish.' };
   }
   if (tripId && activeTrip.id !== tripId) {

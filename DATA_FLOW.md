@@ -57,10 +57,10 @@ useFuelStore.deleteFuelEntry(entryId, vehicle)
         │
         ├─2─► fuelRepo.getFuelEntriesByVehicleChronological(vehicleId)
         │
-        ├─3─► mileageEngine.recalculateAllMileage(entries, fuelType)
-        │              (deletion may affect downstream tank-to-tank calculations)
+        ├─3─► mileageEngine.recalculateDownstreamMileage(entries, startIndex, fuelType)
+        │              (only recalculates affected downstream entries in memory)
         │
-        ├─4─► fuelRepo.updateFuelEntryMileage(id, …) for each changed entry
+        ├─4─► fuelRepo.updateFuelEntryMileage(id, …) for entries whose mileage changed
         │
         ├─5─► vehicleRepo.updateVehicleOdometer(vehicleId, latestOdometer)
         │
