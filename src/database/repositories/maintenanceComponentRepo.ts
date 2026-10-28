@@ -167,6 +167,34 @@ export function getMaintenanceComponentsByVehicle(
 }
 
 /**
+ * Batched lookup of maintenance components for an explicit array of service IDs.
+ * Eliminates N+1 queries and avoids loading all vehicle components.
+ */
+export function getMaintenanceComponentsByServiceIds(
+  serviceRecordIds: string[]
+): Record<string, MaintenanceComponent[]> {
+  if (serviceRecordIds.length === 0) return {};
+  const db = getDatabase();
+  const placeholders = serviceRecordIds.map(() => '?').join(', ');
+  const rows = db.getAllSync<MaintenanceComponent>(
+    `SELECT * FROM maintenance_components
+     WHERE service_record_id IN (${placeholders}) AND deleted_at IS NULL
+     ORDER BY created_at ASC`,
+    serviceRecordIds
+  );
+
+  const map: Record<string, MaintenanceComponent[]> = {};
+  for (const row of rows) {
+    if (!map[row.service_record_id]) {
+      map[row.service_record_id] = [];
+    }
+    map[row.service_record_id].push(row);
+  }
+  return map;
+}
+
+
+/**
  * Returns full chronological history for a component name (case-insensitive)
  * joined with the parent service record's date, odometer, and garage.
  */

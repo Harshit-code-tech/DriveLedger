@@ -673,3 +673,98 @@ export function recoverInterruptedTrips(): number {
 
   return dangling.length;
 }
+
+// ─── PAGINATION ───────────────────────────────────────────────────────
+
+export interface PaginatedTripCursor {
+  startTime: string;
+  id: string;
+}
+
+export interface PaginatedTripOptions {
+  limit?: number;
+  cursor?: PaginatedTripCursor | null;
+  startDate?: string | null;
+  searchQuery?: string | null;
+}
+
+export interface PaginatedTripResult {
+  items: Trip[];
+  nextCursor: PaginatedTripCursor | null;
+  hasMore: boolean;
+  totalCount: number;
+}
+
+/**
+ * Returns total non-deleted, non-discarded trips count for a vehicle.
+ */
+export function getTripCount(vehicleId: string): number {
+  const db = getDatabase();
+  const res = db.getFirstSync<{ count: number }>(
+    "SELECT COUNT(*) as count FROM trips WHERE vehicle_id = ? AND deleted_at IS NULL AND status != 'discarded'",
+    [vehicleId]
+  );
+  return res?.count ?? 0;
+}
+
+/**
+ * Returns cursor-paginated trips ordered by start_time DESC, id DESC.
+ */
+export function getPaginatedTrips(
+  vehicleId: string,
+  options: PaginatedTripOptions = {}
+): PaginatedTripResult {
+  const db = getDatabase();
+  const limit = Math.max(1, Math.min(options.limit ?? 35, 100));
+  const conditions: string[] = [
+    'vehicle_id = ?',
+    'deleted_at IS NULL',
+    "status != 'discarded'",
+  ];
+  const params: (string | number)[] = [vehicleId];
+
+  if (options.startDate) {
+    conditions.push('start_time >= ?');
+    params.push(options.startDate);
+  }
+
+  if (options.searchQuery && options.searchQuery.trim()) {
+    const q = `%${options.searchQuery.trim().toLowerCase()}%`;
+    conditions.push(
+      "(LOWER(trip_type) LIKE ? OR LOWER(COALESCE(purpose, '')) LIKE ? OR LOWER(COALESCE(notes, '')) LIKE ? OR LOWER(COALESCE(quality_warning, '')) LIKE ?)"
+    );
+    params.push(q, q, q, q);
+  }
+
+  const countRow = db.getFirstSync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM trips WHERE ${conditions.join(' AND ')}`,
+    params
+  );
+  const totalCount = countRow?.count ?? 0;
+
+  if (options.cursor) {
+    conditions.push('(start_time < ? OR (start_time = ? AND id < ?))');
+    params.push(options.cursor.startTime, options.cursor.startTime, options.cursor.id);
+  }
+
+  const query = `
+    SELECT * FROM trips
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY start_time DESC, id DESC
+    LIMIT ?
+  `;
+  params.push(limit + 1);
+
+  const rows = db.getAllSync<Trip>(query, params);
+  const hasMore = rows.length > limit;
+  const items = hasMore ? rows.slice(0, limit) : rows;
+  const lastItem = items.length > 0 ? items[items.length - 1] : null;
+
+  return {
+    items,
+    hasMore,
+    nextCursor: lastItem ? { startTime: lastItem.start_time, id: lastItem.id } : null,
+    totalCount,
+  };
+}
+

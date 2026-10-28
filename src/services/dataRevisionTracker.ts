@@ -59,6 +59,13 @@ class DataRevisionTracker {
   }
 
   /**
+   * Checks if a dataset has changed compared to a previously observed revision.
+   */
+  hasChanged(dataset: DatasetType, vehicleId: string | undefined, lastSeenRev: number): boolean {
+    return this.getRevision(dataset, vehicleId) !== lastSeenRev;
+  }
+
+  /**
    * Returns a compact key representing current revisions for the specified datasets.
    */
   getRevisionsKey(datasets?: DatasetType[], vehicleId?: string): string {

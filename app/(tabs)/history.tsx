@@ -1,18 +1,18 @@
 /**
  * History Screen
  *
- * Shows fuel history, service history, and expense history.
+ * Shows fuel history, service history, expense history, and trip history.
  * Features:
- * - Segmented tabs: Fuel | Service | Expenses
- * - Search bar — filters across all text fields on the active tab
+ * - Segmented tabs: Fuel | Service | Expenses | Trips
+ * - Cursor-based pagination on SQLite with bounded initial query volume
+ * - Lazy-loading: only the currently active tab loads data
+ * - Search bar with pushed SQLite LIKE predicates
  * - Date range chips: All | This Week | This Month | 3 Months
- * - Tap to edit, long press to delete
- * - FABs for quick-add service/expense
- * - Wired to centralized Zustand stores
+ * - Virtualized list with memoized rows and batched maintenance components
+ * - Wired to centralized Zustand stores and dataRevisionTracker for invalidation
  */
 
 import { VehicleContextHeader } from '@/components/VehicleContextHeader';
-import { FuelType, MILEAGE_UNIT_LABELS, getFuelSystemLabel, isHybridFuel } from '@/constants/fuelTypes';
 import { Sizing, Spacing, Typography } from '@/constants/theme';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { useExpenseStore } from '@/stores/expenseStore';
@@ -24,16 +24,33 @@ import type { Expense } from '@/types/expense';
 import type { FuelEntry } from '@/types/fuel';
 import type { ServiceRecord, MaintenanceComponent } from '@/types/service';
 import type { Trip } from '@/types/trip';
+import * as fuelRepo from '@/database/repositories/fuelRepo';
+import * as serviceRepo from '@/database/repositories/serviceRepo';
+import * as expenseRepo from '@/database/repositories/expenseRepo';
+import * as tripRepo from '@/database/repositories/tripRepo';
 import * as maintCompRepo from '@/database/repositories/maintenanceComponentRepo';
-import { TyreIcon } from '@/components/TyreIcon';
+import { FuelHistoryRow } from '@/components/history/FuelHistoryRow';
+import { ServiceHistoryRow } from '@/components/history/ServiceHistoryRow';
+import { ExpenseHistoryRow } from '@/components/history/ExpenseHistoryRow';
 import { TripSummaryCard } from '@/components/TripSummaryCard';
 import { TripDetailModal } from '@/components/TripDetailModal';
 import { ManualTripModal } from '@/components/ManualTripModal';
+import { dataRevisionTracker } from '@/services/dataRevisionTracker';
 import { formatDisplayDateLong } from '@/utils/date';
 import { formatCurrency } from '@/utils/format';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -47,46 +64,24 @@ const DATE_CHIPS: { value: DateRange; label: string }[] = [
   { value: '3months', label: '3 Months' },
 ];
 
-// ─── Date range helpers ───────────────────────────────────────────────
-
-function getDateRangeStart(range: DateRange): Date | null {
+function getDateRangeStart(range: DateRange): string | null {
   if (range === 'all') return null;
   const now = new Date();
   if (range === 'week') {
     const d = new Date(now);
     d.setDate(d.getDate() - 7);
-    return d;
+    return d.toISOString().split('T')[0];
   }
   if (range === 'month') {
-    return new Date(now.getFullYear(), now.getMonth(), 1);
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    return `${now.getFullYear()}-${m}-01`;
   }
   if (range === '3months') {
     const d = new Date(now);
     d.setMonth(d.getMonth() - 3);
-    return d;
+    return d.toISOString().split('T')[0];
   }
   return null;
-}
-
-function isInRange(dateStr: string, rangeStart: Date | null): boolean {
-  if (!rangeStart) return true;
-  return new Date(dateStr) >= rangeStart;
-}
-
-function renderComponentTagIcon(name: string) {
-  const lower = name.toLowerCase();
-  if (lower.includes('tyre') || lower.includes('tire')) {
-    return <TyreIcon size={12} />;
-  }
-  if (lower.includes('oil filter')) return <Text style={{ fontSize: 10 }}>⚙️</Text>;
-  if (lower.includes('oil')) return <Text style={{ fontSize: 10 }}>🛢️</Text>;
-  if (lower.includes('brake')) return <Text style={{ fontSize: 10 }}>🛑</Text>;
-  if (lower.includes('spark')) return <Text style={{ fontSize: 10 }}>⚡</Text>;
-  if (lower.includes('battery')) return <Text style={{ fontSize: 10 }}>🔋</Text>;
-  if (lower.includes('air')) return <Text style={{ fontSize: 10 }}>💨</Text>;
-  if (lower.includes('coolant')) return <Text style={{ fontSize: 10 }}>🧪</Text>;
-  if (lower.includes('belt')) return <Text style={{ fontSize: 10 }}>🔄</Text>;
-  return <Text style={{ fontSize: 10 }}>⚙️</Text>;
 }
 
 // ─── Main Screen ──────────────────────────────────────────────────────
@@ -95,408 +90,402 @@ export default function HistoryScreen() {
   const colors = useThemeColors();
   const router = useRouter();
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
-  const isEV = selectedVehicle?.fuel_type === FuelType.ELECTRIC;
+  const isEV = selectedVehicle?.fuel_type === 'electric';
 
   // Stores
-  const fuelEntries = useFuelStore((s) => s.entries);
-  const loadEntries = useFuelStore((s) => s.loadEntries);
   const deleteFuelEntry = useFuelStore((s) => s.deleteFuelEntry);
-
-  const serviceRecords = useServiceStore((s) => s.records);
-  const loadRecords = useServiceStore((s) => s.loadRecords);
   const deleteServiceRecord = useServiceStore((s) => s.deleteRecord);
-
-  const expenses = useExpenseStore((s) => s.expenses);
-  const loadExpenses = useExpenseStore((s) => s.loadExpenses);
   const deleteExpense = useExpenseStore((s) => s.deleteExpense);
-
-  const trips = useTripStore((s) => s.trips);
-  const loadTrips = useTripStore((s) => s.loadTrips);
   const deleteTrip = useTripStore((s) => s.deleteTrip);
 
   // UI state
   const [tab, setTab] = useState<Tab>('fuel');
   const [searchText, setSearchText] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [dateRange, setDateRange] = useState<DateRange>('all');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchText), 150);
+    return () => clearTimeout(timer);
+  }, [searchText]);
+
+  // Tab counts
+  const [tabCounts, setTabCounts] = useState({ fuel: 0, service: 0, expenses: 0, trips: 0 });
+
+  // Separate paginated state per tab
+  const [fuelData, setFuelData] = useState<{
+    items: FuelEntry[];
+    nextCursor: fuelRepo.PaginatedFuelCursor | null;
+    hasMore: boolean;
+    totalFiltered: number;
+    isLoadingMore: boolean;
+  }>({ items: [], nextCursor: null, hasMore: false, totalFiltered: 0, isLoadingMore: false });
+
+  const [serviceData, setServiceData] = useState<{
+    items: ServiceRecord[];
+    nextCursor: serviceRepo.PaginatedServiceCursor | null;
+    hasMore: boolean;
+    totalFiltered: number;
+    isLoadingMore: boolean;
+  }>({ items: [], nextCursor: null, hasMore: false, totalFiltered: 0, isLoadingMore: false });
+
+  const [expenseData, setExpenseData] = useState<{
+    items: Expense[];
+    nextCursor: expenseRepo.PaginatedExpenseCursor | null;
+    hasMore: boolean;
+    totalFiltered: number;
+    isLoadingMore: boolean;
+  }>({ items: [], nextCursor: null, hasMore: false, totalFiltered: 0, isLoadingMore: false });
+
+  const [tripData, setTripData] = useState<{
+    items: Trip[];
+    nextCursor: tripRepo.PaginatedTripCursor | null;
+    hasMore: boolean;
+    totalFiltered: number;
+    isLoadingMore: boolean;
+  }>({ items: [], nextCursor: null, hasMore: false, totalFiltered: 0, isLoadingMore: false });
+
   const [componentsByService, setComponentsByService] = useState<Record<string, MaintenanceComponent[]>>({});
   const [selectedTripForDetail, setSelectedTripForDetail] = useState<Trip | null>(null);
   const [showManualTripModal, setShowManualTripModal] = useState(false);
 
-  const loadAll = useCallback(() => {
-    if (selectedVehicle) {
-      loadEntries(selectedVehicle.id, selectedVehicle.fuel_type as FuelType);
-      loadRecords(selectedVehicle.id);
-      loadExpenses(selectedVehicle.id);
-      loadTrips(selectedVehicle.id);
+  // Invalidation tracking
+  const lastSeenRevs = useRef<Record<string, number>>({});
 
-      try {
-        const allComps = maintCompRepo.getMaintenanceComponentsByVehicle(selectedVehicle.id);
-        const map: Record<string, MaintenanceComponent[]> = {};
-        for (const c of allComps) {
-          if (!map[c.service_record_id]) {
-            map[c.service_record_id] = [];
-          }
-          map[c.service_record_id].push(c);
-        }
-        setComponentsByService(map);
-      } catch (err) {
-        console.warn('[HistoryScreen] Failed to load maintenance components:', err);
-      }
+  // ── Tab Counts ────────────────────────────────────────────────────
+  const refreshTabCounts = useCallback(() => {
+    if (!selectedVehicle) return;
+    try {
+      const f = fuelRepo.getFuelEntryCount(selectedVehicle.id);
+      const s = serviceRepo.getServiceRecordCount(selectedVehicle.id);
+      const e = expenseRepo.getExpenseCount(selectedVehicle.id);
+      const t = tripRepo.getTripCount(selectedVehicle.id);
+      setTabCounts({ fuel: f, service: s, expenses: e, trips: t });
+    } catch (err) {
+      console.warn('[HistoryScreen] Failed to refresh tab counts:', err);
     }
   }, [selectedVehicle?.id]);
 
-  useFocusEffect(loadAll);
+  // ── Loaders ───────────────────────────────────────────────────────
+  const loadFuel = useCallback(
+    (reset = false) => {
+      if (!selectedVehicle) return;
+      const startDate = getDateRangeStart(dateRange);
+      const cursor = reset ? null : fuelData.nextCursor;
+      if (!reset && !fuelData.hasMore) return;
 
-  // Sync components whenever service records change in store
-  useEffect(() => {
-    if (selectedVehicle) {
+      if (!reset) setFuelData((prev) => ({ ...prev, isLoadingMore: true }));
       try {
-        const allComps = maintCompRepo.getMaintenanceComponentsByVehicle(selectedVehicle.id);
-        const map: Record<string, MaintenanceComponent[]> = {};
-        for (const c of allComps) {
-          if (!map[c.service_record_id]) {
-            map[c.service_record_id] = [];
-          }
-          map[c.service_record_id].push(c);
-        }
-        setComponentsByService(map);
+        const res = fuelRepo.getPaginatedFuelEntries(selectedVehicle.id, {
+          startDate,
+          searchQuery: debouncedSearch,
+          cursor,
+          limit: 35,
+        });
+
+        setFuelData((prev) => ({
+          items: reset ? res.items : [...prev.items, ...res.items],
+          nextCursor: res.nextCursor,
+          hasMore: res.hasMore,
+          totalFiltered: res.totalCount,
+          isLoadingMore: false,
+        }));
       } catch (err) {
-        console.warn('[HistoryScreen] Failed to sync maintenance components:', err);
+        console.warn('[HistoryScreen] Failed to load fuel page:', err);
+        setFuelData((prev) => ({ ...prev, isLoadingMore: false }));
       }
-    }
-  }, [selectedVehicle?.id, serviceRecords]);
+    },
+    [selectedVehicle?.id, dateRange, debouncedSearch, fuelData.nextCursor, fuelData.hasMore]
+  );
 
-  // ── Filtered data (pure, no side-effects) ────────────────────────
-  const rangeStart = useMemo(() => getDateRangeStart(dateRange), [dateRange]);
-  const query = searchText.toLowerCase().trim();
+  const loadService = useCallback(
+    (reset = false) => {
+      if (!selectedVehicle) return;
+      const startDate = getDateRangeStart(dateRange);
+      const cursor = reset ? null : serviceData.nextCursor;
+      if (!reset && !serviceData.hasMore) return;
 
-  const filteredFuel = useMemo(() => {
-    return fuelEntries.filter((e) => {
-      if (!isInRange(e.date, rangeStart)) return false;
-      if (!query) return true;
-      return (
-        e.fuel_station?.toLowerCase().includes(query) ||
-        e.notes?.toLowerCase().includes(query) ||
-        e.odometer.toString().includes(query) ||
-        e.fuel_unit.toLowerCase().includes(query) ||
-        formatDisplayDateLong(e.date).toLowerCase().includes(query)
+      if (!reset) setServiceData((prev) => ({ ...prev, isLoadingMore: true }));
+      try {
+        const res = serviceRepo.getPaginatedServiceRecords(selectedVehicle.id, {
+          startDate,
+          searchQuery: debouncedSearch,
+          cursor,
+          limit: 35,
+        });
+
+        // Batch load components for current page only
+        const compMap = maintCompRepo.getMaintenanceComponentsByServiceIds(
+          res.items.map((r) => r.id)
+        );
+        setComponentsByService((prev) => ({ ...prev, ...compMap }));
+
+        setServiceData((prev) => ({
+          items: reset ? res.items : [...prev.items, ...res.items],
+          nextCursor: res.nextCursor,
+          hasMore: res.hasMore,
+          totalFiltered: res.totalCount,
+          isLoadingMore: false,
+        }));
+      } catch (err) {
+        console.warn('[HistoryScreen] Failed to load service page:', err);
+        setServiceData((prev) => ({ ...prev, isLoadingMore: false }));
+      }
+    },
+    [selectedVehicle?.id, dateRange, debouncedSearch, serviceData.nextCursor, serviceData.hasMore]
+  );
+
+  const loadExpenses = useCallback(
+    (reset = false) => {
+      if (!selectedVehicle) return;
+      const startDate = getDateRangeStart(dateRange);
+      const cursor = reset ? null : expenseData.nextCursor;
+      if (!reset && !expenseData.hasMore) return;
+
+      if (!reset) setExpenseData((prev) => ({ ...prev, isLoadingMore: true }));
+      try {
+        const res = expenseRepo.getPaginatedExpenses(selectedVehicle.id, {
+          startDate,
+          searchQuery: debouncedSearch,
+          cursor,
+          limit: 35,
+        });
+
+        setExpenseData((prev) => ({
+          items: reset ? res.items : [...prev.items, ...res.items],
+          nextCursor: res.nextCursor,
+          hasMore: res.hasMore,
+          totalFiltered: res.totalCount,
+          isLoadingMore: false,
+        }));
+      } catch (err) {
+        console.warn('[HistoryScreen] Failed to load expense page:', err);
+        setExpenseData((prev) => ({ ...prev, isLoadingMore: false }));
+      }
+    },
+    [selectedVehicle?.id, dateRange, debouncedSearch, expenseData.nextCursor, expenseData.hasMore]
+  );
+
+  const loadTrips = useCallback(
+    (reset = false) => {
+      if (!selectedVehicle) return;
+      const startDate = getDateRangeStart(dateRange);
+      const cursor = reset ? null : tripData.nextCursor;
+      if (!reset && !tripData.hasMore) return;
+
+      if (!reset) setTripData((prev) => ({ ...prev, isLoadingMore: true }));
+      try {
+        const res = tripRepo.getPaginatedTrips(selectedVehicle.id, {
+          startDate,
+          searchQuery: debouncedSearch,
+          cursor,
+          limit: 35,
+        });
+
+        setTripData((prev) => ({
+          items: reset ? res.items : [...prev.items, ...res.items],
+          nextCursor: res.nextCursor,
+          hasMore: res.hasMore,
+          totalFiltered: res.totalCount,
+          isLoadingMore: false,
+        }));
+      } catch (err) {
+        console.warn('[HistoryScreen] Failed to load trips page:', err);
+        setTripData((prev) => ({ ...prev, isLoadingMore: false }));
+      }
+    },
+    [selectedVehicle?.id, dateRange, debouncedSearch, tripData.nextCursor, tripData.hasMore]
+  );
+
+  // Reload current tab on filter/vehicle change
+  useEffect(() => {
+    if (tab === 'fuel') loadFuel(true);
+    else if (tab === 'service') loadService(true);
+    else if (tab === 'expenses') loadExpenses(true);
+    else if (tab === 'trips') loadTrips(true);
+  }, [tab, debouncedSearch, dateRange, selectedVehicle?.id]);
+
+  // Focus effect: check revisions and refresh counts
+  useFocusEffect(
+    useCallback(() => {
+      if (!selectedVehicle) return;
+      refreshTabCounts();
+
+      const fuelChanged = dataRevisionTracker.hasChanged(
+        'fuel',
+        selectedVehicle.id,
+        lastSeenRevs.current['fuel'] ?? 0
       );
-    });
-  }, [fuelEntries, rangeStart, query]);
-
-  const filteredService = useMemo(() => {
-    return serviceRecords.filter((r) => {
-      if (!isInRange(r.date, rangeStart)) return false;
-      if (!query) return true;
-      const comps = componentsByService[r.id] || [];
-      const compMatch = comps.some(
-        (c) =>
-          c.component_name.toLowerCase().includes(query) ||
-          c.brand?.toLowerCase().includes(query) ||
-          c.notes?.toLowerCase().includes(query)
+      const serviceChanged = dataRevisionTracker.hasChanged(
+        'services',
+        selectedVehicle.id,
+        lastSeenRevs.current['services'] ?? 0
       );
-      return (
-        compMatch ||
-        r.service_type.toLowerCase().includes(query) ||
-        r.garage_name?.toLowerCase().includes(query) ||
-        r.work_done?.toLowerCase().includes(query) ||
-        r.notes?.toLowerCase().includes(query) ||
-        formatDisplayDateLong(r.date).toLowerCase().includes(query)
+      const expenseChanged = dataRevisionTracker.hasChanged(
+        'expenses',
+        selectedVehicle.id,
+        lastSeenRevs.current['expenses'] ?? 0
       );
-    });
-  }, [serviceRecords, componentsByService, rangeStart, query]);
-
-  const filteredExpenses = useMemo(() => {
-    return expenses.filter((e) => {
-      if (!isInRange(e.date, rangeStart)) return false;
-      if (!query) return true;
-      return (
-        e.category.toLowerCase().includes(query) ||
-        e.description?.toLowerCase().includes(query) ||
-        formatDisplayDateLong(e.date).toLowerCase().includes(query)
+      const tripsChanged = dataRevisionTracker.hasChanged(
+        'trips',
+        selectedVehicle.id,
+        lastSeenRevs.current['trips'] ?? 0
       );
-    });
-  }, [expenses, rangeStart, query]);
 
-  const filteredTrips = useMemo(() => {
-    return trips.filter((t) => {
-      if (!isInRange(t.start_time.split('T')[0], rangeStart)) return false;
-      if (!query) return true;
-      return (
-        t.trip_type.toLowerCase().includes(query) ||
-        (t.purpose && t.purpose.toLowerCase().includes(query)) ||
-        (t.notes && t.notes.toLowerCase().includes(query)) ||
-        (t.quality_warning && t.quality_warning.toLowerCase().includes(query)) ||
-        t.distance_km.toFixed(2).includes(query) ||
-        (t.start_odometer !== null && t.start_odometer.toString().includes(query)) ||
-        (t.end_odometer !== null && t.end_odometer.toString().includes(query)) ||
-        formatDisplayDateLong(t.start_time.split('T')[0]).toLowerCase().includes(query)
-      );
-    });
-  }, [trips, rangeStart, query]);
+      lastSeenRevs.current['fuel'] = dataRevisionTracker.getRevision('fuel', selectedVehicle.id);
+      lastSeenRevs.current['services'] = dataRevisionTracker.getRevision('services', selectedVehicle.id);
+      lastSeenRevs.current['expenses'] = dataRevisionTracker.getRevision('expenses', selectedVehicle.id);
+      lastSeenRevs.current['trips'] = dataRevisionTracker.getRevision('trips', selectedVehicle.id);
 
-  // ── Tab counts (unfiltered, for the tab label) ────────────────────
-  const tabCounts = {
-    fuel: fuelEntries.length,
-    service: serviceRecords.length,
-    expenses: expenses.length,
-    trips: trips.length,
-  };
-
-  const handleDeleteTrip = (trip: Trip) => {
-    Alert.alert(
-      'Delete Trip Record? 🚗',
-      `Are you sure you want to delete this ${trip.trip_type === 'gps' ? 'GPS' : 'manual'} trip (${trip.distance_km.toFixed(2)} km)?\n\nDeleting this trip will not roll back your vehicle odometer.`,
-      [
-        { text: 'Keep It', style: 'cancel' },
-        {
-          text: 'Delete It',
-          style: 'destructive',
-          onPress: () => {
-            if (selectedVehicle) {
-              deleteTrip(trip.id, selectedVehicle.id);
-              if (selectedTripForDetail?.id === trip.id) {
-                setSelectedTripForDetail(null);
-              }
-            }
-          },
-        },
-      ]
-    );
-  };
+      if (tab === 'fuel' && (fuelChanged || fuelData.items.length === 0)) loadFuel(true);
+      if (tab === 'service' && (serviceChanged || serviceData.items.length === 0)) loadService(true);
+      if (tab === 'expenses' && (expenseChanged || expenseData.items.length === 0)) loadExpenses(true);
+      if (tab === 'trips' && (tripsChanged || tripData.items.length === 0)) loadTrips(true);
+    }, [selectedVehicle?.id, tab, refreshTabCounts])
+  );
 
   // ── Delete handlers ───────────────────────────────────────────────
-  const handleDeleteFuel = (entry: FuelEntry) => {
-    Alert.alert(
-      isEV ? 'Delete This Charge? ⚡' : 'Delete This Fill-up? ⛽',
-      `Heads up — deleting the entry from ${formatDisplayDateLong(entry.date)} will trigger an ${isEV ? 'efficiency' : 'mileage'} recalculation for everything after it.\n${entry.fuel_amount} ${entry.fuel_unit} · ${formatCurrency(entry.total_cost)}\n\nStill want to delete it?`,
-      [
-        { text: 'Keep It', style: 'cancel' },
-        {
-          text: 'Delete It',
-          style: 'destructive',
-          onPress: () => { if (selectedVehicle) deleteFuelEntry(entry.id, selectedVehicle); },
-        },
-      ]
-    );
-  };
-
-  const handleDeleteService = (record: ServiceRecord) => {
-    Alert.alert(
-      'Delete Service Record? 🔧',
-      `Bye-bye "${record.service_type}" from ${formatDisplayDateLong(record.date)}. Gone forever!`,
-      [
-        { text: 'Keep It', style: 'cancel' },
-        { text: 'Delete It', style: 'destructive', onPress: () => deleteServiceRecord(record.id) },
-      ]
-    );
-  };
-
-  const handleDeleteExpense = (expense: Expense) => {
-    Alert.alert(
-      'Delete Expense? 💸',
-      `Removing "${expense.category}" — ${formatCurrency(expense.amount)}. One less thing to track!`,
-      [
-        { text: 'Keep It', style: 'cancel' },
-        { text: 'Delete It', style: 'destructive', onPress: () => deleteExpense(expense.id) },
-      ]
-    );
-  };
-
-  // ── Row renderers ─────────────────────────────────────────────────
-
-  const renderFuelEntry = ({ item }: { item: FuelEntry }) => (
-    <TouchableOpacity
-      onPress={() => router.push({ pathname: '/add-fuel', params: { id: item.id } })}
-      onLongPress={() => handleDeleteFuel(item)}
-      activeOpacity={0.7}
-      style={[styles.entryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-    >
-      <View style={styles.entryHeader}>
-        <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>
-          {formatDisplayDateLong(item.date)}
-        </Text>
-        <Text style={[Typography.body, { color: colors.primary, fontWeight: '700' }]}>
-          {formatCurrency(item.total_cost)}
-        </Text>
-      </View>
-      <View style={styles.entryDetails}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
-          <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
-            {item.fuel_amount} {item.fuel_unit} · {formatCurrency(item.price_per_unit)}/{item.fuel_unit === 'kWh' ? 'kWh' : item.fuel_unit === 'kg' ? 'kg' : 'L'}
-          </Text>
-          {item.fuel_system === 'secondary' && selectedVehicle && (
-            <View style={[styles.badge, { backgroundColor: '#FEF3C7', paddingVertical: 1, paddingHorizontal: 6 }]}>
-              <Text style={[Typography.caption, { color: '#B45309', fontWeight: '700', fontSize: 10 }]}>
-                {getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'secondary')}
-              </Text>
-            </View>
-          )}
-          {item.fuel_system === 'primary' && selectedVehicle && isHybridFuel(selectedVehicle.fuel_type as FuelType) && (
-            <View style={[styles.badge, { backgroundColor: colors.primaryLight, paddingVertical: 1, paddingHorizontal: 6 }]}>
-              <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700', fontSize: 10 }]}>
-                {getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'primary')}
-              </Text>
-            </View>
-          )}
-        </View>
-        <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
-          {item.odometer.toLocaleString('en-IN')} km
-        </Text>
-      </View>
-      {item.fuel_station ? (
-        <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2 }]}>
-          {isEV ? '⚡' : '📍'} {item.fuel_station}
-        </Text>
-      ) : null}
-      {item.battery_start_percent != null && item.battery_end_percent != null && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
-          <View style={[styles.badge, { backgroundColor: colors.primaryLight + '50', paddingVertical: 1, paddingHorizontal: 6 }]}>
-            <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700', fontSize: 10 }]}>
-              🔋 {item.battery_start_percent}% → {item.battery_end_percent}% (+{Math.round(item.battery_end_percent - item.battery_start_percent)}%)
-            </Text>
-          </View>
-        </View>
-      )}
-      {item.calculated_mileage && item.mileage_unit ? (
-        <View style={[styles.badge, { backgroundColor: colors.successLight }]}>
-          <Text style={[Typography.caption, { color: colors.success }]}>
-            {item.calculated_mileage.toFixed(1)} {MILEAGE_UNIT_LABELS[item.mileage_unit]}
-          </Text>
-        </View>
-      ) : null}
-      {!item.calculated_mileage && item.is_full_tank === 0 ? (
-        <View style={[styles.badge, { backgroundColor: colors.warningLight }]}>
-          <Text style={[Typography.caption, { color: colors.warning }]}>Partial Fill</Text>
-        </View>
-      ) : null}
-      <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
-        Tap to edit · Long press to delete
-      </Text>
-    </TouchableOpacity>
+  const handleDeleteFuel = useCallback(
+    (entry: FuelEntry) => {
+      Alert.alert(
+        isEV ? 'Delete This Charge? ⚡' : 'Delete This Fill-up? ⛽',
+        `Heads up — deleting the entry from ${formatDisplayDateLong(entry.date)} will trigger an ${isEV ? 'efficiency' : 'mileage'} recalculation for everything after it.\n${entry.fuel_amount} ${entry.fuel_unit} · ${formatCurrency(entry.total_cost)}\n\nStill want to delete it?`,
+        [
+          { text: 'Keep It', style: 'cancel' },
+          {
+            text: 'Delete It',
+            style: 'destructive',
+            onPress: () => {
+              if (selectedVehicle) {
+                deleteFuelEntry(entry.id, selectedVehicle);
+                setFuelData((prev) => ({
+                  ...prev,
+                  items: prev.items.filter((item) => item.id !== entry.id),
+                  totalFiltered: Math.max(0, prev.totalFiltered - 1),
+                }));
+                refreshTabCounts();
+              }
+            },
+          },
+        ]
+      );
+    },
+    [isEV, selectedVehicle, deleteFuelEntry, refreshTabCounts]
   );
 
-  const renderServiceRecord = ({ item }: { item: ServiceRecord }) => {
-    const comps =
-      componentsByService[item.id] && componentsByService[item.id].length > 0
-        ? componentsByService[item.id]
-        : maintCompRepo.getMaintenanceComponentsByService(item.id);
-    return (
-      <TouchableOpacity
-        onPress={() => router.push({ pathname: '/add-service', params: { id: item.id } })}
-        onLongPress={() => handleDeleteService(item)}
-        activeOpacity={0.7}
-        style={[styles.entryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-      >
-        <View style={styles.entryHeader}>
-          <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>
-            {item.service_type}
-          </Text>
-          {item.cost != null && (
-            <Text style={[Typography.body, { color: colors.primary, fontWeight: '700' }]}>
-              {formatCurrency(item.cost)}
-            </Text>
-          )}
-        </View>
-
-        <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
-          {formatDisplayDateLong(item.date)}
-          {item.odometer != null ? ` · ${Math.round(item.odometer).toLocaleString('en-IN')} km` : ''}
-          {item.garage_name ? ` · ${item.garage_name}` : ''}
-        </Text>
-
-        {item.work_done ? (
-          <Text style={[Typography.bodySmall, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
-            {item.work_done}
-          </Text>
-        ) : null}
-
-        {/* ── Parts & Components Serviced Tags ── */}
-        {(comps.length > 0 || !!item.receipt_photo_uri) && (
-          <View style={styles.compTagsContainer}>
-            {comps.map((c) => (
-              <View
-                key={c.id}
-                style={[styles.compTagPill, { backgroundColor: colors.borderLight, borderColor: colors.border }]}
-              >
-                {renderComponentTagIcon(c.component_name)}
-                <Text style={[styles.compTagText, { color: colors.text }]}>
-                  {c.component_name}
-                  {c.brand ? ` (${c.brand})` : ''}
-                </Text>
-              </View>
-            ))}
-            {item.receipt_photo_uri ? (
-              <View
-                style={[
-                  styles.compTagPill,
-                  { backgroundColor: colors.primaryLight, borderColor: colors.primary + '40' },
-                ]}
-              >
-                <Text style={{ fontSize: 10 }}>🧾</Text>
-                <Text style={[styles.compTagText, { color: colors.primary, fontWeight: '700' }]}>
-                  Invoice
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        )}
-
-        <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
-          Tap to edit · Long press to delete
-        </Text>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderExpense = ({ item }: { item: Expense }) => (
-    <TouchableOpacity
-      onPress={() => router.push({ pathname: '/add-expense', params: { id: item.id } })}
-      onLongPress={() => handleDeleteExpense(item)}
-      activeOpacity={0.7}
-      style={[styles.entryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-    >
-      <View style={styles.entryHeader}>
-        <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>
-          {item.category}
-        </Text>
-        <Text style={[Typography.body, { color: colors.accent, fontWeight: '700' }]}>
-          {formatCurrency(item.amount)}
-        </Text>
-      </View>
-      <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
-        {formatDisplayDateLong(item.date)}
-      </Text>
-      {item.description ? (
-        <Text style={[Typography.bodySmall, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
-          {item.description}
-        </Text>
-      ) : null}
-
-      {item.receipt_photo_uri ? (
-        <View style={styles.compTagsContainer}>
-          <View
-            style={[
-              styles.compTagPill,
-              { backgroundColor: colors.accent + '18', borderColor: colors.accent + '35' },
-            ]}
-          >
-            <Text style={{ fontSize: 10 }}>🧾</Text>
-            <Text style={[styles.compTagText, { color: colors.accent, fontWeight: '700' }]}>
-              Receipt
-            </Text>
-          </View>
-        </View>
-      ) : null}
-
-      <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
-        Tap to edit · Long press to delete
-      </Text>
-    </TouchableOpacity>
+  const handleDeleteService = useCallback(
+    (record: ServiceRecord) => {
+      Alert.alert(
+        'Delete Service Record? 🔧',
+        `Bye-bye "${record.service_type}" from ${formatDisplayDateLong(record.date)}. Gone forever!`,
+        [
+          { text: 'Keep It', style: 'cancel' },
+          {
+            text: 'Delete It',
+            style: 'destructive',
+            onPress: () => {
+              deleteServiceRecord(record.id);
+              setServiceData((prev) => ({
+                ...prev,
+                items: prev.items.filter((item) => item.id !== record.id),
+                totalFiltered: Math.max(0, prev.totalFiltered - 1),
+              }));
+              refreshTabCounts();
+            },
+          },
+        ]
+      );
+    },
+    [deleteServiceRecord, refreshTabCounts]
   );
+
+  const handleDeleteExpense = useCallback(
+    (expense: Expense) => {
+      Alert.alert(
+        'Delete Expense? 💸',
+        `Removing "${expense.category}" — ${formatCurrency(expense.amount)}. One less thing to track!`,
+        [
+          { text: 'Keep It', style: 'cancel' },
+          {
+            text: 'Delete It',
+            style: 'destructive',
+            onPress: () => {
+              deleteExpense(expense.id);
+              setExpenseData((prev) => ({
+                ...prev,
+                items: prev.items.filter((item) => item.id !== expense.id),
+                totalFiltered: Math.max(0, prev.totalFiltered - 1),
+              }));
+              refreshTabCounts();
+            },
+          },
+        ]
+      );
+    },
+    [deleteExpense, refreshTabCounts]
+  );
+
+  const handleDeleteTrip = useCallback(
+    (trip: Trip) => {
+      Alert.alert(
+        'Delete Trip Record? 🚗',
+        `Are you sure you want to delete this ${trip.trip_type === 'gps' ? 'GPS' : 'manual'} trip (${trip.distance_km.toFixed(2)} km)?\n\nDeleting this trip will not roll back your vehicle odometer.`,
+        [
+          { text: 'Keep It', style: 'cancel' },
+          {
+            text: 'Delete It',
+            style: 'destructive',
+            onPress: () => {
+              if (selectedVehicle) {
+                deleteTrip(trip.id, selectedVehicle.id);
+                setTripData((prev) => ({
+                  ...prev,
+                  items: prev.items.filter((item) => item.id !== trip.id),
+                  totalFiltered: Math.max(0, prev.totalFiltered - 1),
+                }));
+                refreshTabCounts();
+                if (selectedTripForDetail?.id === trip.id) {
+                  setSelectedTripForDetail(null);
+                }
+              }
+            },
+          },
+        ]
+      );
+    },
+    [selectedVehicle, deleteTrip, selectedTripForDetail, refreshTabCounts]
+  );
+
+  // ── Navigation callbacks ──────────────────────────────────────────
+  const handlePressFuel = useCallback(
+    (entry: FuelEntry) => {
+      router.push({ pathname: '/add-fuel', params: { id: entry.id } });
+    },
+    [router]
+  );
+
+  const handlePressService = useCallback(
+    (record: ServiceRecord) => {
+      router.push({ pathname: '/add-service', params: { id: record.id } });
+    },
+    [router]
+  );
+
+  const handlePressExpense = useCallback(
+    (expense: Expense) => {
+      router.push({ pathname: '/add-expense', params: { id: expense.id } });
+    },
+    [router]
+  );
+
+  const handlePressTrip = useCallback((trip: Trip) => {
+    setSelectedTripForDetail(trip);
+  }, []);
 
   // ── Empty state ───────────────────────────────────────────────────
-  const renderEmpty = (type: string, isFiltered: boolean) => (
+  const isFiltered = debouncedSearch.length > 0 || dateRange !== 'all';
+
+  const renderEmpty = (type: Tab) => (
     <View style={styles.emptyState}>
       <Text style={{ fontSize: 48, marginBottom: Spacing.lg }}>
         {isFiltered ? '🔍' : type === 'fuel' ? (isEV ? '⚡' : '⛽') : type === 'service' ? '🔧' : type === 'trips' ? '🗺️' : '💰'}
@@ -528,7 +517,14 @@ export default function HistoryScreen() {
     );
   }
 
-  const isFiltered = query.length > 0 || dateRange !== 'all';
+  const currentCount =
+    tab === 'fuel'
+      ? fuelData.totalFiltered
+      : tab === 'service'
+      ? serviceData.totalFiltered
+      : tab === 'expenses'
+      ? expenseData.totalFiltered
+      : tripData.totalFiltered;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -625,8 +621,7 @@ export default function HistoryScreen() {
         {isFiltered && (
           <View style={styles.filterSummary}>
             <Text style={[Typography.caption, { color: colors.textSecondary }]}>
-              {tab === 'fuel' ? filteredFuel.length : tab === 'service' ? filteredService.length : tab === 'expenses' ? filteredExpenses.length : filteredTrips.length}
-              {' '}result{(tab === 'fuel' ? filteredFuel.length : tab === 'service' ? filteredService.length : tab === 'expenses' ? filteredExpenses.length : filteredTrips.length) !== 1 ? 's' : ''}
+              {currentCount} result{currentCount !== 1 ? 's' : ''}
             </Text>
             <TouchableOpacity
               onPress={() => { setSearchText(''); setDateRange('all'); }}
@@ -643,49 +638,122 @@ export default function HistoryScreen() {
       {/* ── Lists ── */}
       {tab === 'fuel' && (
         <FlatList
-          data={filteredFuel}
+          data={fuelData.items}
           keyExtractor={(item) => item.id}
-          renderItem={renderFuelEntry}
+          renderItem={({ item }) => (
+            <FuelHistoryRow
+              item={item}
+              isEV={isEV}
+              selectedVehicle={selectedVehicle}
+              onPress={handlePressFuel}
+              onLongPress={handleDeleteFuel}
+            />
+          )}
           contentContainerStyle={styles.list}
-          ListEmptyComponent={renderEmpty('fuel', isFiltered)}
+          ListEmptyComponent={renderEmpty('fuel')}
           keyboardShouldPersistTaps="handled"
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
+          onEndReached={() => loadFuel(false)}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            fuelData.isLoadingMore ? (
+              <View style={{ paddingVertical: Spacing.md, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : undefined
+          }
         />
       )}
       {tab === 'service' && (
         <FlatList
-          data={filteredService}
+          data={serviceData.items}
           keyExtractor={(item) => item.id}
-          renderItem={renderServiceRecord}
+          renderItem={({ item }) => (
+            <ServiceHistoryRow
+              item={item}
+              components={componentsByService[item.id] || []}
+              onPress={handlePressService}
+              onLongPress={handleDeleteService}
+            />
+          )}
           contentContainerStyle={styles.list}
-          ListEmptyComponent={renderEmpty('service', isFiltered)}
+          ListEmptyComponent={renderEmpty('service')}
           keyboardShouldPersistTaps="handled"
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
+          onEndReached={() => loadService(false)}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            serviceData.isLoadingMore ? (
+              <View style={{ paddingVertical: Spacing.md, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : undefined
+          }
         />
       )}
       {tab === 'expenses' && (
         <FlatList
-          data={filteredExpenses}
+          data={expenseData.items}
           keyExtractor={(item) => item.id}
-          renderItem={renderExpense}
+          renderItem={({ item }) => (
+            <ExpenseHistoryRow
+              item={item}
+              onPress={handlePressExpense}
+              onLongPress={handleDeleteExpense}
+            />
+          )}
           contentContainerStyle={styles.list}
-          ListEmptyComponent={renderEmpty('expenses', isFiltered)}
+          ListEmptyComponent={renderEmpty('expenses')}
           keyboardShouldPersistTaps="handled"
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
+          onEndReached={() => loadExpenses(false)}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            expenseData.isLoadingMore ? (
+              <View style={{ paddingVertical: Spacing.md, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.accent} />
+              </View>
+            ) : undefined
+          }
         />
       )}
       {tab === 'trips' && (
         <FlatList
-          data={filteredTrips}
+          data={tripData.items}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <TripSummaryCard
               trip={item}
               vehicleName={selectedVehicle?.nickname || `${selectedVehicle?.manufacturer ?? ''} ${selectedVehicle?.model ?? ''}`.trim() || 'Vehicle'}
-              onPress={(t) => setSelectedTripForDetail(t)}
+              onPress={handlePressTrip}
               onDelete={handleDeleteTrip}
             />
           )}
           contentContainerStyle={styles.list}
-          ListEmptyComponent={renderEmpty('trips', isFiltered)}
+          ListEmptyComponent={renderEmpty('trips')}
           keyboardShouldPersistTaps="handled"
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
+          onEndReached={() => loadTrips(false)}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            tripData.isLoadingMore ? (
+              <View style={{ paddingVertical: Spacing.md, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : undefined
+          }
         />
       )}
 
@@ -747,6 +815,13 @@ export default function HistoryScreen() {
           onDelete={(tripId) => {
             if (selectedVehicle) {
               deleteTrip(tripId, selectedVehicle.id);
+              setTripData((prev) => ({
+                ...prev,
+                items: prev.items.filter((item) => item.id !== tripId),
+                totalFiltered: Math.max(0, prev.totalFiltered - 1),
+              }));
+              refreshTabCounts();
+              setSelectedTripForDetail(null);
             }
           }}
         />
@@ -759,9 +834,8 @@ export default function HistoryScreen() {
           vehicle={selectedVehicle}
           onSaved={() => {
             setShowManualTripModal(false);
-            if (selectedVehicle) {
-              loadTrips(selectedVehicle.id);
-            }
+            loadTrips(true);
+            refreshTabCounts();
           }}
           onClose={() => setShowManualTripModal(false)}
         />
@@ -837,49 +911,6 @@ const styles = StyleSheet.create({
 
   // ── List ──
   list: { padding: Spacing.lg, gap: Spacing.sm, paddingBottom: 120 },
-
-  // ── Entry card ──
-  entryCard: {
-    borderRadius: Sizing.radiusMd,
-    borderWidth: 1,
-    padding: Spacing.lg,
-  },
-  entryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.xs,
-  },
-  entryDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  compTagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: Spacing.sm,
-  },
-  compTagPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Sizing.radiusSm,
-    borderWidth: 1,
-  },
-  compTagText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  badge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: Sizing.radiusFull,
-    marginTop: Spacing.sm,
-  },
 
   // ── Empty state ──
   emptyState: {

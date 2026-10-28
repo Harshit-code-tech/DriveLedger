@@ -203,3 +203,94 @@ export function getVehicleExpenseAggregates(
     monthlyAggregates,
   };
 }
+
+// ─── PAGINATION ───────────────────────────────────────────────────────
+
+export interface PaginatedExpenseCursor {
+  date: string;
+  id: string;
+}
+
+export interface PaginatedExpenseOptions {
+  limit?: number;
+  cursor?: PaginatedExpenseCursor | null;
+  startDate?: string | null;
+  searchQuery?: string | null;
+}
+
+export interface PaginatedExpenseResult {
+  items: Expense[];
+  nextCursor: PaginatedExpenseCursor | null;
+  hasMore: boolean;
+  totalCount: number;
+}
+
+/**
+ * Returns total non-deleted expenses count for a vehicle.
+ */
+export function getExpenseCount(vehicleId: string): number {
+  const db = getDatabase();
+  const res = db.getFirstSync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM expenses WHERE vehicle_id = ? AND deleted_at IS NULL',
+    [vehicleId]
+  );
+  return res?.count ?? 0;
+}
+
+/**
+ * Returns cursor-paginated expenses ordered by date DESC, id DESC.
+ */
+export function getPaginatedExpenses(
+  vehicleId: string,
+  options: PaginatedExpenseOptions = {}
+): PaginatedExpenseResult {
+  const db = getDatabase();
+  const limit = Math.max(1, Math.min(options.limit ?? 35, 100));
+  const conditions: string[] = ['vehicle_id = ?', 'deleted_at IS NULL'];
+  const params: (string | number)[] = [vehicleId];
+
+  if (options.startDate) {
+    conditions.push('date >= ?');
+    params.push(options.startDate);
+  }
+
+  if (options.searchQuery && options.searchQuery.trim()) {
+    const q = `%${options.searchQuery.trim().toLowerCase()}%`;
+    conditions.push(
+      "(LOWER(category) LIKE ? OR LOWER(COALESCE(description, '')) LIKE ?)"
+    );
+    params.push(q, q);
+  }
+
+  const countRow = db.getFirstSync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM expenses WHERE ${conditions.join(' AND ')}`,
+    params
+  );
+  const totalCount = countRow?.count ?? 0;
+
+  if (options.cursor) {
+    conditions.push('(date < ? OR (date = ? AND id < ?))');
+    params.push(options.cursor.date, options.cursor.date, options.cursor.id);
+  }
+
+  const query = `
+    SELECT * FROM expenses
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY date DESC, id DESC
+    LIMIT ?
+  `;
+  params.push(limit + 1);
+
+  const rows = db.getAllSync<Expense>(query, params);
+  const hasMore = rows.length > limit;
+  const items = hasMore ? rows.slice(0, limit) : rows;
+  const lastItem = items.length > 0 ? items[items.length - 1] : null;
+
+  return {
+    items,
+    hasMore,
+    nextCursor: lastItem ? { date: lastItem.date, id: lastItem.id } : null,
+    totalCount,
+  };
+}
+

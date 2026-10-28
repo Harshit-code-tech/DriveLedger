@@ -629,3 +629,105 @@ export function getVehicleRunningMileage(
   if (!row || row.avg_mileage == null || !row.unit) return null;
   return { value: Number(row.avg_mileage.toFixed(2)), unit: row.unit };
 }
+
+// ─── PAGINATION ───────────────────────────────────────────────────────
+
+export interface PaginatedFuelCursor {
+  date: string;
+  odometer: number;
+  id: string;
+}
+
+export interface PaginatedFuelOptions {
+  limit?: number;
+  cursor?: PaginatedFuelCursor | null;
+  startDate?: string | null;
+  searchQuery?: string | null;
+}
+
+export interface PaginatedFuelResult {
+  items: FuelEntry[];
+  nextCursor: PaginatedFuelCursor | null;
+  hasMore: boolean;
+  totalCount: number;
+}
+
+/**
+ * Returns total non-deleted fuel entries count for a vehicle.
+ */
+export function getFuelEntryCount(vehicleId: string): number {
+  const db = getDatabase();
+  const res = db.getFirstSync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM fuel_entries WHERE vehicle_id = ? AND deleted_at IS NULL',
+    [vehicleId]
+  );
+  return res?.count ?? 0;
+}
+
+/**
+ * Returns cursor-paginated fuel entries ordered by date DESC, odometer DESC, id DESC.
+ */
+export function getPaginatedFuelEntries(
+  vehicleId: string,
+  options: PaginatedFuelOptions = {}
+): PaginatedFuelResult {
+  const db = getDatabase();
+  const limit = Math.max(1, Math.min(options.limit ?? 35, 100));
+  const conditions: string[] = ['vehicle_id = ?', 'deleted_at IS NULL'];
+  const params: (string | number)[] = [vehicleId];
+
+  if (options.startDate) {
+    conditions.push('date >= ?');
+    params.push(options.startDate);
+  }
+
+  if (options.searchQuery && options.searchQuery.trim()) {
+    const q = `%${options.searchQuery.trim().toLowerCase()}%`;
+    conditions.push(
+      "(LOWER(COALESCE(fuel_station, '')) LIKE ? OR LOWER(COALESCE(notes, '')) LIKE ? OR CAST(odometer AS TEXT) LIKE ? OR LOWER(fuel_unit) LIKE ?)"
+    );
+    params.push(q, q, q, q);
+  }
+
+  const countRow = db.getFirstSync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM fuel_entries WHERE ${conditions.join(' AND ')}`,
+    params
+  );
+  const totalCount = countRow?.count ?? 0;
+
+  if (options.cursor) {
+    conditions.push(
+      '(date < ? OR (date = ? AND (odometer < ? OR (odometer = ? AND id < ?))))'
+    );
+    params.push(
+      options.cursor.date,
+      options.cursor.date,
+      options.cursor.odometer,
+      options.cursor.odometer,
+      options.cursor.id
+    );
+  }
+
+  const query = `
+    SELECT * FROM fuel_entries
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY date DESC, odometer DESC, id DESC
+    LIMIT ?
+  `;
+  params.push(limit + 1);
+
+  const rows = db.getAllSync<FuelEntry>(query, params);
+  const hasMore = rows.length > limit;
+  const items = hasMore ? rows.slice(0, limit) : rows;
+  const lastItem = items.length > 0 ? items[items.length - 1] : null;
+
+  return {
+    items,
+    hasMore,
+    nextCursor: lastItem
+      ? { date: lastItem.date, odometer: lastItem.odometer, id: lastItem.id }
+      : null,
+    totalCount,
+  };
+}
+
