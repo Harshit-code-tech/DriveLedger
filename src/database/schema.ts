@@ -263,6 +263,27 @@ const CREATE_INDEXES = `
 
   CREATE INDEX IF NOT EXISTS idx_trip_locations_trip_accepted
     ON trip_locations(trip_id, is_rejected, timestamp);
+
+  -- Evidence-based composite partial indexes for active date-ordered queries & pagination
+  CREATE INDEX IF NOT EXISTS idx_fuel_entries_active_date
+    ON fuel_entries(vehicle_id, date DESC, id DESC)
+    WHERE deleted_at IS NULL;
+
+  CREATE INDEX IF NOT EXISTS idx_service_records_active_date
+    ON service_records(vehicle_id, date DESC, id DESC)
+    WHERE deleted_at IS NULL;
+
+  CREATE INDEX IF NOT EXISTS idx_expenses_active_date
+    ON expenses(vehicle_id, date DESC, id DESC)
+    WHERE deleted_at IS NULL;
+
+  CREATE INDEX IF NOT EXISTS idx_trips_active_time
+    ON trips(vehicle_id, start_time DESC, id DESC)
+    WHERE deleted_at IS NULL;
+
+  CREATE INDEX IF NOT EXISTS idx_documents_active_vehicle
+    ON documents(vehicle_id)
+    WHERE deleted_at IS NULL;
 `;
 
 // ─── Public API ──────────────────────────────────────────────────────

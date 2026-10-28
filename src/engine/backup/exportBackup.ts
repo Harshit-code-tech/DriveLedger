@@ -69,6 +69,10 @@ export async function exportBackupString(
     try {
       const info = await FileSystem.getInfoAsync(uri);
       if (info.exists && !info.isDirectory) {
+        if (info.size && info.size > 15 * 1024 * 1024) {
+          console.warn(`[BackupExport] Skipping oversized attachment (${info.size} bytes): ${uri}`);
+          continue;
+        }
         const base64 = await FileSystem.readAsStringAsync(uri, {
           encoding: FileSystem.EncodingType.Base64,
         });

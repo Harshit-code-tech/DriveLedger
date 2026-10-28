@@ -12,7 +12,7 @@
  * - 📤 Share: Launches the OS share sheet for WhatsApp, Email, Drive, etc.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -27,6 +27,10 @@ import {
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { Typography, Spacing, Sizing } from '@/constants/theme';
 import type { Vehicle } from '@/types/vehicle';
+import type { FuelEntry } from '@/types/fuel';
+import type { ServiceRecord, MaintenanceComponent } from '@/types/service';
+import type { Expense } from '@/types/expense';
+import type { VehicleDocument } from '@/types/document';
 import * as fuelRepo from '@/database/repositories/fuelRepo';
 import * as serviceRepo from '@/database/repositories/serviceRepo';
 import * as expenseRepo from '@/database/repositories/expenseRepo';
@@ -62,30 +66,57 @@ type ExportActionKey =
   | 'share_csv'
   | null;
 
+interface VehicleReportDataSnapshot {
+  fuelEntries: FuelEntry[];
+  serviceRecords: ServiceRecord[];
+  maintenanceComponents: MaintenanceComponent[];
+  expenses: Expense[];
+  documents: VehicleDocument[];
+  allDocuments: VehicleDocument[];
+}
+
 export function ReportExportModal({ visible, onClose, vehicle }: ReportExportModalProps) {
   const colors = useThemeColors();
   const [activeExport, setActiveExport] = useState<ExportActionKey>(null);
+
+  // ── Session Report Snapshot Caching (P2) ──────────────────────────
+  const snapshotRef = useRef<VehicleReportDataSnapshot | null>(null);
+
+  useEffect(() => {
+    if (!visible) {
+      snapshotRef.current = null;
+    }
+  }, [visible, vehicle.id]);
+
+  const getReportSnapshot = useCallback((): VehicleReportDataSnapshot => {
+    if (!snapshotRef.current) {
+      snapshotRef.current = {
+        fuelEntries: fuelRepo.getFuelEntriesByVehicle(vehicle.id),
+        serviceRecords: serviceRepo.getServiceRecordsByVehicle(vehicle.id),
+        maintenanceComponents: maintCompRepo.getMaintenanceComponentsByVehicle(vehicle.id),
+        expenses: expenseRepo.getExpensesByVehicle(vehicle.id),
+        documents: documentRepo.getCurrentDocumentsByVehicle(vehicle.id),
+        allDocuments: documentRepo.getAllDocumentsByVehicle(vehicle.id),
+      };
+    }
+    return snapshotRef.current;
+  }, [vehicle.id]);
 
   // ─── 0. Vehicle History Report Handlers (Feature 7) ───────────────
 
   const handleSaveVehicleHistory = async () => {
     try {
       setActiveExport('save_history');
-      const fuelEntries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
-      const serviceRecords = serviceRepo.getServiceRecordsByVehicle(vehicle.id);
-      const maintenanceComponents = maintCompRepo.getMaintenanceComponentsByVehicle(vehicle.id);
-      const expenses = expenseRepo.getExpensesByVehicle(vehicle.id);
-      const documents = documentRepo.getCurrentDocumentsByVehicle(vehicle.id);
-      const allDocuments = documentRepo.getAllDocumentsByVehicle(vehicle.id);
+      const snap = getReportSnapshot();
 
       const result = await saveVehicleHistoryReportPdf({
         vehicle,
-        fuelEntries,
-        serviceRecords,
-        maintenanceComponents,
-        expenses,
-        documents,
-        allDocuments,
+        fuelEntries: snap.fuelEntries,
+        serviceRecords: snap.serviceRecords,
+        maintenanceComponents: snap.maintenanceComponents,
+        expenses: snap.expenses,
+        documents: snap.documents,
+        allDocuments: snap.allDocuments,
       });
 
       if (result.success) {
@@ -106,21 +137,16 @@ export function ReportExportModal({ visible, onClose, vehicle }: ReportExportMod
   const handleShareVehicleHistory = async () => {
     try {
       setActiveExport('share_history');
-      const fuelEntries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
-      const serviceRecords = serviceRepo.getServiceRecordsByVehicle(vehicle.id);
-      const maintenanceComponents = maintCompRepo.getMaintenanceComponentsByVehicle(vehicle.id);
-      const expenses = expenseRepo.getExpensesByVehicle(vehicle.id);
-      const documents = documentRepo.getCurrentDocumentsByVehicle(vehicle.id);
-      const allDocuments = documentRepo.getAllDocumentsByVehicle(vehicle.id);
+      const snap = getReportSnapshot();
 
       const result = await exportVehicleHistoryReportPdf({
         vehicle,
-        fuelEntries,
-        serviceRecords,
-        maintenanceComponents,
-        expenses,
-        documents,
-        allDocuments,
+        fuelEntries: snap.fuelEntries,
+        serviceRecords: snap.serviceRecords,
+        maintenanceComponents: snap.maintenanceComponents,
+        expenses: snap.expenses,
+        documents: snap.documents,
+        allDocuments: snap.allDocuments,
       });
 
       if (!result.success && !result.cancelled && result.message) {
@@ -141,15 +167,14 @@ export function ReportExportModal({ visible, onClose, vehicle }: ReportExportMod
   const handleSaveServiceLedger = async () => {
     try {
       setActiveExport('save_service');
-      const serviceRecords = serviceRepo.getServiceRecordsByVehicle(vehicle.id);
-      const allExpenses = expenseRepo.getExpensesByVehicle(vehicle.id);
-      const repairExpenses = allExpenses.filter(
+      const snap = getReportSnapshot();
+      const repairExpenses = snap.expenses.filter(
         (e) => e.category === 'Repair' || e.category === 'Tyres' || e.category === 'Accessories'
       );
 
       const result = await saveServiceLedgerPdf({
         vehicle,
-        serviceRecords,
+        serviceRecords: snap.serviceRecords,
         repairExpenses,
       });
 
@@ -171,15 +196,14 @@ export function ReportExportModal({ visible, onClose, vehicle }: ReportExportMod
   const handleShareServiceLedger = async () => {
     try {
       setActiveExport('share_service');
-      const serviceRecords = serviceRepo.getServiceRecordsByVehicle(vehicle.id);
-      const allExpenses = expenseRepo.getExpensesByVehicle(vehicle.id);
-      const repairExpenses = allExpenses.filter(
+      const snap = getReportSnapshot();
+      const repairExpenses = snap.expenses.filter(
         (e) => e.category === 'Repair' || e.category === 'Tyres' || e.category === 'Accessories'
       );
 
       const result = await exportServiceLedgerPdf({
         vehicle,
-        serviceRecords,
+        serviceRecords: snap.serviceRecords,
         repairExpenses,
       });
 
@@ -201,12 +225,9 @@ export function ReportExportModal({ visible, onClose, vehicle }: ReportExportMod
   const handleSaveVehicleDossier = async () => {
     try {
       setActiveExport('save_dossier');
-      const fuelEntries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
-      const serviceRecords = serviceRepo.getServiceRecordsByVehicle(vehicle.id);
-      const expenses = expenseRepo.getExpensesByVehicle(vehicle.id);
-      const documents = documentRepo.getCurrentDocumentsByVehicle(vehicle.id);
+      const snap = getReportSnapshot();
 
-      const mileageStats = computeMileageStats(fuelEntries);
+      const mileageStats = computeMileageStats(snap.fuelEntries);
       const avgMileage = mileageStats.runningAverage?.value ?? null;
       const mileageUnit = mileageStats.runningAverage?.unit
         ? MILEAGE_UNIT_LABELS[mileageStats.runningAverage.unit]
@@ -214,10 +235,10 @@ export function ReportExportModal({ visible, onClose, vehicle }: ReportExportMod
 
       const result = await saveVehicleDossierPdf({
         vehicle,
-        fuelEntries,
-        serviceRecords,
-        expenses,
-        documents,
+        fuelEntries: snap.fuelEntries,
+        serviceRecords: snap.serviceRecords,
+        expenses: snap.expenses,
+        documents: snap.documents,
         avgMileage,
         mileageUnit,
       });
@@ -240,12 +261,9 @@ export function ReportExportModal({ visible, onClose, vehicle }: ReportExportMod
   const handleShareVehicleDossier = async () => {
     try {
       setActiveExport('share_dossier');
-      const fuelEntries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
-      const serviceRecords = serviceRepo.getServiceRecordsByVehicle(vehicle.id);
-      const expenses = expenseRepo.getExpensesByVehicle(vehicle.id);
-      const documents = documentRepo.getCurrentDocumentsByVehicle(vehicle.id);
+      const snap = getReportSnapshot();
 
-      const mileageStats = computeMileageStats(fuelEntries);
+      const mileageStats = computeMileageStats(snap.fuelEntries);
       const avgMileage = mileageStats.runningAverage?.value ?? null;
       const mileageUnit = mileageStats.runningAverage?.unit
         ? MILEAGE_UNIT_LABELS[mileageStats.runningAverage.unit]
@@ -253,10 +271,10 @@ export function ReportExportModal({ visible, onClose, vehicle }: ReportExportMod
 
       const result = await exportVehicleDossierPdf({
         vehicle,
-        fuelEntries,
-        serviceRecords,
-        expenses,
-        documents,
+        fuelEntries: snap.fuelEntries,
+        serviceRecords: snap.serviceRecords,
+        expenses: snap.expenses,
+        documents: snap.documents,
         avgMileage,
         mileageUnit,
       });
@@ -279,15 +297,13 @@ export function ReportExportModal({ visible, onClose, vehicle }: ReportExportMod
   const handleSaveCsv = async () => {
     try {
       setActiveExport('save_csv');
-      const fuelEntries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
-      const expenses = expenseRepo.getExpensesByVehicle(vehicle.id);
-      const serviceRecords = serviceRepo.getServiceRecordsByVehicle(vehicle.id);
+      const snap = getReportSnapshot();
 
       const result = await saveFuelExpensesCsvFile(
         vehicle,
-        fuelEntries,
-        expenses,
-        serviceRecords
+        snap.fuelEntries,
+        snap.expenses,
+        snap.serviceRecords
       );
 
       if (result.success) {
@@ -308,15 +324,13 @@ export function ReportExportModal({ visible, onClose, vehicle }: ReportExportMod
   const handleShareCsv = async () => {
     try {
       setActiveExport('share_csv');
-      const fuelEntries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
-      const expenses = expenseRepo.getExpensesByVehicle(vehicle.id);
-      const serviceRecords = serviceRepo.getServiceRecordsByVehicle(vehicle.id);
+      const snap = getReportSnapshot();
 
       const result = await exportFuelExpensesCsvFile(
         vehicle,
-        fuelEntries,
-        expenses,
-        serviceRecords
+        snap.fuelEntries,
+        snap.expenses,
+        snap.serviceRecords
       );
 
       if (!result.success && !result.cancelled && result.message) {
