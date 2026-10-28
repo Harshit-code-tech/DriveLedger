@@ -29,6 +29,7 @@ import type {
 } from "@/types/trip";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
+import { perfObserver } from "@/services/perfObserver";
 
 export const BACKGROUND_LOCATION_TASK = "DRIVELEDGER_BACKGROUND_LOCATION_TASK";
 
@@ -343,12 +344,20 @@ export async function handleBackgroundLocations(
   currentDiagnostics.anchor_needed = false;
 
   try {
+    const startWrite = performance.now();
     tripRepo.persistTripLocationsAndUpdate(activeTrip.id, newSamplesToPersist, {
       distance_km: newDistanceKm,
       sample_count: currentDiagnostics.accepted_samples_count,
       quality_warning: qualityWarning,
       diagnostics: JSON.stringify(currentDiagnostics),
     });
+    const writeDuration = performance.now() - startWrite;
+    perfObserver.recordGpsBatch(
+      locations.length,
+      newSamplesToPersist.length,
+      locations.length - newSamplesToPersist.length,
+      writeDuration
+    );
   } catch (err) {
     needsNewAnchor = true;
     console.warn(

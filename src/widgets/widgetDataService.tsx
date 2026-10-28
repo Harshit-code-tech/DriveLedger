@@ -40,6 +40,7 @@ let widgetSyncPromise: Promise<void> | null = null;
 let gpsWidgetSyncPromise: Promise<void> | null = null;
 
 import { getNextVehicleId } from '@/services/tripCoordinatorService';
+import { perfObserver } from '@/services/perfObserver';
 
 export { getNextVehicleId };
 
@@ -314,10 +315,12 @@ async function performWidgetSync(): Promise<void> {
 
     // Skip redundant updates and native render if snapshot is identical to last rendered
     if (serialized === lastRenderedGlanceSnapshot) {
+      perfObserver.recordWidgetSync(false);
       return;
     }
 
     lastRenderedGlanceSnapshot = serialized;
+    perfObserver.recordWidgetSync(true);
 
     // Persist for background task handler
     await AsyncStorage.setItem(WIDGET_STORAGE_KEY, serialized);
@@ -558,10 +561,12 @@ async function performGpsWidgetSync(): Promise<void> {
 
     // Skip redundant updates and native render if snapshot is identical to last rendered
     if (serialized === lastRenderedGpsSnapshot) {
+      perfObserver.recordWidgetSync(false);
       return;
     }
 
     lastRenderedGpsSnapshot = serialized;
+    perfObserver.recordWidgetSync(true);
 
     await AsyncStorage.setItem(GPS_WIDGET_STORAGE_KEY, serialized);
 

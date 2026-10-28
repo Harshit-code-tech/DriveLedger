@@ -41,6 +41,7 @@ import { getPreferences } from '@/stores/preferencesStore';
 import { getServiceDueStatus } from '@/stores/serviceStore';
 import { daysUntil } from '@/utils/date';
 import { dataRevisionTracker } from '@/services/dataRevisionTracker';
+import { perfObserver } from '@/services/perfObserver';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isRunningInExpoGo } from 'expo';
 import { Platform } from 'react-native';
@@ -492,6 +493,7 @@ export async function reconcileNotifications(
   }
 
   try {
+    const startMs = performance.now();
     const prefs = getPreferences();
     if (!prefs.notificationsEnabled) {
       lastReconciledSignature = null;
@@ -542,11 +544,13 @@ export async function reconcileNotifications(
     }
 
     // 2. Fetch existing scheduled notifications from OS
-    const scheduledList = (await N.getAllScheduledNotificationsAsync()) || [];
+    const scheduled = (await N.getAllScheduledNotificationsAsync()) || [];
     let monthlySummaryScheduled = false;
     const satisfiedDocReminders = new Set<string>();
+    let cancelledCount = 0;
+    let scheduledCount = 0;
 
-    for (const req of scheduledList) {
+    for (const req of scheduled) {
       const data = (req.content?.data || {}) as Record<string, unknown>;
       const notifType = data.type as string | undefined;
 
@@ -554,6 +558,7 @@ export async function reconcileNotifications(
         if (monthlySummaryScheduled) {
           try {
             await N.cancelScheduledNotificationAsync(req.identifier);
+            cancelledCount++;
           } catch (e) {
             console.warn('[DriveLedger] Error cancelling duplicate monthly summary:', e);
           }
@@ -568,6 +573,7 @@ export async function reconcileNotifications(
           // Document was deleted, renewed, moved out of window, or duplicate -> cancel
           try {
             await N.cancelScheduledNotificationAsync(req.identifier);
+            cancelledCount++;
           } catch (e) {
             console.warn('[DriveLedger] Error cancelling obsolete reminder:', e);
           }
@@ -579,6 +585,7 @@ export async function reconcileNotifications(
             // Content or days changed -> cancel old so fresh one gets scheduled below
             try {
               await N.cancelScheduledNotificationAsync(req.identifier);
+              cancelledCount++;
             } catch (e) {
               console.warn('[DriveLedger] Error cancelling outdated reminder:', e);
             }
@@ -610,6 +617,7 @@ export async function reconcileNotifications(
             channelId: CHANNEL_DOCUMENT_EXPIRY,
           },
         });
+        scheduledCount++;
       } catch (err) {
         console.warn(`[DriveLedger] Failed to schedule reminder for doc ${docId}:`, err);
       }
@@ -619,6 +627,7 @@ export async function reconcileNotifications(
     if (!monthlySummaryScheduled) {
       try {
         await scheduleMonthlySummary(N);
+        scheduledCount++;
       } catch (err) {
         console.warn('[DriveLedger] Failed to schedule monthly summary:', err);
       }
@@ -661,6 +670,11 @@ export async function reconcileNotifications(
     }
 
     lastReconciledSignature = currentSignature;
+    const durationMs = performance.now() - startMs;
+    perfObserver.recordNotificationReconciliation(
+      cancelledCount + scheduledCount + (context.sentLogChanged ? 1 : 0),
+      durationMs
+    );
   } catch (error) {
     console.warn('[DriveLedger] reconcileNotifications encountered an error:', error);
   }
