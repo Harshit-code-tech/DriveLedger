@@ -334,7 +334,7 @@ export async function getAllActiveAttachmentUris(): Promise<Set<string>> {
   const uris = new Set<string>();
 
   const queries = [
-    'SELECT receipt_photo_uri AS uri FROM fuel_records WHERE receipt_photo_uri IS NOT NULL',
+    'SELECT receipt_photo_uri AS uri FROM fuel_entries WHERE receipt_photo_uri IS NOT NULL',
     'SELECT receipt_photo_uri AS uri FROM service_records WHERE receipt_photo_uri IS NOT NULL',
     'SELECT receipt_photo_uri AS uri FROM expenses WHERE receipt_photo_uri IS NOT NULL',
     'SELECT file_uri AS uri FROM documents WHERE file_uri IS NOT NULL',

@@ -190,6 +190,18 @@ describe('attachmentStorage', () => {
       expect(uris.has('file:///att/service1.jpg')).toBe(true);
       expect(uris.has('file:///att/expense1.jpg')).toBe(true);
       expect(uris.has('file:///att/doc1.pdf')).toBe(true);
+      expect(mockGetAllSync).toHaveBeenCalledWith(
+        expect.stringContaining('FROM fuel_entries')
+      );
+      expect(mockGetAllSync).toHaveBeenCalledWith(
+        expect.stringContaining('FROM service_records')
+      );
+      expect(mockGetAllSync).toHaveBeenCalledWith(
+        expect.stringContaining('FROM expenses')
+      );
+      expect(mockGetAllSync).toHaveBeenCalledWith(
+        expect.stringContaining('FROM documents')
+      );
     });
   });
 });

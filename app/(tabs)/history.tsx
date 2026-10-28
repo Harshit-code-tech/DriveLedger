@@ -172,7 +172,7 @@ export default function HistoryScreen() {
       if (!selectedVehicle) return;
       const startDate = getDateRangeStart(dateRange);
       const cursor = reset ? null : fuelData.nextCursor;
-      if (!reset && !fuelData.hasMore) return;
+      if (!reset && (!fuelData.hasMore || fuelData.isLoadingMore)) return;
 
       if (!reset) setFuelData((prev) => ({ ...prev, isLoadingMore: true }));
       try {
@@ -195,7 +195,7 @@ export default function HistoryScreen() {
         setFuelData((prev) => ({ ...prev, isLoadingMore: false }));
       }
     },
-    [selectedVehicle?.id, dateRange, debouncedSearch, fuelData.nextCursor, fuelData.hasMore]
+    [selectedVehicle?.id, dateRange, debouncedSearch, fuelData.nextCursor, fuelData.hasMore, fuelData.isLoadingMore]
   );
 
   const loadService = useCallback(
@@ -203,7 +203,7 @@ export default function HistoryScreen() {
       if (!selectedVehicle) return;
       const startDate = getDateRangeStart(dateRange);
       const cursor = reset ? null : serviceData.nextCursor;
-      if (!reset && !serviceData.hasMore) return;
+      if (!reset && (!serviceData.hasMore || serviceData.isLoadingMore)) return;
 
       if (!reset) setServiceData((prev) => ({ ...prev, isLoadingMore: true }));
       try {
@@ -232,7 +232,7 @@ export default function HistoryScreen() {
         setServiceData((prev) => ({ ...prev, isLoadingMore: false }));
       }
     },
-    [selectedVehicle?.id, dateRange, debouncedSearch, serviceData.nextCursor, serviceData.hasMore]
+    [selectedVehicle?.id, dateRange, debouncedSearch, serviceData.nextCursor, serviceData.hasMore, serviceData.isLoadingMore]
   );
 
   const loadExpenses = useCallback(
@@ -240,7 +240,7 @@ export default function HistoryScreen() {
       if (!selectedVehicle) return;
       const startDate = getDateRangeStart(dateRange);
       const cursor = reset ? null : expenseData.nextCursor;
-      if (!reset && !expenseData.hasMore) return;
+      if (!reset && (!expenseData.hasMore || expenseData.isLoadingMore)) return;
 
       if (!reset) setExpenseData((prev) => ({ ...prev, isLoadingMore: true }));
       try {
@@ -263,7 +263,7 @@ export default function HistoryScreen() {
         setExpenseData((prev) => ({ ...prev, isLoadingMore: false }));
       }
     },
-    [selectedVehicle?.id, dateRange, debouncedSearch, expenseData.nextCursor, expenseData.hasMore]
+    [selectedVehicle?.id, dateRange, debouncedSearch, expenseData.nextCursor, expenseData.hasMore, expenseData.isLoadingMore]
   );
 
   const loadTrips = useCallback(
@@ -271,7 +271,7 @@ export default function HistoryScreen() {
       if (!selectedVehicle) return;
       const startDate = getDateRangeStart(dateRange);
       const cursor = reset ? null : tripData.nextCursor;
-      if (!reset && !tripData.hasMore) return;
+      if (!reset && (!tripData.hasMore || tripData.isLoadingMore)) return;
 
       if (!reset) setTripData((prev) => ({ ...prev, isLoadingMore: true }));
       try {
@@ -294,7 +294,7 @@ export default function HistoryScreen() {
         setTripData((prev) => ({ ...prev, isLoadingMore: false }));
       }
     },
-    [selectedVehicle?.id, dateRange, debouncedSearch, tripData.nextCursor, tripData.hasMore]
+    [selectedVehicle?.id, dateRange, debouncedSearch, tripData.nextCursor, tripData.hasMore, tripData.isLoadingMore]
   );
 
   // Reload current tab on filter/vehicle change
