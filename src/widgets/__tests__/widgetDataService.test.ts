@@ -9,6 +9,10 @@ import {
   getGpsWidgetDataSnapshot,
   getCachedGpsWidgetData,
   syncGpsWidgetState,
+  syncWidgetState,
+  getWidgetDataSnapshot,
+  resetWidgetSnapshotCacheForTesting,
+  WIDGET_NAME,
   GPS_WIDGET_NAME,
   GPS_WIDGET_STORAGE_KEY,
   DEFAULT_GPS_WIDGET_DATA,
@@ -32,6 +36,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 
 describe('WidgetDataService GPS Widget Snapshot & Sync Suite', () => {
   beforeEach(() => {
+    resetWidgetSnapshotCacheForTesting();
     resetMockDatabase();
     const db = getDatabase();
     createTables(db);
@@ -174,5 +179,45 @@ describe('WidgetDataService GPS Widget Snapshot & Sync Suite', () => {
         widgetName: GPS_WIDGET_NAME,
       })
     );
+  });
+
+  it('skips redundant native widget render when GPS snapshot has not changed', async () => {
+    vehicleRepo.createVehicle({
+      nickname: 'Suzuki Swift',
+      vehicle_type: VehicleType.CAR,
+      fuel_type: FuelType.PETROL,
+      registration_number: 'DL08PQ1111',
+      current_odometer: 32000,
+    });
+
+    await syncGpsWidgetState();
+    expect(requestWidgetUpdate).toHaveBeenCalledTimes(2); // hero + compact
+
+    // Second call without any state changes
+    await syncGpsWidgetState();
+    // Count remains 2 because snapshot is unchanged
+    expect(requestWidgetUpdate).toHaveBeenCalledTimes(2);
+  });
+
+  it('syncWidgetState renders glance widget and skips redundant subsequent syncs', async () => {
+    vehicleRepo.createVehicle({
+      nickname: 'Mahindra Thar',
+      vehicle_type: VehicleType.CAR,
+      fuel_type: FuelType.DIESEL,
+      registration_number: 'MH02TH4444',
+      current_odometer: 12000,
+    });
+
+    await syncWidgetState();
+    expect(requestWidgetUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        widgetName: WIDGET_NAME,
+      })
+    );
+    const initialCalls = (requestWidgetUpdate as jest.Mock).mock.calls.length;
+
+    // Second sync without data changes
+    await syncWidgetState();
+    expect((requestWidgetUpdate as jest.Mock).mock.calls.length).toBe(initialCalls);
   });
 });

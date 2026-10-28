@@ -129,18 +129,47 @@ export function getFuelEntryById(id: string): FuelEntry | null {
 }
 
 /**
- * Returns the most recent fuel entry (by odometer) for a vehicle.
- * Used for odometer smart-defaulting on the fuel entry form.
+ * Returns the most recent fuel entry for a vehicle (ordered by date DESC, odometer DESC).
+ * Used for odometer smart-defaulting and recency checks.
  */
 export function getLatestFuelEntry(vehicleId: string): FuelEntry | null {
   const db = getDatabase();
   return db.getFirstSync<FuelEntry>(
     `SELECT * FROM fuel_entries
      WHERE vehicle_id = ? AND deleted_at IS NULL
-     ORDER BY odometer DESC
+     ORDER BY date DESC, odometer DESC
      LIMIT 1`,
     [vehicleId]
   );
+}
+
+/**
+ * Returns the most recent fuel entry with a non-null calculated mileage.
+ * Used for widget snapshots when the latest entry was a partial fill without mileage.
+ */
+export function getLatestFuelEntryWithMileage(vehicleId: string): FuelEntry | null {
+  const db = getDatabase();
+  return db.getFirstSync<FuelEntry>(
+    `SELECT * FROM fuel_entries
+     WHERE vehicle_id = ? AND deleted_at IS NULL AND calculated_mileage IS NOT NULL
+     ORDER BY date DESC, odometer DESC
+     LIMIT 1`,
+    [vehicleId]
+  );
+}
+
+/**
+ * Returns total fuel cost spent in a specific calendar month (YYYY-MM).
+ */
+export function getMonthlyFuelTotal(vehicleId: string, yearMonth: string): number {
+  const db = getDatabase();
+  const result = db.getFirstSync<{ total: number | null }>(
+    `SELECT SUM(total_cost) AS total FROM fuel_entries
+     WHERE vehicle_id = ? AND deleted_at IS NULL
+     AND date LIKE ?`,
+    [vehicleId, `${yearMonth}%`]
+  );
+  return result?.total ?? 0;
 }
 
 /**

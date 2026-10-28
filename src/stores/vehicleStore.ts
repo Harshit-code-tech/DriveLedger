@@ -21,6 +21,7 @@ import type { Vehicle, CreateVehicleInput, UpdateVehicleInput } from '@/types/ve
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import { getPreferences, usePreferencesStore } from '@/stores/preferencesStore';
 import { syncWidgetState } from '@/widgets/widgetDataService';
+import { refreshReminders } from '@/services/notificationService';
 import { storeRegistry } from '@/stores/storeRegistry';
 import { dataRevisionTracker } from '@/services/dataRevisionTracker';
 
@@ -116,6 +117,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
     set({ vehicles, selectedVehicle: selected });
     dataRevisionTracker.bumpRevision('vehicles');
     if (Platform.OS === 'android') syncWidgetState();
+    refreshReminders();
     return newVehicle;
   },
 
@@ -128,6 +130,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
       set({ vehicles, selectedVehicle: selected });
       dataRevisionTracker.bumpRevision('vehicles', id);
       if (Platform.OS === 'android') syncWidgetState();
+      refreshReminders();
     }
     return updated;
   },
@@ -151,6 +154,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
     set({ vehicles, selectedVehicle: selected });
     dataRevisionTracker.bumpRevision('vehicles');
     if (Platform.OS === 'android') syncWidgetState();
+    refreshReminders();
     // Keep archivedVehicles list in sync so subscribers don't need a separate repo call
     get().loadArchivedVehicles();
   },
@@ -160,5 +164,6 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
     dataRevisionTracker.bumpRevision('vehicles');
     get().loadVehicles();
     get().loadArchivedVehicles();
+    refreshReminders();
   },
 }));

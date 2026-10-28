@@ -59,6 +59,22 @@ class DataRevisionTracker {
   }
 
   /**
+   * Returns a compact key representing current revisions for the specified datasets.
+   */
+  getRevisionsKey(datasets?: DatasetType[], vehicleId?: string): string {
+    const list = datasets ?? [
+      'vehicles',
+      'fuel',
+      'services',
+      'expenses',
+      'trips',
+      'documents',
+      'maintenanceProfiles',
+    ];
+    return list.map((d) => `${d}:${this.getRevision(d, vehicleId)}`).join('|');
+  }
+
+  /**
    * Reset all counters (primarily for tests).
    */
   reset(): void {

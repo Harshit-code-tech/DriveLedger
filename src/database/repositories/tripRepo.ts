@@ -180,6 +180,21 @@ export function getTripsByVehicle(vehicleId: string): Trip[] {
   );
 }
 
+/**
+ * Returns the most recent completed or logged trip for a vehicle.
+ * Used for widget idle snapshot recap.
+ */
+export function getLatestTripByVehicle(vehicleId: string): Trip | null {
+  const db = getDatabase();
+  return db.getFirstSync<Trip>(
+    `SELECT * FROM trips
+     WHERE vehicle_id = ? AND deleted_at IS NULL AND status != 'discarded'
+     ORDER BY start_time DESC
+     LIMIT 1`,
+    [vehicleId],
+  );
+}
+
 export function getTripById(id: string): Trip | null {
   const db = getDatabase();
   return db.getFirstSync<Trip>(

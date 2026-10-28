@@ -116,54 +116,37 @@ export async function getWidgetDataSnapshot(): Promise<VehicleGlanceWidgetData> 
     const vehicleCount = vehicles.length;
 
     // ── Fuel entries ──────────────────────────────────────────────────────────
-    const allEntries = fuelRepo.getFuelEntriesByVehicle(vehicle.id);
-    const validMileageEntries = allEntries.filter((e) => e.calculated_mileage != null);
-
-    // Last fill mileage: most recent entry with a calculated mileage
+    const latestFuel = fuelRepo.getLatestFuelEntry(vehicle.id);
     let lastFillMileage = '—';
     let runningAvgMileage = 'No data';
     let lastFillDate = '—';
 
-    if (allEntries.length > 0) {
-      const latest = allEntries[0]; // getFuelEntriesByVehicle returns DESC
-      lastFillDate = shortDateLabel(latest.date);
+    if (latestFuel) {
+      lastFillDate = shortDateLabel(latestFuel.date);
 
-      if (latest.calculated_mileage && latest.mileage_unit) {
-        const label = MILEAGE_UNIT_LABELS[latest.mileage_unit] ?? latest.mileage_unit;
-        lastFillMileage = `${latest.calculated_mileage.toFixed(1)} ${label}`;
-      } else if (validMileageEntries.length > 0) {
-        // Latest has no mileage (e.g. partial fill) — find the most recent that does
-        const lastWithMileage = validMileageEntries[0];
-        const label = MILEAGE_UNIT_LABELS[lastWithMileage.mileage_unit!] ?? lastWithMileage.mileage_unit!;
-        lastFillMileage = `~${lastWithMileage.calculated_mileage!.toFixed(1)} ${label}`;
+      if (latestFuel.calculated_mileage && latestFuel.mileage_unit) {
+        const label = MILEAGE_UNIT_LABELS[latestFuel.mileage_unit] ?? latestFuel.mileage_unit;
+        lastFillMileage = `${latestFuel.calculated_mileage.toFixed(1)} ${label}`;
+      } else {
+        const lastWithMileage = fuelRepo.getLatestFuelEntryWithMileage(vehicle.id);
+        if (lastWithMileage && lastWithMileage.calculated_mileage && lastWithMileage.mileage_unit) {
+          const label = MILEAGE_UNIT_LABELS[lastWithMileage.mileage_unit] ?? lastWithMileage.mileage_unit;
+          lastFillMileage = `~${lastWithMileage.calculated_mileage.toFixed(1)} ${label}`;
+        }
       }
     }
 
-    if (validMileageEntries.length > 0) {
-      const avg = validMileageEntries.reduce((s, e) => s + (e.calculated_mileage ?? 0), 0) / validMileageEntries.length;
-      // Determine unit from most recent valid entry
-      const unit = validMileageEntries[0].mileage_unit
-        ? (MILEAGE_UNIT_LABELS[validMileageEntries[0].mileage_unit] ?? validMileageEntries[0].mileage_unit)
-        : 'km/L';
-      runningAvgMileage = `Avg ${avg.toFixed(1)} ${unit}`;
+    const runningMileage = fuelRepo.getVehicleRunningMileage(vehicle.id);
+    if (runningMileage) {
+      const unitLabel = MILEAGE_UNIT_LABELS[runningMileage.unit] ?? runningMileage.unit;
+      runningAvgMileage = `Avg ${runningMileage.value.toFixed(1)} ${unitLabel}`;
     }
 
     // ── Monthly Spend ─────────────────────────────────────────────────────────
     const yearMonth = currentYearMonth();
-
-    // Fuel cost this month
-    const monthlyFuel = allEntries
-      .filter((e) => e.date.startsWith(yearMonth))
-      .reduce((s, e) => s + (e.total_cost ?? 0), 0);
-
-    // Expense cost this month (getMonthlyExpenseTotal is available in expenseRepo)
+    const monthlyFuel = fuelRepo.getMonthlyFuelTotal(vehicle.id, yearMonth);
     const monthlyExpense = expenseRepo.getMonthlyExpenseTotal(vehicle.id, yearMonth);
-
-    // Service cost this month
-    const svcRecords = serviceRepo.getServiceRecordsByVehicle(vehicle.id);
-    const monthlySvc = svcRecords
-      .filter((r) => r.date.startsWith(yearMonth))
-      .reduce((s, r) => s + (r.cost ?? 0), 0);
+    const monthlySvc = serviceRepo.getMonthlyServiceTotal(vehicle.id, yearMonth);
 
     const totalMonthlySpend = monthlyFuel + monthlyExpense + monthlySvc;
     const monthlySpend = `${formatAmount(totalMonthlySpend)} this month`;
@@ -189,9 +172,9 @@ export async function getWidgetDataSnapshot(): Promise<VehicleGlanceWidgetData> 
     }
 
     // ── Documents: PUC & Insurance ────────────────────────────────────────────
-    const documents = documentRepo.getAllDocumentsByVehicle(vehicle.id);
+    const documents = documentRepo.getCurrentDocumentsByVehicle(vehicle.id);
     const activeDocOf = (type: DocumentType) =>
-      documents.find((d) => d.type === type && !d.superseded_by);
+      documents.find((d) => d.type === type);
 
     // PUC
     const pucDoc = activeDocOf(DocumentType.PUC);
@@ -305,6 +288,14 @@ export async function getCachedWidgetData(): Promise<VehicleGlanceWidgetData> {
 
 // ─── Main sync function ───────────────────────────────────────────────────────
 
+let lastRenderedGlanceSnapshot: string | null = null;
+let lastRenderedGpsSnapshot: string | null = null;
+
+export function resetWidgetSnapshotCacheForTesting(): void {
+  lastRenderedGlanceSnapshot = null;
+  lastRenderedGpsSnapshot = null;
+}
+
 /**
  * Builds a fresh snapshot and pushes it to the Android home screen widget.
  *
@@ -317,20 +308,19 @@ export async function getCachedWidgetData(): Promise<VehicleGlanceWidgetData> {
 async function performWidgetSync(): Promise<void> {
   if (Platform.OS !== 'android') return;
 
-  // Re-evaluate reminders whenever vehicle/fuel/service/document data changes.
-  // Lazy require: notificationService imports serviceStore, which imports this file.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require('@/services/notificationService').refreshReminders();
-  } catch (e) {
-    console.debug('[DriveLedger] Reminder refresh skipped:', e);
-  }
-
   try {
     const data = await getWidgetDataSnapshot();
+    const serialized = JSON.stringify(data);
+
+    // Skip redundant updates and native render if snapshot is identical to last rendered
+    if (serialized === lastRenderedGlanceSnapshot) {
+      return;
+    }
+
+    lastRenderedGlanceSnapshot = serialized;
 
     // Persist for background task handler
-    await AsyncStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify(data));
+    await AsyncStorage.setItem(WIDGET_STORAGE_KEY, serialized);
 
     // Request native Android widget bitmap render & update
     try {
@@ -487,9 +477,8 @@ export async function getGpsWidgetDataSnapshot(): Promise<GpsCockpitWidgetData> 
     let lastTripDistanceKm: number | null = null;
     let lastTripDuration: string | null = null;
     try {
-      const trips = tripRepo.getTripsByVehicle(vehicle.id);
-      if (trips && trips.length > 0) {
-        const last = trips[0];
+      const last = tripRepo.getLatestTripByVehicle(vehicle.id);
+      if (last) {
         lastTripDistanceKm = last.distance_km;
         const mins = Math.round((last.duration_seconds || 0) / 60);
         lastTripDuration = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
@@ -502,7 +491,7 @@ export async function getGpsWidgetDataSnapshot(): Promise<GpsCockpitWidgetData> 
     let checklistSummary = 'Ready ✅';
     let highwayChecklistReady = true;
     try {
-      const docs = documentRepo.getAllDocumentsByVehicle(vehicle.id);
+      const docs = documentRepo.getCurrentDocumentsByVehicle(vehicle.id);
       const rawChecked = await AsyncStorage.getItem(`@driveledger_checklist_${vehicle.id}`);
       const checkedIds = rawChecked ? JSON.parse(rawChecked) : [];
       const items = buildPreTripChecklist(vehicle, docs, checkedIds);
@@ -565,7 +554,16 @@ async function performGpsWidgetSync(): Promise<void> {
 
   try {
     const data = await getGpsWidgetDataSnapshot();
-    await AsyncStorage.setItem(GPS_WIDGET_STORAGE_KEY, JSON.stringify(data));
+    const serialized = JSON.stringify(data);
+
+    // Skip redundant updates and native render if snapshot is identical to last rendered
+    if (serialized === lastRenderedGpsSnapshot) {
+      return;
+    }
+
+    lastRenderedGpsSnapshot = serialized;
+
+    await AsyncStorage.setItem(GPS_WIDGET_STORAGE_KEY, serialized);
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports

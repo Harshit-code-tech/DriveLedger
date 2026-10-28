@@ -218,3 +218,17 @@ export function getVehicleServiceAggregates(
     monthlyAggregates,
   };
 }
+
+/**
+ * Returns total service cost spent in a specific calendar month (YYYY-MM).
+ */
+export function getMonthlyServiceTotal(vehicleId: string, yearMonth: string): number {
+  const db = getDatabase();
+  const result = db.getFirstSync<{ total: number | null }>(
+    `SELECT SUM(cost) AS total FROM service_records
+     WHERE vehicle_id = ? AND deleted_at IS NULL
+     AND date LIKE ?`,
+    [vehicleId, `${yearMonth}%`]
+  );
+  return result?.total ?? 0;
+}

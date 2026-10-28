@@ -40,6 +40,7 @@ import {
 import { getPreferences } from '@/stores/preferencesStore';
 import { getServiceDueStatus } from '@/stores/serviceStore';
 import { daysUntil } from '@/utils/date';
+import { dataRevisionTracker } from '@/services/dataRevisionTracker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isRunningInExpoGo } from 'expo';
 import { Platform } from 'react-native';
@@ -141,6 +142,11 @@ export async function requestNotificationPermission(): Promise<boolean> {
 
 type NotificationsModule = typeof import('expo-notifications');
 
+interface ReconciliationContext {
+  sentLog: Record<string, number>;
+  sentLogChanged: boolean;
+}
+
 /**
  * Fires a notification immediately, at most once per cooldown window for the
  * same message (prevents spam when data changes trigger a re-check).
@@ -151,16 +157,19 @@ async function notifyNow(
   title: string,
   body: string,
   data: Record<string, unknown>,
-  cooldownDays: number = DEFAULT_COOLDOWN_DAYS
+  cooldownDays: number = DEFAULT_COOLDOWN_DAYS,
+  context?: ReconciliationContext
 ): Promise<string | null> {
   const key = `${channelId}|${title}|${body}`;
   const now = Date.now();
-  let log: Record<string, number> = {};
-  try {
-    const raw = await AsyncStorage.getItem(SENT_LOG_KEY);
-    if (raw) log = JSON.parse(raw);
-  } catch {
-    // ignore — treat as empty log
+  let log: Record<string, number> = context ? context.sentLog : {};
+  if (!context) {
+    try {
+      const raw = await AsyncStorage.getItem(SENT_LOG_KEY);
+      if (raw) log = JSON.parse(raw);
+    } catch {
+      // ignore — treat as empty log
+    }
   }
   if (isInCooldown(log[key], now, cooldownDays)) return null;
 
@@ -169,16 +178,22 @@ async function notifyNow(
     trigger: { channelId },
   });
 
-  // Persist, pruning entries older than 60 days
-  const pruned: Record<string, number> = {};
-  for (const [k, t] of Object.entries(log)) {
-    if (now - t < 60 * 24 * 60 * 60 * 1000) pruned[k] = t;
-  }
-  pruned[key] = now;
-  try {
-    await AsyncStorage.setItem(SENT_LOG_KEY, JSON.stringify(pruned));
-  } catch {
-    // non-fatal
+  if (context) {
+    context.sentLog[key] = now;
+    context.sentLogChanged = true;
+  } else {
+    // Standalone fallback: persist, pruning entries older than 60 days
+    const pruned: Record<string, number> = {};
+    const sixtyDaysAgo = now - 60 * 24 * 60 * 60 * 1000;
+    for (const [k, t] of Object.entries(log)) {
+      if (t >= sixtyDaysAgo) pruned[k] = t;
+    }
+    pruned[key] = now;
+    try {
+      await AsyncStorage.setItem(SENT_LOG_KEY, JSON.stringify(pruned));
+    } catch {
+      // non-fatal
+    }
   }
   return id;
 }
@@ -192,7 +207,8 @@ function pluralDays(n: number): string {
 
 async function scheduleDocumentNotifications(
   N: NotificationsModule,
-  vehicleId: string
+  vehicleId: string,
+  context?: ReconciliationContext
 ): Promise<void> {
   const docs = documentRepo.getCurrentDocumentsByVehicle(vehicleId);
   const vehicle = vehicleRepo.getVehicleById(vehicleId);
@@ -212,28 +228,36 @@ async function scheduleDocumentNotifications(
           N, CHANNEL_DOCUMENT_EXPIRY,
           '🚨 PUC Expired! Immediate ₹10,000 Fine Risk',
           `PUC certificate for ${vName} expired ${pluralDays(Math.abs(days))} ago. Renew immediately at any petrol pump to avoid heavy fines under Sec 190(2).`,
-          data
+          data,
+          DEFAULT_COOLDOWN_DAYS,
+          context
         );
       } else if (days === 1) {
         await notifyNow(
           N, CHANNEL_DOCUMENT_EXPIRY,
           '🚨 PUC Expires Tomorrow! (Avoid ₹10,000 Fine)',
           `Your Pollution Under Control certificate for ${vName} expires tomorrow. Most testing centers take only 5 minutes.`,
-          data
+          data,
+          DEFAULT_COOLDOWN_DAYS,
+          context
         );
       } else if (days <= 7) {
         await notifyNow(
           N, CHANNEL_DOCUMENT_EXPIRY,
           `⚠️ PUC Expiring in ${pluralDays(days)}`,
           `PUC for ${vName} expires in ${pluralDays(days)}. Avoid heavy fines under the Motor Vehicles Act by renewing soon.`,
-          data
+          data,
+          DEFAULT_COOLDOWN_DAYS,
+          context
         );
       } else if (days <= 15) {
         await notifyNow(
           N, CHANNEL_DOCUMENT_EXPIRY,
           '📋 PUC Renewal Window Open (15 Days Left)',
           `PUC for ${vName} expires in ${days} days. Plan a quick test at your next fuel refill.`,
-          data
+          data,
+          DEFAULT_COOLDOWN_DAYS,
+          context
         );
       }
       continue;
@@ -246,14 +270,18 @@ async function scheduleDocumentNotifications(
           N, CHANNEL_DOCUMENT_EXPIRY,
           '🚨 FASTag Expired / KYC Lapsed',
           `FASTag for ${vName} has expired or needs KYC update. Toll booths charge double cash toll for inactive tags.`,
-          data
+          data,
+          DEFAULT_COOLDOWN_DAYS,
+          context
         );
       } else if (days <= 15) {
         await notifyNow(
           N, CHANNEL_DOCUMENT_EXPIRY,
           '⚠️ FASTag KYC / Validity Notice',
           `FASTag validity or KYC renewal for ${vName} is due in ${pluralDays(days)}. Check your issuing bank portal.`,
-          data
+          data,
+          DEFAULT_COOLDOWN_DAYS,
+          context
         );
       }
       continue;
@@ -265,21 +293,27 @@ async function scheduleDocumentNotifications(
         N, CHANNEL_DOCUMENT_EXPIRY,
         `🚨 ${label} Expired!`,
         `Your ${label} for ${vName} expired ${pluralDays(Math.abs(days))} ago. Please renew it immediately.`,
-        data
+        data,
+        DEFAULT_COOLDOWN_DAYS,
+        context
       );
     } else if (days <= 7) {
       await notifyNow(
         N, CHANNEL_DOCUMENT_EXPIRY,
         `⚠️ ${label} Expiring in ${pluralDays(days)}!`,
         `Your ${label} for ${vName} expires in ${pluralDays(days)}. Renew before it lapses!`,
-        data
+        data,
+        DEFAULT_COOLDOWN_DAYS,
+        context
       );
     } else if (days <= 30) {
       await notifyNow(
         N, CHANNEL_DOCUMENT_EXPIRY,
         `📋 ${label} Expiry Notice`,
         `Your ${label} for ${vName} expires in ${days} days. Plan to renew it soon.`,
-        data
+        data,
+        DEFAULT_COOLDOWN_DAYS,
+        context
       );
     }
   }
@@ -294,7 +328,8 @@ async function scheduleDocumentNotifications(
 async function scheduleServiceNotifications(
   N: NotificationsModule,
   vehicleId: string,
-  includeTargets: boolean = true
+  includeTargets: boolean = true,
+  context?: ReconciliationContext
 ): Promise<void> {
   const vehicle = vehicleRepo.getVehicleById(vehicleId);
   const latest = serviceRepo.getLatestServiceRecord(vehicleId);
@@ -309,7 +344,9 @@ async function scheduleServiceNotifications(
       CHANNEL_SERVICE_DUE,
       dueStatus.headline,
       dueStatus.subtext,
-      data
+      data,
+      DEFAULT_COOLDOWN_DAYS,
+      context
     );
   } else if (dueStatus.urgency === 'due_soon') {
     await notifyNow(
@@ -317,7 +354,9 @@ async function scheduleServiceNotifications(
       CHANNEL_SERVICE_DUE,
       dueStatus.headline,
       dueStatus.subtext,
-      data
+      data,
+      DEFAULT_COOLDOWN_DAYS,
+      context
     );
   }
 
@@ -332,7 +371,9 @@ async function scheduleServiceNotifications(
           CHANNEL_SERVICE_DUE,
           `🔧 ${compDue.headline}`,
           compDue.subtext,
-          { vehicleId, componentName: compName, type: 'component_due' }
+          { vehicleId, componentName: compName, type: 'component_due' },
+          DEFAULT_COOLDOWN_DAYS,
+          context
         );
       }
     }
@@ -350,7 +391,9 @@ async function scheduleServiceNotifications(
             CHANNEL_SERVICE_DUE,
             `🎯 ${profileDue.headline}`,
             profileDue.subtext,
-            { vehicleId, profileId: profile.id, type: 'profile_due' }
+            { vehicleId, profileId: profile.id, type: 'profile_due' },
+            DEFAULT_COOLDOWN_DAYS,
+            context
           );
         }
       }
@@ -364,12 +407,13 @@ async function scheduleServiceNotifications(
 
 async function scheduleFuelNudge(
   N: NotificationsModule,
-  vehicleId: string
+  vehicleId: string,
+  context?: ReconciliationContext
 ): Promise<void> {
   const vehicle = vehicleRepo.getVehicleById(vehicleId);
   if (!vehicle) return;
-  const entries = fuelRepo.getFuelEntriesByVehicle(vehicleId);
-  const daysSince = entries.length > 0 ? -daysUntil(entries[0].date) : null;
+  const latest = fuelRepo.getLatestFuelEntry(vehicleId);
+  const daysSince = latest ? -daysUntil(latest.date) : null;
   if (!shouldSendFuelNudge(daysSince)) return;
 
   await notifyNow(
@@ -378,7 +422,8 @@ async function scheduleFuelNudge(
     '⛽ Time to log your fuel?',
     `No fuel logged for ${vehicle.nickname} in ${daysSince} days. Keep your mileage stats accurate.`,
     { vehicleId, type: 'fuel_nudge' },
-    FUEL_NUDGE_COOLDOWN_DAYS
+    FUEL_NUDGE_COOLDOWN_DAYS,
+    context
   );
 }
 
@@ -411,18 +456,32 @@ interface DesiredDocReminder {
   body: string;
 }
 
+export interface ReconcileNotificationsOptions {
+  force?: boolean;
+}
+
+let lastReconciledSignature: string | null = null;
+
+export function resetNotificationReconciliationCacheForTesting(): void {
+  lastReconciledSignature = null;
+}
+
 /**
  * Idempotently reconciles scheduled notifications with current database records.
  *
  * 1. Checks permissions safely without throwing.
- * 2. Fetches currently scheduled notifications from expo-notifications.
- * 3. Identifies desired daily reminders for active, non-superseded, non-deleted documents expiring in 1..7 days.
- * 4. Identifies desired monthly driving summary.
- * 5. Cancels obsolete, renewed, deleted, or duplicate scheduled notifications.
- * 6. Schedules any missing desired notifications.
- * 7. Dispatches any immediate (cooldown-guarded) alerts for overdue services, expired docs, or fuel nudges.
+ * 2. Fingerprints reminder inputs (date, data revisions, preferences) to skip redundant cycles.
+ * 3. Fetches currently scheduled notifications from expo-notifications.
+ * 4. Identifies desired daily reminders for active, non-superseded, non-deleted documents expiring in 1..7 days.
+ * 5. Identifies desired monthly driving summary.
+ * 6. Cancels obsolete, renewed, deleted, or duplicate scheduled notifications.
+ * 7. Schedules any missing desired notifications.
+ * 8. Dispatches any immediate (cooldown-guarded) alerts with a single-batch sent-log read/write.
  */
-export async function reconcileNotifications(injectedN?: NotificationsModule | null): Promise<void> {
+export async function reconcileNotifications(
+  injectedN?: NotificationsModule | null,
+  options?: ReconcileNotificationsOptions
+): Promise<void> {
   const N = injectedN ?? getNotifications();
   if (!N) return;
 
@@ -435,7 +494,24 @@ export async function reconcileNotifications(injectedN?: NotificationsModule | n
   try {
     const prefs = getPreferences();
     if (!prefs.notificationsEnabled) {
+      lastReconciledSignature = null;
       await N.cancelAllScheduledNotificationsAsync();
+      return;
+    }
+
+    // Fingerprint reconciliation inputs to skip redundant passes
+    const todayKey = new Date().toISOString().split('T')[0];
+    const revisionsKey = dataRevisionTracker.getRevisionsKey([
+      'vehicles',
+      'documents',
+      'services',
+      'maintenanceProfiles',
+      'fuel',
+    ]);
+    const prefsKey = `${prefs.notifyDocumentExpiry}|${prefs.notifyServiceDue}|${prefs.notifyMaintenanceTargets}|${prefs.docExpiryLeadDays}`;
+    const currentSignature = `${todayKey}_${revisionsKey}_${prefsKey}`;
+
+    if (!injectedN && !options?.force && currentSignature === lastReconciledSignature) {
       return;
     }
 
@@ -549,20 +625,46 @@ export async function reconcileNotifications(injectedN?: NotificationsModule | n
     }
 
     // 5. Fire any immediate notifications (cooldown-guarded) for documents, services, and fuel
+    // Sent-log read once per cycle
+    let sentLog: Record<string, number> = {};
+    try {
+      const raw = await AsyncStorage.getItem(SENT_LOG_KEY);
+      if (raw) sentLog = JSON.parse(raw);
+    } catch {
+      // ignore
+    }
+    const context: ReconciliationContext = { sentLog, sentLogChanged: false };
+
     for (const vehicle of activeVehicles) {
       if (prefs.notifyDocumentExpiry) {
-        await scheduleDocumentNotifications(N, vehicle.id);
+        await scheduleDocumentNotifications(N, vehicle.id, context);
       }
       if (prefs.notifyServiceDue) {
-        await scheduleServiceNotifications(N, vehicle.id, prefs.notifyMaintenanceTargets);
+        await scheduleServiceNotifications(N, vehicle.id, prefs.notifyMaintenanceTargets, context);
       }
-      await scheduleFuelNudge(N, vehicle.id);
+      await scheduleFuelNudge(N, vehicle.id, context);
     }
+
+    // Sent-log written once only when notifications were dispatched
+    if (context.sentLogChanged) {
+      const now = Date.now();
+      const sixtyDaysAgo = now - 60 * 24 * 60 * 60 * 1000;
+      const pruned: Record<string, number> = {};
+      for (const [k, t] of Object.entries(context.sentLog)) {
+        if (t >= sixtyDaysAgo) pruned[k] = t;
+      }
+      try {
+        await AsyncStorage.setItem(SENT_LOG_KEY, JSON.stringify(pruned));
+      } catch {
+        // non-fatal
+      }
+    }
+
+    lastReconciledSignature = currentSignature;
   } catch (error) {
     console.warn('[DriveLedger] reconcileNotifications encountered an error:', error);
   }
 }
-
 
 /**
  * Checks all vehicles' documents and service records, and reconciles
@@ -571,9 +673,13 @@ export async function reconcileNotifications(injectedN?: NotificationsModule | n
  * Backwards compatible with existing call sites.
  *
  * @param _vehicleIds - Optional array of active vehicle IDs (ignored; queries active vehicles from repo)
+ * @param options - Optional reconciliation options (e.g. force: true)
  */
-export async function scheduleReminderNotifications(_vehicleIds?: string[]): Promise<void> {
-  await reconcileNotifications();
+export async function scheduleReminderNotifications(
+  _vehicleIds?: string[],
+  options?: ReconcileNotificationsOptions
+): Promise<void> {
+  await reconcileNotifications(undefined, options);
 }
 
 // ─── Refresh (called after data changes) ────────────────────────────
@@ -584,12 +690,12 @@ let refreshTimer: ReturnType<typeof setTimeout> | null = null;
  * Re-evaluates reminders for all active vehicles. Debounced so rapid
  * store mutations result in a single re-check. Safe to call anywhere.
  */
-export function refreshReminders(): void {
+export function refreshReminders(options?: ReconcileNotificationsOptions): void {
   if (refreshTimer) clearTimeout(refreshTimer);
   refreshTimer = setTimeout(() => {
     refreshTimer = null;
-    void reconcileNotifications();
-  }, 1500);
+    void reconcileNotifications(undefined, options);
+  }, 1000);
 }
 
 // ─── Cancel ─────────────────────────────────────────────────────────

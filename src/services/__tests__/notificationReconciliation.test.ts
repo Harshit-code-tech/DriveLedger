@@ -1,4 +1,7 @@
-import { reconcileNotifications } from '../notificationService';
+import {
+  reconcileNotifications,
+  resetNotificationReconciliationCacheForTesting,
+} from '../notificationService';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import * as documentRepo from '@/database/repositories/documentRepo';
 import { FuelType, VehicleType } from '@/constants/fuelTypes';
@@ -6,6 +9,7 @@ import { DocumentType } from '@/constants/documentTypes';
 import { getDatabase } from '@/database/connection';
 import { createTables } from '@/database/schema';
 import { resetMockDatabase } from '@/__mocks__/expo-sqlite';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 let asyncStorageStore: Record<string, string> = {};
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -52,6 +56,7 @@ describe('P0.3 — Reminder & Notification Lifecycle Reconciliation', () => {
   };
 
   beforeEach(() => {
+    resetNotificationReconciliationCacheForTesting();
     resetMockDatabase();
     db = getDatabase();
     createTables(db);
@@ -297,5 +302,35 @@ describe('P0.3 — Reminder & Notification Lifecycle Reconciliation', () => {
 
     // Restore preference
     await usePreferencesStore.getState().setNotifyDocumentExpiry(true);
+  });
+
+  it('batches sent-log writes: calls AsyncStorage.setItem at most once per reconciliation cycle when multiple immediate alerts trigger', async () => {
+    // Create 2 expired documents (which both trigger immediate notifications)
+    documentRepo.createDocument({
+      vehicle_id: testVehicle.id,
+      type: DocumentType.PUC,
+      expiry_date: getDateOffset(-2),
+    });
+    documentRepo.createDocument({
+      vehicle_id: testVehicle.id,
+      type: DocumentType.FASTAG,
+      expiry_date: getDateOffset(-5),
+    });
+
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+
+    await reconcileNotifications(mockNotificationsModule);
+
+    // Verify both immediate notifications were scheduled
+    const immediateNotifs = mockScheduledList.filter(
+      (n) => n.content.data?.type === 'expiry'
+    );
+    expect(immediateNotifs.length).toBeGreaterThanOrEqual(2);
+
+    // AsyncStorage.setItem for sent log must be called at most ONCE (batched)
+    const sentLogCalls = (AsyncStorage.setItem as jest.Mock).mock.calls.filter(
+      (call) => call[0] === 'driveledger_notification_sent_log'
+    );
+    expect(sentLogCalls).toHaveLength(1);
   });
 });

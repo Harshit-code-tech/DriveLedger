@@ -12,6 +12,7 @@ import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import * as fuelRepo from '@/database/repositories/fuelRepo';
 import * as serviceRepo from '@/database/repositories/serviceRepo';
 import * as expenseRepo from '@/database/repositories/expenseRepo';
+import * as tripRepo from '@/database/repositories/tripRepo';
 import { FuelType, FuelUnit, VehicleType } from '@/constants/fuelTypes';
 import { resetMockDatabase } from '@/__mocks__/expo-sqlite';
 import type { Vehicle } from '@/types/vehicle';
@@ -196,4 +197,131 @@ describe('Targeted Repository Aggregates', () => {
       expect(sinceOct.monthlyAggregates['2026-10']?.expenseCost).toBe(100);
     });
   });
+
+  describe('Lightweight Single-Row and Monthly Widget Queries', () => {
+    it('fuelRepo.getMonthlyFuelTotal computes exact month total', () => {
+      fuelRepo.createFuelEntryAtomic(
+        {
+          vehicle_id: vehicle1.id,
+          date: '2026-11-02',
+          odometer: 11000,
+          fuel_amount: 10,
+          fuel_unit: FuelUnit.LITRES,
+          price_per_unit: 100, // 1000
+          is_full_tank: 1,
+        },
+        FuelType.PETROL,
+        VehicleType.CAR
+      );
+      fuelRepo.createFuelEntryAtomic(
+        {
+          vehicle_id: vehicle1.id,
+          date: '2026-11-15',
+          odometer: 11200,
+          fuel_amount: 15,
+          fuel_unit: FuelUnit.LITRES,
+          price_per_unit: 100, // 1500
+          is_full_tank: 1,
+        },
+        FuelType.PETROL,
+        VehicleType.CAR
+      );
+
+      expect(fuelRepo.getMonthlyFuelTotal(vehicle1.id, '2026-11')).toBe(2500);
+      expect(fuelRepo.getMonthlyFuelTotal(vehicle1.id, '2026-12')).toBe(0);
+    });
+
+    it('fuelRepo.getLatestFuelEntryWithMileage returns most recent entry with calculated mileage', () => {
+      // First fill: full tank (no mileage yet)
+      const f1 = fuelRepo.createFuelEntryAtomic(
+        {
+          vehicle_id: vehicle1.id,
+          date: '2026-10-01',
+          odometer: 10000,
+          fuel_amount: 20,
+          fuel_unit: FuelUnit.LITRES,
+          price_per_unit: 100,
+          is_full_tank: 1,
+        },
+        FuelType.PETROL,
+        VehicleType.CAR
+      );
+
+      // Second fill: full tank (calculates mileage)
+      const f2 = fuelRepo.createFuelEntryAtomic(
+        {
+          vehicle_id: vehicle1.id,
+          date: '2026-10-10',
+          odometer: 10300,
+          fuel_amount: 20,
+          fuel_unit: FuelUnit.LITRES,
+          price_per_unit: 100,
+          is_full_tank: 1,
+        },
+        FuelType.PETROL,
+        VehicleType.CAR
+      );
+
+      // Third fill: partial fill (no mileage calculated)
+      const f3 = fuelRepo.createFuelEntryAtomic(
+        {
+          vehicle_id: vehicle1.id,
+          date: '2026-10-20',
+          odometer: 10450,
+          fuel_amount: 10,
+          fuel_unit: FuelUnit.LITRES,
+          price_per_unit: 100,
+          is_full_tank: 0,
+        },
+        FuelType.PETROL,
+        VehicleType.CAR
+      );
+
+      const latest = fuelRepo.getLatestFuelEntry(vehicle1.id);
+      expect(latest?.id).toBe(f3.entry.id);
+      expect(latest?.calculated_mileage).toBeNull();
+
+      const latestWithMileage = fuelRepo.getLatestFuelEntryWithMileage(vehicle1.id);
+      expect(latestWithMileage?.id).toBe(f2.entry.id);
+      expect(latestWithMileage?.calculated_mileage).toBe(15);
+    });
+
+    it('serviceRepo.getMonthlyServiceTotal computes exact month total', () => {
+      serviceRepo.createServiceRecord({
+        vehicle_id: vehicle1.id,
+        date: '2026-09-05',
+        service_type: 'General Checkup',
+        cost: 1500,
+      });
+      serviceRepo.createServiceRecord({
+        vehicle_id: vehicle1.id,
+        date: '2026-09-22',
+        service_type: 'Wheel Balancing',
+        cost: 800,
+      });
+
+      expect(serviceRepo.getMonthlyServiceTotal(vehicle1.id, '2026-09')).toBe(2300);
+      expect(serviceRepo.getMonthlyServiceTotal(vehicle1.id, '2026-10')).toBe(0);
+    });
+
+    it('tripRepo.getLatestTripByVehicle returns latest non-discarded trip', () => {
+      const t1 = tripRepo.createManualTrip({
+        vehicle_id: vehicle1.id,
+        start_odometer: 10000,
+        end_odometer: 10050,
+        date: '2026-10-01',
+      });
+      const t2 = tripRepo.createManualTrip({
+        vehicle_id: vehicle1.id,
+        start_odometer: 10050,
+        end_odometer: 10120,
+        date: '2026-10-05',
+      });
+
+      const latest = tripRepo.getLatestTripByVehicle(vehicle1.id);
+      expect(latest?.id).toBe(t2.id);
+      expect(latest?.distance_km).toBe(70);
+    });
+  });
 });
+

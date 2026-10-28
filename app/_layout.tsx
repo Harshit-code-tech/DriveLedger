@@ -13,6 +13,7 @@ import AnimatedSplash from '@/components/AnimatedSplash';
 import { getDatabase } from '@/database/connection';
 import {
   reconcileNotifications,
+  refreshReminders,
   scheduleReminderNotifications,
   setupNotificationChannel,
 } from '@/services/notificationService';
@@ -112,7 +113,7 @@ export default function RootLayout() {
 
         // Set up notification channel (Android) and reconcile notification schedules
         await setupNotificationChannel();
-        await reconcileNotifications();
+        await reconcileNotifications(undefined, { force: true });
       } catch (e) {
         console.warn('App initialization warning:', e);
       } finally {
@@ -124,11 +125,15 @@ export default function RootLayout() {
     prepare();
   }, []);
 
-  // Schedule expiry + service reminders & sync widget whenever vehicles list actually changes
+  const isInitialMount = useRef(true);
+  // Schedule expiry + service reminders & sync widget whenever vehicles list actually changes post-startup
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
     if (vehicleIdsKey) {
-      const vehicleIds = vehicleIdsKey.split(',').filter(Boolean);
-      scheduleReminderNotifications(vehicleIds);
+      refreshReminders();
       syncWidgetState().catch((err) => console.debug('Widget sync on vehicles change skipped:', err));
     }
   }, [vehicleIdsKey]);
