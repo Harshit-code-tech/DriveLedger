@@ -10,9 +10,7 @@ import type { Vehicle } from '@/types/vehicle';
 import * as fuelRepo from '@/database/repositories/fuelRepo';
 import * as serviceRepo from '@/database/repositories/serviceRepo';
 import * as expenseRepo from '@/database/repositories/expenseRepo';
-import { computeMileageStats } from '@/engine/mileageEngine';
-import { MILEAGE_UNIT_LABELS } from '@/constants/fuelTypes';
-import type { FuelType } from '@/constants/fuelTypes';
+import { MILEAGE_UNIT_LABELS, MileageUnit } from '@/constants/fuelTypes';
 
 export interface VehiclePeriodStats {
   monthKey: string;     // e.g. "2026-10"
@@ -72,33 +70,27 @@ export function useCrossVehicleStats(vehicles: Vehicle[]): VehicleSummary[] | nu
       });
     }
 
+    const oldestMonthKey = recentMonthOptions[recentMonthOptions.length - 1]?.key;
+
     const summaries: VehicleSummary[] = vehicles.map((v) => {
-      const vEntries = fuelRepo.getFuelEntriesByVehicleChronological(v.id);
-      const svc      = serviceRepo.getServiceRecordsByVehicle(v.id);
-      const exp      = expenseRepo.getExpensesByVehicle(v.id);
+      // 1. Fetch targeted summaries and 6-month aggregates directly from SQLite
+      const fuelAgg = fuelRepo.getVehicleFuelAggregates(v.id, oldestMonthKey);
+      const svcAgg = serviceRepo.getVehicleServiceAggregates(v.id, oldestMonthKey);
+      const expAgg = expenseRepo.getVehicleExpenseAggregates(v.id, oldestMonthKey);
+      const runningMileage = fuelRepo.getVehicleRunningMileage(v.id);
 
-      const mStats   = computeMileageStats(vEntries, v.fuel_type as FuelType);
-      const fuelCost = vEntries.reduce((s, e) => s + e.total_cost, 0);
-      const svcCost  = svc.reduce((s, r) => s + (r.cost || 0), 0);
-      const expCost  = exp.reduce((s, e) => s + e.amount, 0);
+      const fuelCost = fuelAgg.totalCost;
+      const svcCost = svcAgg.totalCost;
+      const expCost = expAgg.totalCost;
 
-      // Compute monthly stats for each of the last 6 months
+      // 2. Assemble monthly stats for the 6 target months from aggregate maps
       const monthlyStats: Record<string, VehiclePeriodStats> = {};
       for (const mOpt of recentMonthOptions) {
         const mKey = mOpt.key;
-        const mEntries = vEntries.filter((e) => e.date && e.date.startsWith(mKey));
-        const mSvc = svc.filter((r) => r.date && r.date.startsWith(mKey));
-        const mExp = exp.filter((e) => e.date && e.date.startsWith(mKey));
-
-        const mFuelCost = mEntries.reduce((s, e) => s + e.total_cost, 0);
-        const mSvcCost  = mSvc.reduce((s, r) => s + (r.cost || 0), 0);
-        const mExpCost  = mExp.reduce((s, e) => s + e.amount, 0);
-
-        // Mileage for this month: average calculated_mileage if available
-        const entriesWithMileage = mEntries.filter((e) => e.calculated_mileage != null);
-        const mAvgMileage = entriesWithMileage.length > 0
-          ? entriesWithMileage.reduce((sum, e) => sum + e.calculated_mileage!, 0) / entriesWithMileage.length
-          : null;
+        const mFuelCost = fuelAgg.monthlyAggregates[mKey]?.fuelCost ?? 0;
+        const mSvcCost = svcAgg.monthlyAggregates[mKey]?.serviceCost ?? 0;
+        const mExpCost = expAgg.monthlyAggregates[mKey]?.expenseCost ?? 0;
+        const mAvgMileage = fuelAgg.monthlyAggregates[mKey]?.avgMileage ?? null;
 
         monthlyStats[mKey] = {
           monthKey: mKey,
@@ -114,8 +106,8 @@ export function useCrossVehicleStats(vehicles: Vehicle[]): VehicleSummary[] | nu
       return {
         id:              v.id,
         name:            v.nickname,
-        avgMileage:      mStats.runningAverage?.value ?? null,
-        mileageUnit:     mStats.runningAverage ? MILEAGE_UNIT_LABELS[mStats.runningAverage.unit] : null,
+        avgMileage:      runningMileage?.value ?? null,
+        mileageUnit:     runningMileage?.unit ? MILEAGE_UNIT_LABELS[runningMileage.unit as MileageUnit] : null,
         totalCost:       fuelCost + svcCost + expCost,
         fuelCost,
         serviceCost:     svcCost,
@@ -130,3 +122,4 @@ export function useCrossVehicleStats(vehicles: Vehicle[]): VehicleSummary[] | nu
     return filtered.length >= 2 ? filtered : null;
   }, [vehicles]);
 }
+

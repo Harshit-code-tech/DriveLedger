@@ -16,6 +16,7 @@ import type {
 } from '@/types/service';
 import * as profileRepo from '@/database/repositories/maintenanceProfileRepo';
 import { refreshReminders } from '@/services/notificationService';
+import { dataRevisionTracker } from '@/services/dataRevisionTracker';
 
 interface MaintenanceProfileState {
   /** Profiles for the currently active vehicle */
@@ -69,6 +70,7 @@ export const useMaintenanceProfileStore = create<MaintenanceProfileState>((set, 
     const profiles = profileRepo.getMaintenanceProfilesByVehicle(input.vehicle_id);
     const dueStatuses = profileRepo.computeAllProfilesDueStatus(input.vehicle_id, currentOdometer ?? null);
     set({ profiles, dueStatuses });
+    dataRevisionTracker.bumpRevision('maintenanceProfiles', input.vehicle_id);
     refreshReminders();
     return profile;
   },
@@ -79,6 +81,7 @@ export const useMaintenanceProfileStore = create<MaintenanceProfileState>((set, 
       const profiles = profileRepo.getMaintenanceProfilesByVehicle(updated.vehicle_id);
       const dueStatuses = profileRepo.computeAllProfilesDueStatus(updated.vehicle_id, currentOdometer ?? null);
       set({ profiles, dueStatuses });
+      dataRevisionTracker.bumpRevision('maintenanceProfiles', updated.vehicle_id);
       refreshReminders();
     }
     return updated;
@@ -89,6 +92,7 @@ export const useMaintenanceProfileStore = create<MaintenanceProfileState>((set, 
     const profiles = profileRepo.getMaintenanceProfilesByVehicle(vehicleId);
     const dueStatuses = profileRepo.computeAllProfilesDueStatus(vehicleId, currentOdometer ?? null);
     set({ profiles, dueStatuses });
+    dataRevisionTracker.bumpRevision('maintenanceProfiles', vehicleId);
     refreshReminders();
   },
 

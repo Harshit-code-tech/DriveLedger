@@ -137,3 +137,69 @@ export function restoreExpense(id: string): void {
     [now, id]
   );
 }
+
+// ─── TARGETED SQL AGGREGATES (P1.1) ──────────────────────────────────
+
+export interface MonthlyExpenseAggregate {
+  monthKey: string;
+  expenseCost: number;
+  expenseCount: number;
+}
+
+export interface VehicleExpenseAggregateSummary {
+  totalCost: number;
+  monthlyAggregates: Record<string, MonthlyExpenseAggregate>;
+}
+
+/**
+ * Returns aggregated expense totals and monthly breakdown for a vehicle directly from SQLite.
+ */
+export function getVehicleExpenseAggregates(
+  vehicleId: string,
+  sinceMonthKey?: string
+): VehicleExpenseAggregateSummary {
+  const db = getDatabase();
+  const totalRow = db.getFirstSync<{ total_cost: number | null }>(
+    `SELECT COALESCE(SUM(amount), 0) AS total_cost
+     FROM expenses
+     WHERE vehicle_id = ? AND deleted_at IS NULL`,
+    [vehicleId]
+  );
+
+  const monthlyQuery = sinceMonthKey
+    ? `SELECT
+         SUBSTR(date, 1, 7) AS month_key,
+         COALESCE(SUM(amount), 0) AS expense_cost,
+         COUNT(*) AS expense_count
+       FROM expenses
+       WHERE vehicle_id = ? AND deleted_at IS NULL AND SUBSTR(date, 1, 7) >= ?
+       GROUP BY SUBSTR(date, 1, 7)`
+    : `SELECT
+         SUBSTR(date, 1, 7) AS month_key,
+         COALESCE(SUM(amount), 0) AS expense_cost,
+         COUNT(*) AS expense_count
+       FROM expenses
+       WHERE vehicle_id = ? AND deleted_at IS NULL
+       GROUP BY SUBSTR(date, 1, 7)`;
+
+  const params = sinceMonthKey ? [vehicleId, sinceMonthKey] : [vehicleId];
+  const rows = db.getAllSync<{
+    month_key: string;
+    expense_cost: number;
+    expense_count: number;
+  }>(monthlyQuery, params);
+
+  const monthlyAggregates: Record<string, MonthlyExpenseAggregate> = {};
+  for (const r of rows) {
+    monthlyAggregates[r.month_key] = {
+      monthKey: r.month_key,
+      expenseCost: r.expense_cost,
+      expenseCount: r.expense_count,
+    };
+  }
+
+  return {
+    totalCost: totalRow?.total_cost ?? 0,
+    monthlyAggregates,
+  };
+}

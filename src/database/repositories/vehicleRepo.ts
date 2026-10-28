@@ -47,7 +47,7 @@ export function createVehicle(input: CreateVehicleInput): Vehicle {
     variant: input.variant ?? null,
     year: input.year ?? null,
     color: input.color ?? null,
-    registration_number: input.registration_number,
+    registration_number: input.registration_number ?? null,
     fuel_type: input.fuel_type,
     tank_capacity: input.tank_capacity ?? null,
     secondary_tank_capacity: input.secondary_tank_capacity ?? null,

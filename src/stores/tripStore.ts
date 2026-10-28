@@ -28,6 +28,7 @@ import type {
 import * as tripRepo from '@/database/repositories/tripRepo';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import { storeRegistry } from '@/stores/storeRegistry';
+import { dataRevisionTracker } from '@/services/dataRevisionTracker';
 import { canUpdateCanonicalOdometer } from '@/engine/odometerReconciliation';
 import {
   processLocationSample,
@@ -349,6 +350,8 @@ export const useTripStore = create<TripState>((set, get) => ({
         start_odometer: baselineOdo,
         purpose,
       });
+
+      dataRevisionTracker.bumpRevision('trips', vehicleId);
 
       const thisGeneration = ++currentSessionGeneration;
       const thisTripId = trip.id;
@@ -911,6 +914,8 @@ export const useTripStore = create<TripState>((set, get) => ({
       },
     });
 
+    dataRevisionTracker.bumpRevision('trips', vehicleId);
+    dataRevisionTracker.bumpRevision('vehicles', vehicleId);
     notifyWidgetSync();
     return finalizedTrip;
   },
@@ -963,6 +968,7 @@ export const useTripStore = create<TripState>((set, get) => ({
       },
     });
 
+    if (vehicleId) dataRevisionTracker.bumpRevision('trips', vehicleId);
     notifyWidgetSync();
   },
 
@@ -985,6 +991,8 @@ export const useTripStore = create<TripState>((set, get) => ({
 
     const trips = tripRepo.getTripsByVehicle(input.vehicle_id);
     set({ trips });
+    dataRevisionTracker.bumpRevision('trips', input.vehicle_id);
+    if (input.updateVehicleOdometer) dataRevisionTracker.bumpRevision('vehicles', input.vehicle_id);
     return trip;
   },
 
@@ -992,6 +1000,7 @@ export const useTripStore = create<TripState>((set, get) => ({
     tripRepo.softDeleteTrip(id);
     const trips = tripRepo.getTripsByVehicle(vehicleId);
     set({ trips });
+    dataRevisionTracker.bumpRevision('trips', vehicleId);
   },
 
   clearError: () => set({ error: null }),

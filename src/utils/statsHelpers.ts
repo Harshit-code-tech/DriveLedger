@@ -127,7 +127,7 @@ export function estimateFuelLevel(
 }
 
 /**
- * Filters records to a specific month/year and sums a numeric field.
+ * Filters records to a specific month/year and sums a numeric field using fast prefix check.
  */
 function sumByMonth<T>(
   records: T[],
@@ -136,12 +136,21 @@ function sumByMonth<T>(
   getDate: (record: T) => string,
   getAmount: (record: T) => number
 ): number {
-  return records
-    .filter((r) => {
-      const d = new Date(getDate(r));
-      return d.getMonth() === month && d.getFullYear() === year;
-    })
-    .reduce((sum, r) => sum + getAmount(r), 0);
+  const targetPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+  let sum = 0;
+  for (let i = 0; i < records.length; i++) {
+    const raw = getDate(records[i]);
+    if (!raw) continue;
+    if (raw.startsWith(targetPrefix)) {
+      sum += getAmount(records[i]);
+    } else if (raw.length > 7 && !raw.startsWith(String(year))) {
+      const d = new Date(raw);
+      if (d.getMonth() === month && d.getFullYear() === year) {
+        sum += getAmount(records[i]);
+      }
+    }
+  }
+  return sum;
 }
 
 /**
@@ -183,6 +192,7 @@ export interface MonthlySpendDataPoint {
 
 /**
  * Computes monthly spending data for the last N months (for charts).
+ * Uses a single-pass accumulator grouping by YYYY-MM to avoid repeated array scanning.
  */
 export function getMonthlySpendHistory(
   entries: FuelEntry[],
@@ -196,27 +206,61 @@ export function getMonthlySpendHistory(
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
   const now = new Date();
+  const keyToIndex = new Map<string, number>();
   const result: MonthlySpendDataPoint[] = [];
 
   for (let i = months - 1; i >= 0; i--) {
     const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const m = monthDate.getMonth();
     const y = monthDate.getFullYear();
-    const { fuel, service, expense, total } = getMonthlyTotalSpend(
-      entries,
-      serviceRecords,
-      expenses,
-      m,
-      y
-    );
+    const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+    keyToIndex.set(key, result.length);
     result.push({
       label: monthNames[m],
       fullLabel: `${fullMonthNames[m]} ${y}`,
-      value: Math.round(total),
-      fuel: Math.round(fuel),
-      service: Math.round(service),
-      expense: Math.round(expense),
+      value: 0,
+      fuel: 0,
+      service: 0,
+      expense: 0,
     });
+  }
+
+  for (let i = 0; i < entries.length; i++) {
+    const d = entries[i].date;
+    if (!d) continue;
+    const key = d.length >= 7 ? d.substring(0, 7) : '';
+    const idx = keyToIndex.get(key);
+    if (idx !== undefined) {
+      result[idx].fuel += entries[i].total_cost;
+    }
+  }
+
+  for (let i = 0; i < serviceRecords.length; i++) {
+    const d = serviceRecords[i].date;
+    if (!d) continue;
+    const key = d.length >= 7 ? d.substring(0, 7) : '';
+    const idx = keyToIndex.get(key);
+    if (idx !== undefined) {
+      result[idx].service += (serviceRecords[i].cost || 0);
+    }
+  }
+
+  for (let i = 0; i < expenses.length; i++) {
+    const d = expenses[i].date;
+    if (!d) continue;
+    const key = d.length >= 7 ? d.substring(0, 7) : '';
+    const idx = keyToIndex.get(key);
+    if (idx !== undefined) {
+      result[idx].expense += expenses[i].amount;
+    }
+  }
+
+  for (let i = 0; i < result.length; i++) {
+    const total = result[i].fuel + result[i].service + result[i].expense;
+    result[i].value = Math.round(total);
+    result[i].fuel = Math.round(result[i].fuel);
+    result[i].service = Math.round(result[i].service);
+    result[i].expense = Math.round(result[i].expense);
   }
 
   return result;

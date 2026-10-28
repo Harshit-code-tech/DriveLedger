@@ -152,3 +152,69 @@ export function restoreServiceRecord(id: string): void {
     [now, id]
   );
 }
+
+// ─── TARGETED SQL AGGREGATES (P1.1) ──────────────────────────────────
+
+export interface MonthlyServiceAggregate {
+  monthKey: string;
+  serviceCost: number;
+  serviceCount: number;
+}
+
+export interface VehicleServiceAggregateSummary {
+  totalCost: number;
+  monthlyAggregates: Record<string, MonthlyServiceAggregate>;
+}
+
+/**
+ * Returns aggregated service totals and monthly breakdown for a vehicle directly from SQLite.
+ */
+export function getVehicleServiceAggregates(
+  vehicleId: string,
+  sinceMonthKey?: string
+): VehicleServiceAggregateSummary {
+  const db = getDatabase();
+  const totalRow = db.getFirstSync<{ total_cost: number | null }>(
+    `SELECT COALESCE(SUM(cost), 0) AS total_cost
+     FROM service_records
+     WHERE vehicle_id = ? AND deleted_at IS NULL`,
+    [vehicleId]
+  );
+
+  const monthlyQuery = sinceMonthKey
+    ? `SELECT
+         SUBSTR(date, 1, 7) AS month_key,
+         COALESCE(SUM(cost), 0) AS service_cost,
+         COUNT(*) AS service_count
+       FROM service_records
+       WHERE vehicle_id = ? AND deleted_at IS NULL AND SUBSTR(date, 1, 7) >= ?
+       GROUP BY SUBSTR(date, 1, 7)`
+    : `SELECT
+         SUBSTR(date, 1, 7) AS month_key,
+         COALESCE(SUM(cost), 0) AS service_cost,
+         COUNT(*) AS service_count
+       FROM service_records
+       WHERE vehicle_id = ? AND deleted_at IS NULL
+       GROUP BY SUBSTR(date, 1, 7)`;
+
+  const params = sinceMonthKey ? [vehicleId, sinceMonthKey] : [vehicleId];
+  const rows = db.getAllSync<{
+    month_key: string;
+    service_cost: number;
+    service_count: number;
+  }>(monthlyQuery, params);
+
+  const monthlyAggregates: Record<string, MonthlyServiceAggregate> = {};
+  for (const r of rows) {
+    monthlyAggregates[r.month_key] = {
+      monthKey: r.month_key,
+      serviceCost: r.service_cost,
+      serviceCount: r.service_count,
+    };
+  }
+
+  return {
+    totalCost: totalRow?.total_cost ?? 0,
+    monthlyAggregates,
+  };
+}

@@ -17,6 +17,7 @@ import * as documentRepo from '@/database/repositories/documentRepo';
 import { daysUntil } from '@/utils/date';
 import { syncWidgetState } from '@/widgets/widgetDataService';
 import { refreshReminders } from '@/services/notificationService';
+import { dataRevisionTracker } from '@/services/dataRevisionTracker';
 
 interface DocumentState {
   /** Current (non-superseded) documents for the selected vehicle */
@@ -64,6 +65,7 @@ export const useDocumentStore = create<DocumentState>((set) => ({
       (d) => d.expiry_date && daysUntil(d.expiry_date) <= 30
     );
     set({ documents, allDocuments, expiringDocs });
+    dataRevisionTracker.bumpRevision('documents', input.vehicle_id);
     syncWidgetState();
     refreshReminders();
     return doc;
@@ -78,6 +80,7 @@ export const useDocumentStore = create<DocumentState>((set) => ({
         (d) => d.expiry_date && daysUntil(d.expiry_date) <= 30
       );
       set({ documents, allDocuments, expiringDocs });
+      dataRevisionTracker.bumpRevision('documents', updated.vehicle_id);
       syncWidgetState();
       refreshReminders();
     }
@@ -92,6 +95,7 @@ export const useDocumentStore = create<DocumentState>((set) => ({
       (d) => d.expiry_date && daysUntil(d.expiry_date) <= 30
     );
     set({ documents, allDocuments, expiringDocs });
+    dataRevisionTracker.bumpRevision('documents', vehicleId);
     syncWidgetState();
     refreshReminders();
   },
@@ -104,6 +108,7 @@ export const useDocumentStore = create<DocumentState>((set) => ({
       (d) => d.expiry_date && daysUntil(d.expiry_date) <= 30
     );
     set({ documents, allDocuments, expiringDocs });
+    dataRevisionTracker.bumpRevision('documents', newInput.vehicle_id);
     syncWidgetState();
     refreshReminders();
     return newDoc;

@@ -15,6 +15,7 @@ import { Platform } from 'react-native';
 import type { Expense, CreateExpenseInput, UpdateExpenseInput } from '@/types/expense';
 import * as expenseRepo from '@/database/repositories/expenseRepo';
 import { syncWidgetState } from '@/widgets/widgetDataService';
+import { dataRevisionTracker } from '@/services/dataRevisionTracker';
 
 interface ExpenseState {
   /** Expenses for the currently selected vehicle */
@@ -46,6 +47,7 @@ export const useExpenseStore = create<ExpenseState>((set) => ({
     const expense = expenseRepo.createExpense(input);
     const expenses = expenseRepo.getExpensesByVehicle(input.vehicle_id);
     set({ expenses });
+    dataRevisionTracker.bumpRevision('expenses', input.vehicle_id);
     if (Platform.OS === 'android') syncWidgetState();
     return expense;
   },
@@ -55,6 +57,7 @@ export const useExpenseStore = create<ExpenseState>((set) => ({
     if (updated) {
       const expenses = expenseRepo.getExpensesByVehicle(updated.vehicle_id);
       set({ expenses });
+      dataRevisionTracker.bumpRevision('expenses', updated.vehicle_id);
       if (Platform.OS === 'android') syncWidgetState();
     }
     return updated;
@@ -66,6 +69,7 @@ export const useExpenseStore = create<ExpenseState>((set) => ({
     if (expense) {
       const expenses = expenseRepo.getExpensesByVehicle(expense.vehicle_id);
       set({ expenses });
+      dataRevisionTracker.bumpRevision('expenses', expense.vehicle_id);
       if (Platform.OS === 'android') syncWidgetState();
     }
   },

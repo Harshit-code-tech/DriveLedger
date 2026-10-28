@@ -25,6 +25,7 @@ import {
   type MileageWarning,
 } from "@/engine/mileageEngine";
 import { refreshReminders } from "@/services/notificationService";
+import { dataRevisionTracker } from "@/services/dataRevisionTracker";
 import { storeRegistry } from "@/stores/storeRegistry";
 import type {
   CreateFuelEntryInput,
@@ -143,6 +144,8 @@ export const useFuelStore = create<FuelState>((set) => ({
     );
     set({ entries, stats, partialEstimates });
 
+    dataRevisionTracker.bumpRevision('fuel', vehicle.id);
+    dataRevisionTracker.bumpRevision('vehicles', vehicle.id);
     storeRegistry.refreshVehicles();
     if (Platform.OS === "android") syncWidgetState();
     refreshReminders();
@@ -172,6 +175,8 @@ export const useFuelStore = create<FuelState>((set) => ({
     );
     set({ entries, stats, partialEstimates });
 
+    dataRevisionTracker.bumpRevision('fuel', vehicle.id);
+    dataRevisionTracker.bumpRevision('vehicles', vehicle.id);
     storeRegistry.refreshVehicles();
     if (Platform.OS === "android") syncWidgetState();
     refreshReminders();
@@ -197,6 +202,8 @@ export const useFuelStore = create<FuelState>((set) => ({
     );
     set({ entries, stats, partialEstimates });
 
+    dataRevisionTracker.bumpRevision('fuel', vehicle.id);
+    dataRevisionTracker.bumpRevision('vehicles', vehicle.id);
     storeRegistry.refreshVehicles();
     if (Platform.OS === "android") syncWidgetState();
     refreshReminders();

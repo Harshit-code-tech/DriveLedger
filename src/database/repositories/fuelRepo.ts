@@ -26,7 +26,7 @@ import {
   checkMileageReasonableness,
   type MileageWarning,
 } from '@/engine/mileageEngine';
-import type { FuelType, VehicleType, FuelUnit } from '@/constants/fuelTypes';
+import type { FuelType, VehicleType, FuelUnit, MileageUnit } from '@/constants/fuelTypes';
 
 // ─── CREATE ──────────────────────────────────────────────────────────
 
@@ -507,4 +507,96 @@ export function deleteFuelEntryAtomic(
 
     updateVehicleOdometer(vehicleId, targetOdo);
   });
+}
+
+// ─── TARGETED SQL AGGREGATES (P1.1) ──────────────────────────────────
+
+export interface MonthlyFuelAggregate {
+  monthKey: string;
+  fuelCost: number;
+  avgMileage: number | null;
+  entryCount: number;
+}
+
+export interface VehicleFuelAggregateSummary {
+  totalCost: number;
+  monthlyAggregates: Record<string, MonthlyFuelAggregate>;
+}
+
+/**
+ * Returns aggregated fuel totals and monthly breakdown for a vehicle directly from SQLite.
+ * Avoids loading full fuel history rows when only summaries are needed (e.g. Fleet Comparison).
+ */
+export function getVehicleFuelAggregates(
+  vehicleId: string,
+  sinceMonthKey?: string
+): VehicleFuelAggregateSummary {
+  const db = getDatabase();
+  const totalRow = db.getFirstSync<{ total_cost: number | null }>(
+    `SELECT COALESCE(SUM(total_cost), 0) AS total_cost
+     FROM fuel_entries
+     WHERE vehicle_id = ? AND deleted_at IS NULL`,
+    [vehicleId]
+  );
+
+  const monthlyQuery = sinceMonthKey
+    ? `SELECT
+         SUBSTR(date, 1, 7) AS month_key,
+         COALESCE(SUM(total_cost), 0) AS fuel_cost,
+         AVG(calculated_mileage) AS avg_mileage,
+         COUNT(*) AS entry_count
+       FROM fuel_entries
+       WHERE vehicle_id = ? AND deleted_at IS NULL AND SUBSTR(date, 1, 7) >= ?
+       GROUP BY SUBSTR(date, 1, 7)`
+    : `SELECT
+         SUBSTR(date, 1, 7) AS month_key,
+         COALESCE(SUM(total_cost), 0) AS fuel_cost,
+         AVG(calculated_mileage) AS avg_mileage,
+         COUNT(*) AS entry_count
+       FROM fuel_entries
+       WHERE vehicle_id = ? AND deleted_at IS NULL
+       GROUP BY SUBSTR(date, 1, 7)`;
+
+  const params = sinceMonthKey ? [vehicleId, sinceMonthKey] : [vehicleId];
+  const rows = db.getAllSync<{
+    month_key: string;
+    fuel_cost: number;
+    avg_mileage: number | null;
+    entry_count: number;
+  }>(monthlyQuery, params);
+
+  const monthlyAggregates: Record<string, MonthlyFuelAggregate> = {};
+  for (const r of rows) {
+    monthlyAggregates[r.month_key] = {
+      monthKey: r.month_key,
+      fuelCost: r.fuel_cost,
+      avgMileage: r.avg_mileage != null ? Number(r.avg_mileage.toFixed(2)) : null,
+      entryCount: r.entry_count,
+    };
+  }
+
+  return {
+    totalCost: totalRow?.total_cost ?? 0,
+    monthlyAggregates,
+  };
+}
+
+/**
+ * Fast running average calculation for a vehicle directly from SQLite.
+ */
+export function getVehicleRunningMileage(
+  vehicleId: string
+): { value: number; unit: MileageUnit } | null {
+  const db = getDatabase();
+  const row = db.getFirstSync<{ avg_mileage: number | null; unit: MileageUnit | null }>(
+    `SELECT AVG(calculated_mileage) AS avg_mileage, mileage_unit AS unit
+     FROM fuel_entries
+     WHERE vehicle_id = ? AND deleted_at IS NULL AND calculated_mileage IS NOT NULL
+     GROUP BY mileage_unit
+     ORDER BY COUNT(*) DESC
+     LIMIT 1`,
+    [vehicleId]
+  );
+  if (!row || row.avg_mileage == null || !row.unit) return null;
+  return { value: Number(row.avg_mileage.toFixed(2)), unit: row.unit };
 }

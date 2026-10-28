@@ -25,6 +25,7 @@ import * as maintCompRepo from '@/database/repositories/maintenanceComponentRepo
 import { getDatabase } from '@/database/connection';
 import { syncWidgetState } from '@/widgets/widgetDataService';
 import { refreshReminders } from '@/services/notificationService';
+import { dataRevisionTracker } from '@/services/dataRevisionTracker';
 
 export * from '@/database/repositories/maintenanceComponentRepo';
 
@@ -87,6 +88,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
 
     const records = serviceRepo.getServiceRecordsByVehicle(input.vehicle_id);
     set({ records });
+    dataRevisionTracker.bumpRevision('services', input.vehicle_id);
     syncWidgetState();
     refreshReminders();
     return record!;
@@ -118,6 +120,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     if (updated) {
       const records = serviceRepo.getServiceRecordsByVehicle(updated.vehicle_id);
       set({ records });
+      dataRevisionTracker.bumpRevision('services', updated.vehicle_id);
       syncWidgetState();
       refreshReminders();
     }
@@ -136,6 +139,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     if (record) {
       const records = serviceRepo.getServiceRecordsByVehicle(record.vehicle_id);
       set({ records });
+      dataRevisionTracker.bumpRevision('services', record.vehicle_id);
       syncWidgetState();
       refreshReminders();
     }

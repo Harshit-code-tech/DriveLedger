@@ -17,7 +17,7 @@
  */
 
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { VehicleContextHeader } from '@/components/VehicleContextHeader';
@@ -44,6 +44,7 @@ import { CngTankIcon } from '@/components/CngTankIcon';
 import { ReportExportModal } from '@/components/ReportExportModal';
 import { computeMileageStats } from '@/engine/mileageEngine';
 import { useCrossVehicleStats } from '@/hooks/useCrossVehicleStats';
+import { dataRevisionTracker } from '@/services/dataRevisionTracker';
 
 // BarChart is now in src/components/charts/BarChart.tsx (imported above)
 
@@ -77,14 +78,36 @@ export default function StatsScreen() {
   // Report Export Modal
   const [showExportModal, setShowExportModal] = useState<boolean>(false);
 
+  const lastLoadedVehicleId = useRef<string | null>(null);
+  const lastLoadedRevisions = useRef<Record<string, number>>({});
+
   useFocusEffect(
     useCallback(() => {
       if (selectedVehicle) {
-        loadEntries(selectedVehicle.id, selectedVehicle.fuel_type as FuelType);
-        loadRecords(selectedVehicle.id);
-        loadExpenses(selectedVehicle.id);
+        const vId = selectedVehicle.id;
+        const vehicleChanged = vId !== lastLoadedVehicleId.current;
+
+        const fuelRev = dataRevisionTracker.getRevision('fuel', vId);
+        if (vehicleChanged || fuelRev > (lastLoadedRevisions.current[`fuel_${vId}`] ?? -1)) {
+          loadEntries(vId, selectedVehicle.fuel_type as FuelType);
+          lastLoadedRevisions.current[`fuel_${vId}`] = fuelRev;
+        }
+
+        const serviceRev = dataRevisionTracker.getRevision('services', vId);
+        if (vehicleChanged || serviceRev > (lastLoadedRevisions.current[`services_${vId}`] ?? -1)) {
+          loadRecords(vId);
+          lastLoadedRevisions.current[`services_${vId}`] = serviceRev;
+        }
+
+        const expenseRev = dataRevisionTracker.getRevision('expenses', vId);
+        if (vehicleChanged || expenseRev > (lastLoadedRevisions.current[`expenses_${vId}`] ?? -1)) {
+          loadExpenses(vId);
+          lastLoadedRevisions.current[`expenses_${vId}`] = expenseRev;
+        }
+
+        lastLoadedVehicleId.current = vId;
       }
-    }, [selectedVehicle?.id])
+    }, [selectedVehicle?.id, selectedVehicle?.fuel_type])
   );
 
   // ── Filtered data sets based on active Time Range Filter ──

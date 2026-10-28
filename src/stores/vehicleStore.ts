@@ -22,6 +22,7 @@ import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import { getPreferences, usePreferencesStore } from '@/stores/preferencesStore';
 import { syncWidgetState } from '@/widgets/widgetDataService';
 import { storeRegistry } from '@/stores/storeRegistry';
+import { dataRevisionTracker } from '@/services/dataRevisionTracker';
 
 interface VehicleState {
   /** All active (non-archived) vehicles */
@@ -113,6 +114,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
     const selected = get().selectedVehicle ?? newVehicle;
 
     set({ vehicles, selectedVehicle: selected });
+    dataRevisionTracker.bumpRevision('vehicles');
     if (Platform.OS === 'android') syncWidgetState();
     return newVehicle;
   },
@@ -124,6 +126,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
       const currentSelected = get().selectedVehicle;
       const selected = currentSelected?.id === id ? updated : currentSelected;
       set({ vehicles, selectedVehicle: selected });
+      dataRevisionTracker.bumpRevision('vehicles', id);
       if (Platform.OS === 'android') syncWidgetState();
     }
     return updated;
@@ -146,6 +149,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
       : currentSelected;
 
     set({ vehicles, selectedVehicle: selected });
+    dataRevisionTracker.bumpRevision('vehicles');
     if (Platform.OS === 'android') syncWidgetState();
     // Keep archivedVehicles list in sync so subscribers don't need a separate repo call
     get().loadArchivedVehicles();
@@ -153,6 +157,7 @@ export const useVehicleStore = create<VehicleState>((set, get) => ({
 
   restoreVehicle: (id: string) => {
     vehicleRepo.restoreVehicle(id);
+    dataRevisionTracker.bumpRevision('vehicles');
     get().loadVehicles();
     get().loadArchivedVehicles();
   },

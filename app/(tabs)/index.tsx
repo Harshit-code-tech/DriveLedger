@@ -51,6 +51,7 @@ import { TripHistoryModal } from '@/components/TripHistoryModal';
 import { FuelBarSection } from '@/components/FuelBarSection';
 import { useTripStore } from '@/stores/tripStore';
 import { useMaintenanceProfileStore } from '@/stores/maintenanceProfileStore';
+import { dataRevisionTracker } from '@/services/dataRevisionTracker';
 
 const EMPTY_CHECKED_LIST: string[] = [];
 
@@ -224,23 +225,72 @@ export default function HomeScreen() {
   // useFocusEffect fires on initial mount AND every time this tab gains
   // focus (e.g. returning from History after an edit/delete).
   // Single hook — no redundant useEffect needed.
-  const loadAll = useCallback(() => {
-    // Always refresh vehicle list so current_odometer reflects latest DB value
-    loadVehicles();
-    if (selectedVehicle) {
-      loadEntries(selectedVehicle.id);
-      loadRecords(selectedVehicle.id);
-      loadExpenses(selectedVehicle.id);
-      loadDocuments(selectedVehicle.id);
-      loadTrips(selectedVehicle.id);
-      loadProfiles(selectedVehicle.id, selectedVehicle.current_odometer);
-      // Note: loadChecklist is intentionally NOT here — AsyncStorage reads
-      // are slow (~2-3s) and checklist data only needs to load when the
-      // vehicle changes, not on every tab focus event.
-    }
-  }, [selectedVehicle?.id]);
+  const lastLoadedVehicleId = useRef<string | null>(null);
+  const lastLoadedRevisions = useRef<Record<string, number>>({});
 
-  useFocusEffect(loadAll);
+  const loadAll = useCallback((force = false) => {
+    const currentVehicleId = selectedVehicle?.id ?? null;
+    const vehicleChanged = currentVehicleId !== lastLoadedVehicleId.current;
+
+    // Refresh vehicles only if forced, vehicle changed, or vehicle dataset revision changed
+    const currentVehiclesRev = dataRevisionTracker.getRevision('vehicles');
+    if (force || vehicleChanged || currentVehiclesRev > (lastLoadedRevisions.current['vehicles'] ?? -1)) {
+      loadVehicles();
+      lastLoadedRevisions.current['vehicles'] = currentVehiclesRev;
+    }
+
+    if (selectedVehicle) {
+      const vId = selectedVehicle.id;
+
+      // Fuel entries
+      const fuelRev = dataRevisionTracker.getRevision('fuel', vId);
+      if (force || vehicleChanged || fuelRev > (lastLoadedRevisions.current[`fuel_${vId}`] ?? -1)) {
+        loadEntries(vId);
+        lastLoadedRevisions.current[`fuel_${vId}`] = fuelRev;
+      }
+
+      // Service records
+      const serviceRev = dataRevisionTracker.getRevision('services', vId);
+      if (force || vehicleChanged || serviceRev > (lastLoadedRevisions.current[`services_${vId}`] ?? -1)) {
+        loadRecords(vId);
+        lastLoadedRevisions.current[`services_${vId}`] = serviceRev;
+      }
+
+      // Expenses
+      const expenseRev = dataRevisionTracker.getRevision('expenses', vId);
+      if (force || vehicleChanged || expenseRev > (lastLoadedRevisions.current[`expenses_${vId}`] ?? -1)) {
+        loadExpenses(vId);
+        lastLoadedRevisions.current[`expenses_${vId}`] = expenseRev;
+      }
+
+      // Documents
+      const docRev = dataRevisionTracker.getRevision('documents', vId);
+      if (force || vehicleChanged || docRev > (lastLoadedRevisions.current[`documents_${vId}`] ?? -1)) {
+        loadDocuments(vId);
+        lastLoadedRevisions.current[`documents_${vId}`] = docRev;
+      }
+
+      // Trips
+      const tripRev = dataRevisionTracker.getRevision('trips', vId);
+      if (force || vehicleChanged || tripRev > (lastLoadedRevisions.current[`trips_${vId}`] ?? -1)) {
+        loadTrips(vId);
+        lastLoadedRevisions.current[`trips_${vId}`] = tripRev;
+      }
+
+      // Maintenance Profiles
+      const profileRev = dataRevisionTracker.getRevision('maintenanceProfiles', vId);
+      if (force || vehicleChanged || profileRev > (lastLoadedRevisions.current[`profiles_${vId}`] ?? -1)) {
+        loadProfiles(vId, selectedVehicle.current_odometer);
+        lastLoadedRevisions.current[`profiles_${vId}`] = profileRev;
+      }
+    }
+
+    lastLoadedVehicleId.current = currentVehicleId;
+  }, [selectedVehicle?.id, selectedVehicle?.current_odometer]);
+
+  useFocusEffect(useCallback(() => {
+    loadAll(false);
+  }, [loadAll]));
 
   // Load checklist state once per vehicle change (not on every tab focus).
   // AsyncStorage is significantly slower than SQLite, so keeping this
@@ -256,7 +306,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    loadAll();
+    loadAll(true);
     setTimeout(() => setRefreshing(false), 500);
   }, [loadAll]);
 

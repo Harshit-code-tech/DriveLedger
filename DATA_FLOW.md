@@ -71,23 +71,26 @@ useFuelStore.deleteFuelEntry(entryId, vehicle)
 
 ---
 
-## Load Screen Data Flow
+## Load Screen Data Flow (Targeted Revision-Based Invalidation)
 
 ```
 Screen comes into focus (useFocusEffect)
         │
-        ├─► useFuelStore.loadEntries(vehicleId, fuelType)
+        ├─► check dataRevisionTracker.getRevision(dataset, vehicleId)
         │       │
-        │       ├─► fuelRepo.getFuelEntriesByVehicle(vehicleId)
-        │       │       └─► derive odometer order in memory for calculations
-        │       ├─► mileageEngine.computeMileageStats(entries, fuelType)
-        │       └─► set({ entries, stats, partialEstimates })
+        │       ├─► Revision unchanged & vehicle unchanged?
+        │       │       └─► SKIP SQLite read (use existing in-memory store state)
+        │       │
+        │       └─► Revision bumped or vehicle changed?
+        │               ├─► fuel: fuelRepo.getFuelEntriesByVehicle(vehicleId)
+        │               ├─► services: serviceRepo.getServiceRecordsByVehicle(vehicleId)
+        │               ├─► expenses: expenseRepo.getExpensesByVehicle(vehicleId)
+        │               └─► update screen's last-loaded revision ref
         │
-        ├─► useServiceStore.loadRecords(vehicleId)
-        │       └─► serviceRepo.getServiceRecordsByVehicle(vehicleId)
-        │
-        └─► useExpenseStore.loadExpenses(vehicleId)
-                └─► expenseRepo.getExpensesByVehicle(vehicleId)
+        └─► Fleet Comparison & Charts (Stats Screen):
+                └─► Uses targeted SQL aggregates (fuelRepo.getVehicleFuelAggregates,
+                    serviceRepo.getVehicleServiceAggregates, expenseRepo.getVehicleExpenseAggregates)
+                    instead of loading full entity rows across all vehicles.
 ```
 
 ---
