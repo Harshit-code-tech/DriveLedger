@@ -19,12 +19,10 @@ import { useVehicleStore } from '@/stores/vehicleStore';
 import type { VehicleDocument } from '@/types/document';
 import { daysUntil, formatDisplayDateLong } from '@/utils/date';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import * as IntentLauncher from 'expo-intent-launcher';
-import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system/legacy';
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import { Alert, FlatList, Image, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ReportExportModal } from '@/components/ReportExportModal';
+import { openAttachment, isPdfAttachment, getThumbnailUri } from '@/utils/attachmentStorage';
 
 export default function DocumentsScreen() {
   const colors = useThemeColors();
@@ -114,81 +112,10 @@ export default function DocumentsScreen() {
   };
 
   const openDocumentFile = async (uri: string) => {
-    const isPDF = Boolean(uri && (uri.toLowerCase().includes('.pdf') || uri.toLowerCase().endsWith('.pdf')));
-    if (isPDF) {
-      try {
-        const cacheDir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
-        const shareUri = `${cacheDir}share_${Date.now()}.pdf`;
-
-        let readyToOpen = false;
-
-        try {
-          await FileSystem.copyAsync({ from: uri, to: shareUri });
-          readyToOpen = true;
-        } catch (copyErr) {
-          console.warn('copyAsync to cache failed, trying stream fallback:', copyErr);
-        }
-
-        if (!readyToOpen) {
-          try {
-            const res = await fetch(uri);
-            const blob = await res.blob();
-            const base64 = await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onloadend = () => {
-                const dataUrl = reader.result as string;
-                resolve(dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl);
-              };
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
-            });
-            await FileSystem.writeAsStringAsync(shareUri, base64, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-            readyToOpen = true;
-          } catch (fetchErr) {
-            console.warn('Fetch fallback to cache failed:', fetchErr);
-          }
-        }
-
-        if (!readyToOpen) {
-          Alert.alert(
-            '📄 Document File Inaccessible',
-            'This PDF is no longer accessible on your device. Please edit the document and re-upload your PDF.'
-          );
-          return;
-        }
-
-        if (Platform.OS === 'android') {
-          try {
-            const contentUri = await FileSystem.getContentUriAsync(shareUri);
-            await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-              data: contentUri,
-              flags: 1,
-              type: 'application/pdf',
-            });
-            return;
-          } catch (intentErr) {
-            console.warn('Direct ACTION_VIEW failed, falling back to share sheet:', intentErr);
-          }
-        }
-
-        const isAvailable = await Sharing.isAvailableAsync();
-        if (isAvailable) {
-          await Sharing.shareAsync(shareUri, {
-            mimeType: 'application/pdf',
-            dialogTitle: 'Open PDF',
-          });
-        } else {
-          Alert.alert(
-            '📄 No PDF Viewer Available',
-            'Install a PDF viewer to view this document.'
-          );
-        }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : '';
-        if (msg.includes('cancelled') || msg.includes('canceled') || msg.includes('dismiss')) return;
-        Alert.alert('Could Not Open PDF', msg || 'File may be inaccessible.');
+    if (isPdfAttachment(uri)) {
+      const res = await openAttachment(uri, 'Open PDF');
+      if (!res.success && res.message) {
+        Alert.alert('📄 Could Not Open Document', res.message);
       }
     } else {
       setViewerUri(uri);
@@ -444,10 +371,18 @@ function DocumentCard({
   }, []);
 
   const isExpiredOrExpiring = item.expiry_date && daysUntil(item.expiry_date) <= 30;
-  const isPDF = Boolean(
-    item.file_uri &&
-      (item.file_uri.toLowerCase().endsWith('.pdf') || item.file_uri.toLowerCase().includes('.pdf'))
+  const isPDF = isPdfAttachment(item.file_uri);
+  const [photoUri, setPhotoUri] = useState<string | null>(
+    () => (item.file_uri ? getThumbnailUri(item.file_uri) || item.file_uri : null)
   );
+
+  useEffect(() => {
+    if (item.file_uri) {
+      setPhotoUri(getThumbnailUri(item.file_uri) || item.file_uri);
+    } else {
+      setPhotoUri(null);
+    }
+  }, [item.file_uri]);
 
   const handleTap = () => {
     const now = Date.now();
@@ -525,8 +460,17 @@ function DocumentCard({
         </View>
       </View>
 
-      {item.file_uri && !isPDF && (
-        <Image source={{ uri: item.file_uri }} style={styles.docPhoto} resizeMode="cover" />
+      {photoUri && !isPDF && (
+        <Image
+          source={{ uri: photoUri }}
+          style={styles.docPhoto}
+          resizeMode="cover"
+          onError={() => {
+            if (photoUri !== item.file_uri && item.file_uri) {
+              setPhotoUri(item.file_uri);
+            }
+          }}
+        />
       )}
       {item.file_uri && isPDF && (
         <TouchableOpacity
