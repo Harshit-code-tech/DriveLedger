@@ -504,6 +504,7 @@ export const useTripStore = create<TripState>((set, get) => ({
               return;
             }
             activeSession.distanceKm = event.totalDistanceKm;
+            activeSession.totalSamplesReceived = event.totalSamplesReceived;
             activeSession.acceptedSamplesCount = event.acceptedSamplesCount;
             activeSession.rejectedSamplesCount = event.rejectedSamplesCount;
             activeSession.currentSpeed = event.currentSpeed;
@@ -593,7 +594,7 @@ export const useTripStore = create<TripState>((set, get) => ({
               stationary_drift: 0,
               implausible_speed: 0,
             },
-            total_samples_received: activeSession.totalSamplesReceived,
+            total_samples_received: Math.max(activeSession.totalSamplesReceived, activeSession.acceptedSamplesCount + activeSession.rejectedSamplesCount),
             accepted_samples_count: activeSession.acceptedSamplesCount,
             rejected_samples_count: activeSession.rejectedSamplesCount,
             gap_count: activeSession.gapCount,
@@ -632,7 +633,7 @@ export const useTripStore = create<TripState>((set, get) => ({
               stationary_drift: 0,
               implausible_speed: 0,
             },
-            total_samples_received: activeSession.totalSamplesReceived,
+            total_samples_received: Math.max(activeSession.totalSamplesReceived, activeSession.acceptedSamplesCount + activeSession.rejectedSamplesCount),
             accepted_samples_count: activeSession.acceptedSamplesCount,
             rejected_samples_count: activeSession.rejectedSamplesCount,
             gap_count: activeSession.gapCount,
@@ -706,6 +707,7 @@ export const useTripStore = create<TripState>((set, get) => ({
             return;
           }
           activeSession.distanceKm = event.totalDistanceKm;
+          activeSession.totalSamplesReceived = event.totalSamplesReceived;
           activeSession.acceptedSamplesCount = event.acceptedSamplesCount;
           activeSession.rejectedSamplesCount = event.rejectedSamplesCount;
           activeSession.currentSpeed = event.currentSpeed;
@@ -838,9 +840,15 @@ export const useTripStore = create<TripState>((set, get) => ({
     const finalDurationMinutes = Math.round(finalDurationSeconds / 60);
 
     // Build aggregate diagnostics and quality warning from observed live events
+    const totalReceived = currentSession
+      ? (currentSession.totalSamplesReceived > 0
+          ? currentSession.totalSamplesReceived
+          : currentSession.acceptedSamplesCount + currentSession.rejectedSamplesCount)
+      : storedLocations.length;
+
     const diagnostics: TripDiagnostics = currentSession ? {
       rejection_counts: { ...currentSession.rejectionCounts },
-      total_samples_received: currentSession.totalSamplesReceived,
+      total_samples_received: totalReceived,
       accepted_samples_count: currentSession.acceptedSamplesCount,
       rejected_samples_count: currentSession.rejectedSamplesCount,
       gap_count: currentSession.gapCount,
@@ -865,7 +873,7 @@ export const useTripStore = create<TripState>((set, get) => ({
 
     const qualityNotes = currentSession ? buildQualityWarning({
       hasGapWarning: currentSession.hasGaps,
-      totalReceived: currentSession.totalSamplesReceived,
+      totalReceived,
       rejectedCount: currentSession.rejectedSamplesCount,
       rejectionCounts: currentSession.rejectionCounts,
     }) : undefined;
@@ -885,15 +893,23 @@ export const useTripStore = create<TripState>((set, get) => ({
     activeSession = null;
 
     // Explicit canonical odometer reconciliation
-    if (options?.updateVehicleOdometer && typeof options?.endOdometer === 'number') {
+    const proposedEndOdo =
+      typeof options?.endOdometer === 'number'
+        ? options.endOdometer
+        : (typeof thisTrip.start_odometer === 'number' && finalDistanceKm > 0
+            ? Math.round(thisTrip.start_odometer + finalDistanceKm)
+            : undefined);
+
+    if (options?.updateVehicleOdometer && typeof proposedEndOdo === 'number') {
       const vehicle = vehicleRepo.getVehicleById(vehicleId);
       const updateCheck = canUpdateCanonicalOdometer({
-        proposedOdometer: options.endOdometer,
+        proposedOdometer: proposedEndOdo,
         currentCanonicalOdometer: vehicle?.current_odometer,
         isExplicitlyConfirmed: true,
       });
       if (updateCheck.canUpdate) {
-        vehicleRepo.updateVehicleOdometer(vehicleId, options.endOdometer);
+        vehicleRepo.updateVehicleOdometer(vehicleId, proposedEndOdo);
+        dataRevisionTracker.bumpRevision('vehicles', vehicleId);
         storeRegistry.refreshVehicles();
       }
     }

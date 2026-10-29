@@ -26,6 +26,7 @@ import { checkLocationPermissionStatus } from '@/services/locationPermissionServ
 import { haversineDistance, buildQualityWarning } from '@/engine/distanceEngine';
 
 import { storeRegistry } from '@/stores/storeRegistry';
+import { setPendingPostTripPrompt, resolveTripEndOdometer } from '@/services/postTripFuelPromptService';
 import type { Trip, TripDiagnostics, FinishTripOptions } from '@/types/trip';
 import type { Vehicle } from '@/types/vehicle';
 
@@ -523,10 +524,21 @@ export async function finishGpsTripCoordinator(
     }
   }
 
+  const acceptedCount = acceptedPoints.length;
+  const rejectedCount = diagnosticsObj?.rejected_samples_count ?? 0;
+  const totalReceived =
+    diagnosticsObj?.total_samples_received && diagnosticsObj.total_samples_received > 0
+      ? diagnosticsObj.total_samples_received
+      : acceptedCount + rejectedCount;
+
+  if (diagnosticsObj) {
+    diagnosticsObj.total_samples_received = totalReceived;
+  }
+
   const qualityNotes = buildQualityWarning({
     hasGapWarning: diagnosticsObj?.has_gap_warning ?? false,
-    totalReceived: diagnosticsObj?.total_samples_received ?? acceptedPoints.length,
-    rejectedCount: diagnosticsObj?.rejected_samples_count ?? 0,
+    totalReceived,
+    rejectedCount,
     rejectionCounts: diagnosticsObj?.rejection_counts,
   });
 
@@ -542,6 +554,22 @@ export async function finishGpsTripCoordinator(
   });
 
   storeRegistry.refreshTrips(activeTrip.vehicle_id);
+
+  if (finalized) {
+    const vehicle = vehicleRepo.getVehicleById(activeTrip.vehicle_id);
+    const tripOdo = resolveTripEndOdometer(finalized, vehicle?.current_odometer);
+    if (
+      typeof tripOdo === 'number' &&
+      typeof vehicle?.current_odometer === 'number' &&
+      tripOdo > vehicle.current_odometer
+    ) {
+      vehicleRepo.updateVehicleOdometer(activeTrip.vehicle_id, tripOdo);
+      storeRegistry.refreshVehicles();
+    }
+    try {
+      await setPendingPostTripPrompt(finalized.id, activeTrip.vehicle_id, tripOdo);
+    } catch {}
+  }
 
   // Synchronize native Android widget
   try {

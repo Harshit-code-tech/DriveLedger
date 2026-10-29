@@ -226,12 +226,55 @@ E1 = full tank, 500 km from E0
 
 E2 = partial fill (is_full_tank = 0)
      calculated_mileage = NULL (partial fills do not anchor a calculation)
-     partialEstimate(E2) = (odometer[E2] - odometer[E1]) / fuel[E1]
-                           (estimated from previous fill, shown with ~ prefix)
+     partialEstimate(E2) = (odometer[E2] - odometer[E1]) / fuel[E2]
+                           (estimated from current fill replenishment, shown with ~ prefix)
 
 E3 = full tank, 300 km from E1
      mileage(E3) = (odometer[E3] - odometer[E1]) / (fuel[E2] + fuel[E3])
                    (all fuel since last full fill is counted)
 ```
 
-See [`mileage_calculation_guide.md`](./mileage_calculation_guide.md) for edge cases (first entry, EV kWh, CNG kg).
+See [`mileage_calculation_guide.md`](./mileage_calculation_guide.md) for full comparison of partial fill formulas, edge cases, EV kWh, and CNG kg.
+
+---
+
+## GPS Trip Completion & Post-Trip Fuel Prompt Flow
+
+```
+User completes GPS Trip in TripReviewModal (or widget/background stop)
+        │
+        ├─► tripStore.finishGpsTrip(tripId, endOdometer, purpose, notes)
+        │       ├─► tripRepo.updateTripStatus(tripId, 'completed', distance, duration, endOdo)
+        │       ├─► vehicleRepo.updateVehicleOdometer(vehicleId, endOdometer)
+        │       ├─► statsHelpers.estimateFuelLevel() updates depleted level based on km driven & mileage
+        │       ├─► dataRevisionTracker.bumpRevision('trips', vehicleId)
+        │       └─► dataRevisionTracker.bumpRevision('vehicles')
+        │
+        └─► showPostTripFuelPrompt() [postTripFuelPromptService.ts]
+                ├─ User taps "Add Fuel":
+                │     └─► router.push('/add-fuel?vehicleId=...&odometer=...')
+                │           └─ Pre-fills verified odometer from GPS trip
+                └─ User taps "Not Now" / dismisses:
+                      └─► Preserves normal post-completion flow without altering trip
+```
+
+---
+
+## GPS Speed & Efficiency Analysis Flow
+
+```
+Trip Detail Modal / Trip Review Modal opens (visible = true)
+        │
+        ├─► tripRepo.getTripLocations(tripId)
+        │
+        ├─► speedBandAnalysisEngine.analyzeTripSpeedBands(locations, options)
+        │       ├─► Filters invalid coordinates & rejected points (O(N) check)
+        │       ├─► Filters pause intervals & signal gaps (>120s)
+        │       ├─► O(1) classifies intervals into speed bands (0-20, 20-30, 30-50, 50-80, 80+)
+        │       ├─► Computes distance % and time % using identical shared denominators
+        │       └─► Derives speed band mileage: Baseline × Band Efficiency Factor
+        │
+        └─► renders memoized SpeedEfficiencySection.tsx
+                └─ 3-way toggle: Distance (km) | Time % | Estimated Mileage
+```
+

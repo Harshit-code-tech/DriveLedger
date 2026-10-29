@@ -229,8 +229,8 @@ export function calculateMileageForEntry(
  * Calculates an ESTIMATED mileage for a partial fill entry.
  *
  * This is an approximation: distance since the previous entry divided by
- * fuel added in the previous fill. It's imprecise because it ignores how much fuel
- * was already in the tank at both ends. Always flag with isEstimate: true.
+ * fuel added in the current fill (representing the fuel added to replenish the interval).
+ * Always flag with isEstimate: true.
  *
  * @param entries - ALL fuel entries for the vehicle, sorted by odometer ASC
  * @param currentIndex - Index of the entry to estimate mileage for
@@ -272,11 +272,11 @@ export function calculatePartialEstimate(
   const distance = current.odometer - previous.odometer;
   if (distance <= 0) return null;
 
-  const fuel = previous.fuel_amount;
+  const fuel = current.fuel_amount;
   if (fuel <= 0) return null;
 
   const mileage = distance / fuel;
-  const unit = FUEL_UNIT_TO_MILEAGE_UNIT[previous.fuel_unit] ?? FUEL_UNIT_TO_MILEAGE_UNIT[current.fuel_unit];
+  const unit = FUEL_UNIT_TO_MILEAGE_UNIT[current.fuel_unit];
 
   return { value: mileage, unit, isEstimate: true };
 }

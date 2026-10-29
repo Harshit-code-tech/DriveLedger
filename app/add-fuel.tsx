@@ -70,7 +70,7 @@ export default function AddFuelScreen() {
   const colors = useThemeColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ id?: string; vehicleId?: string }>();
+  const params = useLocalSearchParams<{ id?: string; vehicleId?: string; odometer?: string }>();
 
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
   const selectVehicle = useVehicleStore((s) => s.selectVehicle);
@@ -84,12 +84,18 @@ export default function AddFuelScreen() {
     }
   }, [params.vehicleId]);
 
+  useEffect(() => {
+    if (!params.id && params.odometer && !odometer) {
+      setOdometer(String(params.odometer));
+    }
+  }, [params.id, params.odometer]);
+
   const isEditMode = !!params.id;
 
   // Form state
   const [date, setDate] = useState(todayISO());
   const [dateDisplay, setDateDisplay] = useState('');
-  const [odometer, setOdometer] = useState('');
+  const [odometer, setOdometer] = useState(!params.id && params.odometer ? String(params.odometer) : '');
   const [fuelAmount, setFuelAmount] = useState('');
   const [pricePerUnit, setPricePerUnit] = useState('');
   const [totalCostInput, setTotalCostInput] = useState('');
@@ -160,6 +166,13 @@ export default function AddFuelScreen() {
       }
     }
   }, [isEditMode, selectedVehicle?.id]);
+
+  // Pre-fill odometer if passed from post-GPS trip completion redirect
+  useEffect(() => {
+    if (!isEditMode && params.odometer) {
+      setOdometer(String(params.odometer));
+    }
+  }, [isEditMode, params.odometer]);
 
   // ── Derived fuel & EV properties (Declared before early return to obey Rules of Hooks) ──
   const isHybrid = selectedVehicle ? isHybridFuel(selectedVehicle.fuel_type as FuelType) : false;
@@ -658,7 +671,7 @@ export default function AddFuelScreen() {
           value={odometer}
           onChangeText={setOdometer}
           keyboardType="numeric"
-          autoFocus={!isEditMode}
+          autoFocus={!isEditMode && !params.odometer}
         />
 
         {/* ── 2-Way Fuel & Cost Calculator Card ── */}

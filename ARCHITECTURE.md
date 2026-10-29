@@ -56,6 +56,8 @@ DriveLedger/
 │   │   └── repositories/       # One file per table (fuelRepo, vehicleRepo, …)
 │   ├── engine/                 # Pure business logic (no UI, no DB)
 │   │   ├── mileageEngine.ts    # Tank-to-tank mileage calculation
+│   │   ├── speedBandAnalysisEngine.ts # Non-overlapping speed-band classification & aggregation
+│   │   ├── distanceEngine.ts   # GPS coordinate filtering and distance accumulation
 │   │   ├── validationEngine.ts # Input validation rules
 │   │   ├── backupEngine.ts     # Backup/restore orchestration (re-exports from backup/)
 │   │   └── backup/             # Backup sub-modules
@@ -135,10 +137,54 @@ Tank-to-tank method:
 
 1. Fill-ups are stored in chronological order.
 2. When a new full-tank fill-up is saved, `calculateMileageForEntry` divides the distance driven (odometer delta) by the fuel consumed (previous fill to this fill) to get `km/L` or `km/kg`.
-3. Partial fills are estimated via `calculatePartialEstimate` using distance divided by fuel added in the previous fill.
+3. Partial fills are estimated via `calculatePartialEstimate` using distance divided by fuel added in the current fill (representing replenishment).
 4. `computeMileageStats` derives running average, best, worst, monthly average over all entries.
 
 See [`mileage_calculation_guide.md`](./mileage_calculation_guide.md) for full details.
+
+---
+
+## GPS Speed & Efficiency Analysis
+
+The Speed & Efficiency Analysis section (`SpeedEfficiencySection.tsx`) appears on completed GPS Trip Details (`TripDetailModal.tsx`) placed immediately after sensor diagnostics and before the Recorded Point Timeline.
+
+### Speed-Band Boundaries & Relative Efficiency
+- `0–<20 km/h` (`band_0_20`): Stop & Go crawling (ICE: 0.60x, EV: 1.20x)
+- `20–<30 km/h` (`band_20_30`): City traffic (ICE: 0.80x, EV: 1.15x)
+- `30–<50 km/h` (`band_30_50`): Moderate suburban cruising (ICE: 1.05x, EV: 1.10x)
+- `50–<80 km/h` (`band_50_80`): Optimal cruising sweet spot (ICE: 1.25x, EV: 0.95x)
+- `80+ km/h` (`band_80_plus`): High-speed aerodynamic drag dominant (ICE: 0.85x, EV: 0.75x)
+
+Boundaries are non-overlapping: exact 20, 30, 50, and 80 km/h are strictly assigned to upper bands ($s \ge \text{min} \land (s < \text{max} \lor \text{max is null})$).
+
+### Speed & Efficiency Section & Toggle Modes
+- Displayed immediately upon ending a GPS trip in [`TripReviewModal`](file:///home/hghosh/Desktop/CODING/DriveLedger/src/components/TripReviewModal.tsx) and on completed trip details in [`TripDetailModal`](file:///home/hghosh/Desktop/CODING/DriveLedger/src/components/TripDetailModal.tsx).
+- 3-way segmented toggle:
+  1. **Distance**: Shows distance in km per speed band with proportional bar sharing total analyzed distance.
+  2. **Time %**: Shows percentage of active moving duration per speed band with proportional bar sharing total analyzed duration.
+  3. **Mileage**: Shows estimated average mileage (in `km/L`, `km/kg`, or `km/kWh`) provided at each particular speed range, calculated from the vehicle's baseline/running average scaled by aerodynamic and powertrain efficiency factors. Highlights the optimal sweet-spot band.
+
+### Calculation Rules & Robustness
+1. **Analysed Distance & Duration**: Estimated from consecutive accepted GPS points sorted chronologically.
+2. **Missing Speeds**: Unknown, null, or negative speeds are NEVER treated as 0 km/h; unanalysed intervals are omitted from speed bands.
+3. **Rejected Samples**: Ignored completely.
+4. **Pause Boundaries**: Intervals that intersect or cross pause windows (`p.paused_at < t_curr && t_prev < p.resumed_at`) contribute 0 active moving time and 0 distance.
+5. **Signal Gaps (>120s)**: Excluded from speed-band metrics and flagged in data quality notices.
+6. **Strict Proportions**: In Distance mode, bar lengths represent each band's share of total *analysed distance*. In Time % mode, bar lengths represent each band's share of total *analysed duration*. Both modes share identical denominators between bar widths and displayed values.
+
+### Vehicle Average Mileage Display
+- Displayed below the speed-band bars in a dedicated summary row (never inside an individual speed-band bar).
+- Derived authoritatively from the vehicle's existing tank-to-tank fuel records via `computeMileageStats(entries, fuelType).runningAverage`.
+- If fewer than two qualifying full fills exist, displays the neutral message: `Add a valid fuel record interval to calculate the vehicle average.` (never `0 km/L`, `NaN`, or fabricated estimates).
+
+### Post-Trip Fuel Prompt
+- Triggered immediately after a GPS trip is successfully finalized and persisted (`finishGpsTrip` / `TripReviewModal`).
+- Dialog title: `Trip completed!`, message: `Would you like to add fuel for this vehicle now?`.
+- **Add Fuel**: Opens `/add-fuel` preselecting the trip's vehicle ID and pre-filling the odometer reading automatically from the trip's finalized/calculated end odometer. Normal navigation to `/add-fuel` (from tab bar, dashboard button, or widget) remains unaffected.
+- **Not Now**: Dismisses dialog and preserves normal post-completion flow.
+- Dismissing or cancelling fuel entry never rolls back, alters, or loses the saved trip.
+- **Headless Deferral**: When a trip is finished via widget or background tasks (`finishGpsTripCoordinator`), the prompt (including trip end odometer) is stored in `AsyncStorage` and deferred until the app is foregrounded, ensuring headless tasks never trigger UI dialogs.
+- Deduplication prevents duplicate dialogs across re-renders, app resume, or navigation events.
 
 ---
 

@@ -113,6 +113,7 @@ export function resetBackgroundLocationAnchor(): void {
 export interface BackgroundLocationUpdateEvent {
   tripId: string;
   totalDistanceKm: number;
+  totalSamplesReceived: number;
   acceptedSamplesCount: number;
   rejectedSamplesCount: number;
   currentSpeed: number | null;
@@ -371,6 +372,7 @@ export async function handleBackgroundLocations(
   const event: BackgroundLocationUpdateEvent = {
     tripId: activeTrip.id,
     totalDistanceKm: newDistanceKm,
+    totalSamplesReceived: currentDiagnostics.total_samples_received,
     acceptedSamplesCount: currentDiagnostics.accepted_samples_count,
     rejectedSamplesCount: currentDiagnostics.rejected_samples_count,
     currentSpeed: latestSpeed,

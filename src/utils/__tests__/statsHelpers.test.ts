@@ -165,6 +165,54 @@ describe('estimateFuelLevel', () => {
     expect(estimateFuelLevel([{ odometer: 1000, is_full_tank: 0, fuel_amount: 10 } as any], 35, 1050, 15)).toBeNull();
     expect(estimateFuelLevel([{ odometer: 1000, is_full_tank: 1, fuel_amount: 30 } as any], 35, 1050, 0)).toBeNull();
   });
+
+  it('depletes fuel level across completed trips as per vehicle mileage', () => {
+    // Tank: 45 L, full at 46100, mileage: 20 km/L.
+    const entries = [{ odometer: 46100, fuel_amount: 45, is_full_tank: 1 } as any];
+
+    // Trip 1 completes: odometer increases to 46110 (+10 km), no fuel added.
+    // Consumed: 10 km / 20 km/L = 0.5 L -> remaining = 44.5 L (98.9% -> 5 bars Full)
+    const afterTrip1 = estimateFuelLevel(entries, 45, 46110, 20, 'L');
+    expect(afterTrip1).not.toBeNull();
+    expect(afterTrip1?.remainingLitres).toBe(44.5);
+    expect(afterTrip1?.percent).toBeCloseTo(98.89, 1);
+    expect(afterTrip1?.bars).toBe(5);
+
+    // Trip 2 completes: odometer increases to 46500 (+400 km total), no fuel added.
+    // Consumed: 400 km / 20 km/L = 20 L -> remaining = 25 L (55.6% -> 3 bars Half)
+    const afterTrip2 = estimateFuelLevel(entries, 45, 46500, 20, 'L');
+    expect(afterTrip2).not.toBeNull();
+    expect(afterTrip2?.remainingLitres).toBe(25);
+    expect(afterTrip2?.bars).toBe(3);
+    expect(afterTrip2?.label).toBe('Half');
+
+    // Long distance: odometer increases to 47100 (+1000 km total).
+    // Consumed: 1000 / 20 = 50 L > 45 L tank -> emptied to 0 L, 0%, Empty
+    const afterLongTrips = estimateFuelLevel(entries, 45, 47100, 20, 'L');
+    expect(afterLongTrips).not.toBeNull();
+    expect(afterLongTrips?.remainingLitres).toBe(0);
+    expect(afterLongTrips?.percent).toBe(0);
+    expect(afterLongTrips?.bars).toBe(0);
+    expect(afterLongTrips?.label).toBe('Empty');
+  });
+
+  it('estimates EV battery level and depletes battery as per EV mileage (km/kWh)', () => {
+    // EV battery: 60 kWh, charged at 10000 km to 80% (48 kWh), avg efficiency: 6 km/kWh.
+    const evEntries = [
+      { odometer: 10000, battery_end_percent: 80, fuel_amount: 30, fuel_unit: 'kWh' } as any,
+    ];
+
+    // Drove 60 km without charging -> odometer is 10060.
+    // Consumed: 60 km / 6 km/kWh = 10 kWh -> remaining = 38 kWh.
+    // Percent: 38 / 60 = 63.3% -> 3 bars Half
+    const evLevel = estimateFuelLevel(evEntries, 60, 10060, 6, 'kWh');
+    expect(evLevel).not.toBeNull();
+    expect(evLevel?.remainingLitres).toBe(38);
+    expect(evLevel?.percent).toBeCloseTo(63.33, 1);
+    expect(evLevel?.kmRemaining).toBe(228);
+    expect(evLevel?.bars).toBe(3);
+    expect(evLevel?.label).toBe('Half');
+  });
 });
 
 describe('filterRecordsByTimeRange', () => {

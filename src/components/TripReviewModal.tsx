@@ -27,7 +27,14 @@ import { useThemeColors } from '@/hooks/useThemeColors';
 import { useTripStore } from '@/stores/tripStore';
 import * as vehicleRepo from '@/database/repositories/vehicleRepo';
 import type { Vehicle } from '@/types/vehicle';
+import type { Trip } from '@/types/trip';
 import { formatDisplayDateLong } from '@/utils/date';
+import * as tripRepo from '@/database/repositories/tripRepo';
+import * as fuelRepo from '@/database/repositories/fuelRepo';
+import { FuelType } from '@/constants/fuelTypes';
+import { computeMileageStats } from '@/engine/mileageEngine';
+import { analyzeTripSpeedBands } from '@/engine/speedBandAnalysisEngine';
+import { SpeedEfficiencySection } from '@/components/SpeedEfficiencySection';
 import {
   calculateEstimatedEndOdometer,
   detectBaselineConflict,
@@ -37,7 +44,7 @@ import {
 interface TripReviewModalProps {
   visible: boolean;
   vehicle: Vehicle;
-  onSaved: () => void;
+  onSaved: (finalizedTrip?: Trip | null) => void;
   onCancel: () => void;
 }
 
@@ -57,26 +64,68 @@ export function TripReviewModal({
   const finishGpsTrip = useTripStore((s) => s.finishGpsTrip);
 
   const targetVehicle = useMemo(() => {
+    if (!visible) return vehicle;
     if (activeTrip && activeTrip.vehicle_id !== vehicle.id) {
       const v = vehicleRepo.getVehicleById(activeTrip.vehicle_id);
       if (v) return v;
     }
     return vehicle;
-  }, [activeTrip?.vehicle_id, vehicle]);
+  }, [visible, activeTrip?.vehicle_id, vehicle]);
 
   const estimatedEndOdo = useMemo(() => {
-    if (!activeTrip) return null;
-    return calculateEstimatedEndOdometer(activeTrip.start_odometer, liveMetrics.distanceKm);
-  }, [activeTrip?.start_odometer, liveMetrics.distanceKm]);
+    if (!visible || !activeTrip) return null;
+    const startOdo = activeTrip.start_odometer ?? targetVehicle.current_odometer;
+    return calculateEstimatedEndOdometer(startOdo, liveMetrics.distanceKm);
+  }, [visible, activeTrip?.start_odometer, targetVehicle.current_odometer, liveMetrics.distanceKm]);
 
   const baselineConflict = useMemo(() => {
-    if (!activeTrip) return { hasConflict: false, expectedEstimatedEndOdo: null };
+    if (!visible || !activeTrip) return { hasConflict: false, expectedEstimatedEndOdo: null };
     return detectBaselineConflict(
       activeTrip.start_odometer,
       targetVehicle.current_odometer,
       liveMetrics.distanceKm
     );
-  }, [activeTrip?.start_odometer, targetVehicle.current_odometer, liveMetrics.distanceKm]);
+  }, [visible, activeTrip?.start_odometer, targetVehicle.current_odometer, liveMetrics.distanceKm]);
+
+  const rawLocations = useMemo(() => {
+    if (!visible || !activeTrip) return [];
+    try {
+      return tripRepo.getTripLocations(activeTrip.id);
+    } catch {
+      return [];
+    }
+  }, [visible, activeTrip?.id]);
+
+  const vehicleAverageMileage = useMemo(() => {
+    if (!visible || !targetVehicle?.id) return null;
+    try {
+      const entries = fuelRepo.getFuelEntriesByVehicle(targetVehicle.id);
+      const stats = computeMileageStats(entries, targetVehicle.fuel_type as FuelType);
+      return stats.runningAverage;
+    } catch {
+      return null;
+    }
+  }, [visible, targetVehicle]);
+
+  const speedAnalysis = useMemo(() => {
+    if (!visible || !activeTrip || rawLocations.length === 0) return null;
+    let pauseIntervals: Array<{ paused_at: number; resumed_at: number }> = [];
+    if (activeTrip.diagnostics) {
+      try {
+        const parsed = JSON.parse(activeTrip.diagnostics);
+        if (Array.isArray(parsed?.pause_intervals)) {
+          pauseIntervals = parsed.pause_intervals;
+        }
+      } catch {}
+    }
+    return analyzeTripSpeedBands(rawLocations, {
+      pauseIntervals,
+      totalTripDistanceKm: liveMetrics.distanceKm,
+      totalTripDurationSeconds: liveMetrics.elapsedSeconds,
+      baselineMileage: vehicleAverageMileage?.value,
+      fuelType: targetVehicle?.fuel_type,
+    });
+  }, [visible, activeTrip, rawLocations, liveMetrics.distanceKm, liveMetrics.elapsedSeconds, vehicleAverageMileage, targetVehicle]);
 
   const [purpose, setPurpose] = useState(activeTrip?.purpose || 'Personal');
   const [endOdometer, setEndOdometer] = useState(
@@ -136,7 +185,7 @@ export function TripReviewModal({
 
       if (finalized) {
         setIsSaving(false);
-        onSaved();
+        onSaved(finalized);
       } else {
         setIsSaving(false);
         Alert.alert('Save Failed', 'Unable to finalize trip record. Please try again.');
@@ -249,6 +298,17 @@ export function TripReviewModal({
               </Text>
             </View>
           </View>
+
+          {/* Speed & Efficiency Analysis Breakdown */}
+          {speedAnalysis && speedAnalysis.hasSufficientData && (
+            <View style={{ marginBottom: Spacing.md }}>
+              <SpeedEfficiencySection
+                analysis={speedAnalysis}
+                vehicleAverageMileage={vehicleAverageMileage}
+                vehicleFuelType={targetVehicle.fuel_type}
+              />
+            </View>
+          )}
 
           {/* Form Fields */}
           <View style={styles.formSection}>

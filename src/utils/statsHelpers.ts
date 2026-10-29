@@ -80,31 +80,51 @@ export function estimateFuelLevel(
 
   if (systemEntries.length === 0) return null;
 
-  // Walk newest → oldest to find the last full-tank fill
-  let lastFullTankOdometer: number | null = null;
-  let partialsAddedAfterFull = 0;
+  const isEV = unitLabel === 'kWh';
 
-  for (const entry of systemEntries) {
-    if (entry.is_full_tank === 1) {
-      lastFullTankOdometer = entry.odometer;
-      break; // stop at first (newest) full tank
+  let referenceOdometer: number | null = null;
+  let startingFuelOrEnergy: number = tankCapacity;
+  let partialsAddedAfter = 0;
+
+  if (isEV) {
+    // For EVs, every charge session is a valid reference point (no full/partial requirement)
+    const latestCharge = systemEntries[0]; // systemEntries is sorted newest first
+    if (latestCharge && latestCharge.odometer != null) {
+      referenceOdometer = latestCharge.odometer;
+      if (typeof latestCharge.battery_end_percent === 'number' && latestCharge.battery_end_percent > 0) {
+        startingFuelOrEnergy = (Math.min(100, latestCharge.battery_end_percent) / 100) * tankCapacity;
+      } else if (latestCharge.is_full_tank === 1) {
+        startingFuelOrEnergy = tankCapacity;
+      } else if (typeof latestCharge.fuel_amount === 'number' && latestCharge.fuel_amount > 0) {
+        startingFuelOrEnergy = Math.min(tankCapacity, latestCharge.fuel_amount);
+      } else {
+        startingFuelOrEnergy = tankCapacity;
+      }
     }
-    // Partial fill AFTER the last full tank — it added fuel to the tank
-    partialsAddedAfterFull += entry.fuel_amount;
+  } else {
+    // Walk newest → oldest to find the last full-tank fill
+    for (const entry of systemEntries) {
+      if (entry.is_full_tank === 1) {
+        referenceOdometer = entry.odometer;
+        break; // stop at first (newest) full tank
+      }
+      // Partial fill AFTER the last full tank — it added fuel to the tank
+      partialsAddedAfter += entry.fuel_amount;
+    }
   }
 
-  // If no full-tank entry exists, we have no reliable reference point
-  if (lastFullTankOdometer === null) return null;
+  // If no reference entry exists, we have no reliable reference point
+  if (referenceOdometer === null) return null;
 
-  // Distance driven since the last full tank
-  const kmSinceFull = currentOdometer - lastFullTankOdometer;
-  if (kmSinceFull < 0) return null; // odometer inconsistency
+  // Distance driven since the reference point
+  const kmDriven = currentOdometer - referenceOdometer;
+  if (kmDriven < 0) return null; // odometer inconsistency
 
-  // Fuel consumed since the last full tank (using running average)
-  const estimatedConsumed = kmSinceFull / avgMileage;
+  // Fuel or energy consumed since reference point (using running average)
+  const estimatedConsumed = kmDriven / avgMileage;
 
-  // Remaining = started full + topped up with partials - consumed
-  const remaining = tankCapacity + partialsAddedAfterFull - estimatedConsumed;
+  // Remaining = started at reference + topped up with partials - consumed
+  const remaining = startingFuelOrEnergy + partialsAddedAfter - estimatedConsumed;
   const percent = Math.min(100, Math.max(0, (remaining / tankCapacity) * 100));
 
   // Convert to 0–5 bars (0 = truly empty)

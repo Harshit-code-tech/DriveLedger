@@ -52,6 +52,11 @@ import { FuelBarSection } from '@/components/FuelBarSection';
 import { useTripStore } from '@/stores/tripStore';
 import { useMaintenanceProfileStore } from '@/stores/maintenanceProfileStore';
 import { dataRevisionTracker } from '@/services/dataRevisionTracker';
+import {
+  showPostTripFuelPrompt,
+  getAndClearPendingPostTripPrompt,
+  resolveTripEndOdometer,
+} from '@/services/postTripFuelPromptService';
 
 const EMPTY_CHECKED_LIST: string[] = [];
 
@@ -290,7 +295,26 @@ export default function HomeScreen() {
 
   useFocusEffect(useCallback(() => {
     loadAll(false);
-  }, [loadAll]));
+    // Check for deferred post-trip fuel prompt (e.g. from background widget completion)
+    getAndClearPendingPostTripPrompt().then((pending) => {
+      if (pending) {
+        showPostTripFuelPrompt({
+          vehicleId: pending.vehicleId,
+          tripId: pending.tripId,
+          odometer: pending.odometer,
+          onAddFuel: (odo) => {
+            router.push({
+              pathname: '/add-fuel',
+              params: {
+                vehicleId: pending.vehicleId,
+                ...(typeof odo === 'number' && !isNaN(odo) ? { odometer: String(odo) } : {}),
+              },
+            });
+          },
+        });
+      }
+    });
+  }, [loadAll, router]));
 
   // Load checklist state once per vehicle change (not on every tab focus).
   // AsyncStorage is significantly slower than SQLite, so keeping this
@@ -1285,12 +1309,27 @@ export default function HomeScreen() {
         <TripReviewModal
           visible={showTripReviewModal}
           vehicle={tripVehicle || selectedVehicle}
-          onSaved={() => {
+          onSaved={(finalized) => {
             setShowTripReviewModal(false);
-            if (tripVehicle) {
-              loadTrips(tripVehicle.id);
-            } else if (selectedVehicle) {
-              loadTrips(selectedVehicle.id);
+            const targetVeh = tripVehicle || selectedVehicle;
+            if (targetVeh) {
+              loadVehicles();
+              loadTrips(targetVeh.id);
+              const tripOdometer = resolveTripEndOdometer(finalized, targetVeh.current_odometer);
+              showPostTripFuelPrompt({
+                vehicleId: targetVeh.id,
+                tripId: finalized?.id,
+                odometer: tripOdometer,
+                onAddFuel: (odo) => {
+                  router.push({
+                    pathname: '/add-fuel',
+                    params: {
+                      vehicleId: targetVeh.id,
+                      ...(typeof odo === 'number' && !isNaN(odo) ? { odometer: String(odo) } : {}),
+                    },
+                  });
+                },
+              });
             }
           }}
           onCancel={() => {

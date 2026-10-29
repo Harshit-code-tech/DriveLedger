@@ -38,6 +38,13 @@ jest.mock('@/widgets/widgetDataService', () => ({
   syncGpsWidgetState: jest.fn(),
 }));
 
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  getItem: jest.fn().mockResolvedValue(null),
+  setItem: jest.fn().mockResolvedValue(undefined),
+  removeItem: jest.fn().mockResolvedValue(undefined),
+  clear: jest.fn().mockResolvedValue(undefined),
+}));
+
 describe('tripCoordinatorService Lifecycle & Idempotency', () => {
   let vehicle1: any;
   let vehicle2: any;

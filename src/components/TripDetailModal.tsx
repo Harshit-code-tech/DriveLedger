@@ -35,6 +35,12 @@ import * as tripRepo from '@/database/repositories/tripRepo';
 import { haversineDistance, SIGNAL_GAP_SECONDS } from '@/engine/distanceEngine';
 import { formatDisplayDateLong } from '@/utils/date';
 import { formatTripDuration } from './TripSummaryCard';
+import { SpeedEfficiencySection } from './SpeedEfficiencySection';
+import { analyzeTripSpeedBands } from '@/engine/speedBandAnalysisEngine';
+import * as fuelRepo from '@/database/repositories/fuelRepo';
+import * as vehicleRepo from '@/database/repositories/vehicleRepo';
+import { computeMileageStats } from '@/engine/mileageEngine';
+import type { FuelType } from '@/constants/fuelTypes';
 
 interface TripDetailModalProps {
   visible: boolean;
@@ -90,14 +96,14 @@ export function TripDetailModal({
 
   // Parse diagnostics object if present
   const diagnostics: TripDiagnostics | null = useMemo(() => {
-    if (!trip?.diagnostics) return null;
+    if (!visible || !trip?.diagnostics) return null;
     if (typeof trip.diagnostics === 'object') return trip.diagnostics as TripDiagnostics;
     try {
       return JSON.parse(trip.diagnostics);
     } catch {
       return null;
     }
-  }, [trip?.diagnostics]);
+  }, [visible, trip?.diagnostics]);
 
   // Compute processed timeline points with step & cumulative distances
   const processedPoints: ProcessedLocationPoint[] = useMemo(() => {
@@ -202,6 +208,41 @@ export function TripDetailModal({
     }
     return maxS > 0 ? maxS : null;
   }, [processedPoints]);
+
+  // Authoritative vehicle average mileage (from existing fuel records for this vehicle)
+  const vehicleAverageMileage = useMemo(() => {
+    if (!visible || !trip?.vehicle_id) return null;
+    try {
+      const entries = fuelRepo.getFuelEntriesByVehicle(trip.vehicle_id);
+      const targetVeh =
+        vehicle?.id === trip.vehicle_id
+          ? vehicle
+          : vehicleRepo.getVehicleById(trip.vehicle_id);
+      const stats = computeMileageStats(entries, targetVeh?.fuel_type as FuelType);
+      return stats.runningAverage;
+    } catch {
+      return null;
+    }
+  }, [visible, trip?.vehicle_id, vehicle]);
+
+  // Speed & Efficiency Analysis for completed GPS trips
+  const speedAnalysis = useMemo(() => {
+    if (!visible || !isGps || !trip || trip.status !== 'completed' || rawLocations.length === 0) {
+      return null;
+    }
+    const targetVeh =
+      vehicle?.id === trip.vehicle_id
+        ? vehicle
+        : vehicleRepo.getVehicleById(trip.vehicle_id);
+
+    return analyzeTripSpeedBands(rawLocations, {
+      pauseIntervals: diagnostics?.pause_intervals,
+      totalTripDistanceKm: trip.distance_km,
+      totalTripDurationSeconds: trip.duration_seconds,
+      baselineMileage: vehicleAverageMileage?.value,
+      fuelType: targetVeh?.fuel_type,
+    });
+  }, [visible, isGps, trip?.status, trip?.distance_km, trip?.duration_seconds, trip?.vehicle_id, rawLocations, diagnostics?.pause_intervals, vehicleAverageMileage, vehicle]);
 
   if (!visible || !trip) return null;
 
@@ -377,12 +418,28 @@ export function TripDetailModal({
           <Text style={[Typography.caption, { color: colors.textSecondary, fontWeight: '700', marginBottom: 6 }]}>
             🛰️ SENSOR DIAGNOSTICS & FILTERING
           </Text>
-          <View style={styles.diagRow}>
-            <Text style={[Typography.caption, { color: colors.textSecondary }]}>Samples Received:</Text>
-            <Text style={[Typography.caption, { color: colors.text, fontWeight: '600' }]}>
-              {diagnostics.total_samples_received} ({diagnostics.accepted_samples_count} accepted, {diagnostics.rejected_samples_count} filtered)
-            </Text>
-          </View>
+          {(() => {
+            const accepted = diagnostics.accepted_samples_count || 0;
+            const filtered = diagnostics.rejected_samples_count || 0;
+            const total = Math.max(diagnostics.total_samples_received || 0, accepted + filtered);
+            const acceptedPct = total > 0 ? Math.round((accepted / total) * 100) : 100;
+            return (
+              <>
+                <View style={styles.diagRow}>
+                  <Text style={[Typography.caption, { color: colors.textSecondary }]}>Total GPS Fixes:</Text>
+                  <Text style={[Typography.caption, { color: colors.text, fontWeight: '700' }]}>
+                    {total} received
+                  </Text>
+                </View>
+                <View style={[styles.diagRow, { marginTop: 3 }]}>
+                  <Text style={[Typography.caption, { color: colors.textSecondary }]}>Signal Quality:</Text>
+                  <Text style={[Typography.caption, { color: colors.text, fontWeight: '600' }]}>
+                    {accepted} accepted ({acceptedPct}%) · {filtered} filtered
+                  </Text>
+                </View>
+              </>
+            );
+          })()}
           {diagnostics.gap_count > 0 && (
             <View style={[styles.diagRow, { marginTop: 3 }]}>
               <Text style={[Typography.caption, { color: colors.warning }]}>Signal Gaps (&gt;120s):</Text>
@@ -394,7 +451,15 @@ export function TripDetailModal({
         </View>
       )}
 
-      {/* ── GPS Timeline Section Title ── */}
+      {/* ── Speed & Efficiency Analysis (Completed GPS Trips Only) ── */}
+      {isGps && trip.status === 'completed' && speedAnalysis && (
+        <SpeedEfficiencySection
+          analysis={speedAnalysis}
+          vehicleAverageMileage={vehicleAverageMileage}
+          vehicleFuelType={vehicle?.fuel_type}
+        />
+      )}
+
       {/* ── GPS Timeline Section Title & Table Header ── */}
       {isGps && (
         <View style={{ marginTop: Spacing.md }}>
@@ -542,18 +607,18 @@ export function TripDetailModal({
                 <Text style={styles.emptyIcon}>📍</Text>
                 <Text style={[Typography.bodySmall, { color: colors.textSecondary, textAlign: 'center' }]}>
                   {rawLocations.length === 0
-                    ? diagnostics?.total_samples_received === 0
-                      ? 'No GPS location fixes were received from device location services.'
-                      : diagnostics &&
-                        diagnostics.rejected_samples_count > 0 &&
-                        diagnostics.accepted_samples_count === 0
-                      ? `${diagnostics.total_samples_received} GPS fix(es) received, but all were filtered due to ${
+                    ? diagnostics &&
+                      diagnostics.rejected_samples_count > 0 &&
+                      diagnostics.accepted_samples_count === 0
+                      ? `${Math.max(diagnostics.total_samples_received || 0, diagnostics.rejected_samples_count)} GPS fix(es) received, but all were filtered due to ${
                           diagnostics.rejection_counts?.poor_accuracy && diagnostics.rejection_counts.poor_accuracy > 0
                             ? 'poor accuracy (>35m)'
                             : diagnostics.rejection_counts?.stationary_drift && diagnostics.rejection_counts.stationary_drift > 0
                             ? 'stationary drift (<4m)'
                             : 'signal filtering'
                         }.`
+                      : Math.max(diagnostics?.total_samples_received || 0, (diagnostics?.accepted_samples_count || 0) + (diagnostics?.rejected_samples_count || 0)) === 0
+                      ? 'No GPS location fixes were received from device location services.'
                       : 'No GPS coordinate points recorded for this trip.'
                     : '1 coordinate point recorded (stationary baseline).'}
                 </Text>
