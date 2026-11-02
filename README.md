@@ -94,7 +94,7 @@ _Track fuel economy, maintenance history, running costs, tyre pressure, and docu
 ### 🔄 In-App GitHub Updates
 
 - Checks the official [GitHub Releases API](https://api.github.com/repos/Harshit-code-tech/DriveLedger/releases/latest) with one tap in Settings.
-- View release notes ("What's New") and download the new `.apk` directly in your browser.
+- View release notes ("What's New") and tap **Download APK** to directly download the new `.apk` via Android's native download manager — no browser redirect, no in-app WebView.
 
 ### 💾 1-Tap Offline Backup & Restore (V3 Encryption)
 
@@ -123,8 +123,8 @@ Start here if you want to understand or contribute to the codebase:
 
 | Document                                                            | What you will learn                                                                                                                                                                                                                                                                                             |
 | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🏛️ **[ARCHITECTURE.md](ARCHITECTURE.md)**                           | The big picture: tech stack, directory layout, the screen → store → repository/engine layering, how Zustand stores, `storeRegistry`, and `preferencesStore` fit together, the backup security model (HMAC-SHA256 + AES-256-GCM), how to add an expense category, and how to run tests. Read this first.         |
-| 🔀 **[DATA_FLOW.md](DATA_FLOW.md)**                                 | Step-by-step traces of how data moves: adding and deleting a fuel entry (validation → store → repo → engine → odometer → UI refresh), loading screen data, backup export/restore, the Stats screen, theme/colour flow, and a worked mileage example. Read this when debugging or changing a feature end to end. |
+| 🏛️ **[ARCHITECTURE.md](ARCHITECTURE.md)**                           | The big picture: tech stack, full directory layout, screen → store → repository/engine layering, all engine modules, 3-widget system, backup security model (HMAC-SHA256 + AES-256-GCM), notification system, performance architecture, APK distribution, and how to add an expense category. Read this first. |
+| 🔀 **[DATA_FLOW.md](DATA_FLOW.md)**                                 | Step-by-step traces: adding/deleting a fuel entry, screen data loading, backup export/restore, GPS background persistence, Stats screen, GPS trip completion & post-trip fuel prompt, speed-band analysis, APK download (web + in-app), smart insights, and notification reconciliation. Read when debugging. |
 | 🧮 **[mileage_calculation_guide.md](mileage_calculation_guide.md)** | The mileage rules in detail: tank-to-tank (R1–R9), partial-fill accumulation and the `~est.` formula, EV charge-to-charge, aggregated stats, reasonableness thresholds per vehicle type, and recalculation on edit/delete, with a complete worked example table.                                                |
 
 ### Project Structure at a Glance

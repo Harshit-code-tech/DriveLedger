@@ -4,7 +4,6 @@ import {
   parseGitHubRelease,
 } from '@/utils/releaseParser';
 import Constants from 'expo-constants';
-import * as WebBrowser from 'expo-web-browser';
 import { Alert, Linking } from 'react-native';
 
 export { GITHUB_REPO, GitHubRelease, parseGitHubRelease };
@@ -103,11 +102,10 @@ export async function checkForAppUpdate(options?: {
             text: 'Download APK 📥',
             onPress: async () => {
               if (result.downloadUrl) {
-                try {
-                  await WebBrowser.openBrowserAsync(result.downloadUrl);
-                } catch {
-                  await Linking.openURL(result.downloadUrl);
-                }
+                // Use Linking.openURL so Android routes APK URLs through the
+                // system download manager / default browser, triggering a real
+                // file download rather than opening inside a WebView.
+                await Linking.openURL(result.downloadUrl);
               }
             },
           },

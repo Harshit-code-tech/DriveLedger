@@ -1,6 +1,6 @@
 # DriveLedger — Data Flow Reference
 
-> Last updated: 2026-10-16
+> Last updated: 2026-11-02
 
 ---
 
@@ -278,3 +278,103 @@ Trip Detail Modal / Trip Review Modal opens (visible = true)
                 └─ 3-way toggle: Distance (km) | Time % | Estimated Mileage
 ```
 
+---
+
+## APK Download Flow
+
+### Web (GitHub Pages landing page)
+
+```
+User opens index.html on mobile browser
+        │
+        ├─► Static buttons already link to GitHub releases page (fallback)
+        │
+        └─► fetchLatestRelease()  [js/script.js — runs on DOMContentLoaded]
+                │
+                ├─► GET https://api.github.com/repos/Harshit-code-tech/DriveLedger/releases/latest
+                ├─► Find .apk asset in data.assets[]
+                │
+                └─► APK asset found?
+                        ├─► Update .download-apk-btn href = browser_download_url (direct APK URL)
+                        ├─► Set download="DriveLedger.apk" attribute on each button
+                        │       └─► Forces browser to DOWNLOAD the file vs. navigating to it
+                        │           (critical: mobile Chrome/Android follows redirects in-tab
+                        │            without download attribute; with it, triggers Save dialog)
+                        └─► Update terminal-card "Download APK" link similarly
+```
+
+### In-App (Android)
+
+```
+User taps "Check for Updates" in Settings
+        │
+        ▼
+checkForAppUpdate()  [updateChecker.ts]
+        │
+        ├─► GET https://api.github.com/repos/.../releases/latest
+        │       headers: { Accept: 'application/vnd.github.v3+json', User-Agent: 'DriveLedger-App' }
+        │
+        ├─► parseGitHubRelease(data, currentVersion)  [releaseParser.ts]
+        │       ├─► isNewerVersion(currentVersion, tag_name)  [version.ts]
+        │       └─► downloadUrl = apkAsset.browser_download_url || release.html_url
+        │
+        └─► hasUpdate === true?
+                └─► Alert.alert("Update Available!", releaseNotes + safety rules, buttons)
+                        └─► User taps "Download APK":
+                                └─► Linking.openURL(downloadUrl)
+                                        └─► Android routes URL to native download manager
+                                            or system browser — triggers real file download
+                                        NOTE: NOT WebBrowser.openBrowserAsync() — that opens
+                                        a Chrome Custom Tab/WebView which follows the GitHub
+                                        redirect and shows the APK in-browser instead of
+                                        downloading it to the device
+```
+
+---
+
+## Smart Insights Flow
+
+```
+SmartInsightsCard receives pre-loaded data from parent screen
+        │  (fuelEntries, serviceRecords, expenses, vehicle — already in store)
+        │
+        ▼
+insightsEngine.deriveInsights(data)
+        │
+        ├─► Mileage trend analysis (rolling average vs. historical baseline)
+        ├─► Cost anomaly detection (spike vs. monthly average)
+        ├─► Service interval adherence (days + km since last service vs. profile)
+        └─► Returns typed Insight[]
+                (pure — no DB reads, no side effects, no async)
+        │
+        └─► SmartInsightsCard renders priority-ordered cards
+                (in-memory only — no extra queries on mount or re-render)
+```
+
+---
+
+## Notification & Reminder Reconciliation Flow
+
+```
+App foregrounds  OR  serviceStore / documentStore mutation completes
+        │
+        ▼
+notificationService.reconcileReminders(vehicles, serviceRecords, documents)
+  [notificationService.ts]
+        │
+        ├─► reminderRules.computeDueReminders(records, rules)
+        │       ├─► Service: km-based (odometer delta vs. interval) + date-based
+        │       └─► Documents: 30-day advance warning + overdue
+        │
+        ├─► expo-notifications.getAllScheduledNotificationsAsync()
+        │       (read existing scheduled notification identifiers)
+        │
+        ├─► Diff: stale (records deleted / intervals changed) vs. new triggers
+        │
+        ├─► expo-notifications.cancelScheduledNotificationAsync(id)
+        │       for each stale notification
+        │
+        └─► expo-notifications.scheduleNotificationAsync({ trigger, content })
+                for each new trigger only
+                (idempotent — re-mounting a screen does not duplicate reminders)
+```

@@ -173,8 +173,18 @@
       if (apkAsset && apkAsset.browser_download_url) {
         document.querySelectorAll(".download-apk-btn").forEach((btn) => {
           btn.href = apkAsset.browser_download_url;
+          // The `download` attribute tells the browser to save the linked file
+          // instead of navigating to it. Critical for APKs on mobile Chrome/Android —
+          // without this the browser renders the redirect page instead of downloading.
+          btn.setAttribute("download", apkAsset.name || "DriveLedger.apk");
           btn.innerHTML = `📲 Download ${tagName} APK`;
         });
+        // Also patch the small inline terminal "Download APK →" link
+        const termDownloadLink = document.querySelector(".install-card a[href*='releases']");
+        if (termDownloadLink) {
+          termDownloadLink.href = apkAsset.browser_download_url;
+          termDownloadLink.setAttribute("download", apkAsset.name || "DriveLedger.apk");
+        }
       }
 
       // Update terminal visual version preview

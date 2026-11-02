@@ -54,8 +54,14 @@ export default function StatsScreen() {
   const colors = useThemeColors();
 
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
-  const isEV = selectedVehicle ? isElectricFuel(selectedVehicle.fuel_type as FuelType) : false;
-  const isPureCng = selectedVehicle ? selectedVehicle.fuel_type === FuelType.CNG : false;
+  const isEV = useMemo(
+    () => selectedVehicle ? isElectricFuel(selectedVehicle.fuel_type as FuelType) : false,
+    [selectedVehicle?.fuel_type]
+  );
+  const isPureCng = useMemo(
+    () => selectedVehicle ? selectedVehicle.fuel_type === FuelType.CNG : false,
+    [selectedVehicle?.fuel_type]
+  );
 
   const entries = useFuelStore((s) => s.entries);
   const stats = useFuelStore((s) => s.stats);

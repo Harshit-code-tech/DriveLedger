@@ -1,6 +1,6 @@
 # DriveLedger — Architecture Guide
 
-> Last updated: 2026-10-16
+> Last updated: 2026-11-02
 
 ---
 
@@ -18,9 +18,9 @@ DriveLedger is an offline-first vehicle tracking mobile app built with **Expo SD
 | Navigation | Expo Router 4 (file-based) |
 | State | Zustand 5 |
 | Persistence | expo-sqlite 15 (synchronous API) |
-| Crypto | expo-crypto (HMAC-SHA256, AES-256-GCM) |
-| Language | TypeScript 5.3 (strict mode) |
-| Tests | Jest + jest-expo preset |
+| Crypto | expo-crypto + @noble/hashes (PBKDF2-HMAC-SHA256, AES-256-GCM) |
+| Language | TypeScript ~6.0 (strict mode) |
+| Tests | Jest ~30 + jest-expo preset + ts-jest |
 | Platform | Android (primary), iOS (secondary), Web (landing page only) |
 
 ---
@@ -29,62 +29,108 @@ DriveLedger is an offline-first vehicle tracking mobile app built with **Expo SD
 
 ```
 DriveLedger/
-├── app/                        # Expo Router screens (file-based routing)
-│   ├── (tabs)/                 # Bottom-tab screens
-│   │   ├── index.tsx           # Home / Vehicle Dashboard
-│   │   ├── stats.tsx           # Analytics & Reports (857 lines → being split)
-│   │   ├── history.tsx         # Fuel entry history
-│   │   └── settings.tsx        # Preferences, backup, vehicles
-│   ├── add-fuel.tsx            # Add fuel entry modal
-│   ├── add-service.tsx         # Add service record modal
-│   ├── add-expense.tsx         # Add expense modal
-│   └── _layout.tsx             # Root layout (DB init, font loading)
+├── app/                             # Expo Router screens (file-based routing)
+│   ├── (tabs)/                      # Bottom-tab screens
+│   │   ├── index.tsx                # Home / Vehicle Dashboard (primary screen)
+│   │   ├── stats.tsx                # Analytics & Reports
+│   │   ├── history.tsx              # Fuel/service/expense/trip history
+│   │   ├── documents.tsx            # Document vault & expiry tracking
+│   │   └── settings.tsx             # Preferences, backup, vehicles, update check
+│   ├── add-fuel.tsx, add-service.tsx, add-expense.tsx, add-document.tsx
+│   ├── add-vehicle.tsx, edit-vehicle.tsx
+│   ├── checklist.tsx                # Pre-trip checklist launcher
+│   ├── onboarding.tsx               # First-launch onboarding flow
+│   └── _layout.tsx                  # Root layout (DB init, font loading, widget registration)
 │
 ├── src/
-│   ├── components/             # Reusable UI components
-│   │   ├── charts/             # Chart components (BarChart, MileageTrendChart, etc.)
-│   │   ├── OptionPicker.tsx    # Generic bottom-sheet option picker
-│   │   ├── SettingsRow.tsx     # Settings list row
-│   │   └── ...
-│   ├── constants/              # App-wide enumerations and mappings
-│   │   ├── fuelTypes.ts        # FuelType enum, unit labels
-│   │   ├── expenseCategories.ts # Categories + EXPENSE_CHART_BUCKET map
-│   │   └── theme.ts            # Spacing, Typography, Sizing tokens
+│   ├── components/                  # Reusable UI components
+│   │   ├── charts/                  # BarChart, MileageTrendChart, CostBreakdownDonutChart
+│   │   ├── history/                 # History entry cards (fuel, service, expense, document)
+│   │   ├── ActiveTripModal.tsx      # Live GPS trip HUD & controls
+│   │   ├── FleetComparisonCard.tsx  # Multi-vehicle fleet stats comparison
+│   │   ├── MaintenanceProfilesModal.tsx  # Maintenance interval profile picker
+│   │   ├── ManualTripModal.tsx      # Manual trip entry form
+│   │   ├── MonthlySpendCard.tsx     # Monthly cost breakdown card
+│   │   ├── PreTripChecklistModal.tsx  # Pre-trip vehicle checklist dialog
+│   │   ├── ReportExportModal.tsx    # PDF/CSV export UI (session-cached)
+│   │   ├── SmartInsightsCard.tsx    # Insight cards from insightsEngine
+│   │   ├── SpeedEfficiencySection.tsx  # Speed-band efficiency visualizer
+│   │   ├── TripDetailModal.tsx      # Completed GPS trip detail view
+│   │   ├── TripReviewModal.tsx      # Post-trip review & finalization
+│   │   ├── OptionPicker.tsx, SettingsRow.tsx, ...
+│   │
+│   ├── constants/                   # App-wide enumerations and mappings
+│   │   ├── documentTypes.ts, expenseCategories.ts, fuelTypes.ts
+│   │   ├── formStyles.ts, serviceTemplates.ts, theme.ts
+│   │
 │   ├── database/
-│   │   ├── connection.ts       # SQLite connection singleton
-│   │   ├── schema.ts           # CREATE TABLE + migrations
-│   │   └── repositories/       # One file per table (fuelRepo, vehicleRepo, …)
-│   ├── engine/                 # Pure business logic (no UI, no DB)
-│   │   ├── mileageEngine.ts    # Tank-to-tank mileage calculation
-│   │   ├── speedBandAnalysisEngine.ts # Non-overlapping speed-band classification & aggregation
-│   │   ├── distanceEngine.ts   # GPS coordinate filtering and distance accumulation
-│   │   ├── validationEngine.ts # Input validation rules
-│   │   ├── backupEngine.ts     # Backup/restore orchestration (re-exports from backup/)
-│   │   └── backup/             # Backup sub-modules
-│   │       ├── types.ts        # Interfaces (BackupData, BackupResult, …)
-│   │       └── schema.ts       # Pure row validators + validateSchema()
-│   ├── hooks/                  # Custom React hooks
-│   │   ├── useThemeColors.ts   # Dark/light theme colour accessor
-│   │   └── useCrossVehicleStats.ts  # Multi-vehicle fleet comparison data
-│   ├── services/               # Side-effectful services (PDF, CSV, update check)
-│   │   ├── reportService.ts    # PDF report generation
-│   │   └── updateChecker.ts    # GitHub release polling
-│   ├── stores/                 # Zustand stores
-│   │   ├── fuelStore.ts        # Fuel entry CRUD + mileage orchestration
-│   │   ├── vehicleStore.ts     # Vehicle CRUD + selection
-│   │   ├── preferencesStore.ts # User preferences (currency, units, etc.)
-│   │   ├── storeRegistry.ts    # Cross-store callback registry (avoids circular imports)
-│   │   └── ...
-│   ├── types/                  # TypeScript type definitions per domain
-│   └── utils/                  # Pure utility functions
-│       ├── statsHelpers.ts     # filterRecordsByTimeRange, aggregateCostBreakdown, …
-│       ├── format.ts           # formatCurrency, formatMileage, formatOdometer
-│       ├── date.ts             # nowISO, dateInputToISO, …
-│       └── ...
+│   │   ├── connection.ts            # SQLite connection singleton
+│   │   ├── safeUpdate.ts            # Safe column-migration helper (ALTER TABLE guard)
+│   │   ├── schema.ts                # CREATE TABLE statements + incremental migrations
+│   │   └── repositories/            # One file per table domain
+│   │       ├── documentRepo.ts, expenseRepo.ts, fuelRepo.ts
+│   │       ├── maintenanceComponentRepo.ts, maintenanceProfileRepo.ts
+│   │       ├── serviceRepo.ts, tripRepo.ts, vehicleRepo.ts
+│   │
+│   ├── engine/                      # Pure business logic (no UI, no DB, no side effects)
+│   │   ├── backup/
+│   │   │   ├── types.ts, schema.ts, crypto.ts, exportBackup.ts, restore.ts
+│   │   ├── backupEngine.ts          # Backup/restore orchestration (re-exports from backup/)
+│   │   ├── distanceEngine.ts        # GPS coordinate filtering & incremental distance
+│   │   ├── insightsEngine.ts        # Smart insights derivation from vehicle history
+│   │   ├── mileageEngine.ts         # Tank-to-tank mileage calculation
+│   │   ├── odometerReconciliation.ts  # Odometer consistency checks
+│   │   ├── speedBandAnalysisEngine.ts  # Speed-band classification & efficiency aggregation
+│   │   └── validationEngine.ts      # Input validation rules for all form types
+│   │
+│   ├── hooks/
+│   │   ├── useCrossVehicleStats.ts  # Multi-vehicle fleet comparison data hook
+│   │   └── useThemeColors.ts        # Dark/light theme colour accessor
+│   │
+│   ├── services/                    # Side-effectful services & workflows
+│   │   ├── reports/
+│   │   │   ├── fuelExpensesCsv.ts, reportActions.ts, reportHtmlHelpers.ts
+│   │   │   ├── serviceLedger.ts, vehicleDossier.ts, vehicleHistoryReport.ts
+│   │   ├── dataRevisionTracker.ts   # Monotonic revision counters — targeted cache invalidation
+│   │   ├── locationPermissionService.ts  # Location permission management
+│   │   ├── notificationService.ts   # Service/document reminder scheduling
+│   │   ├── perfObserver.ts          # Zero-cost in-memory diagnostic telemetry
+│   │   ├── postTripFuelPromptService.ts  # Headless-safe post-trip fuel prompt deferral
+│   │   ├── reminderRules.ts, reportService.ts
+│   │   ├── tripCoordinatorService.ts  # GPS trip lifecycle coordinator (foreground + headless)
+│   │   └── updateChecker.ts         # GitHub release polling + in-app update alerts
+│   │
+│   ├── stores/                      # Zustand stores
+│   │   ├── checklistStore.ts        # Pre-trip checklist state & persistence
+│   │   ├── documentStore.ts, expenseStore.ts, fuelStore.ts
+│   │   ├── maintenanceProfileStore.ts
+│   │   ├── preferencesStore.ts      # User preferences (AsyncStorage persist middleware)
+│   │   ├── serviceStore.ts, storeRegistry.ts
+│   │   ├── tripStore.ts             # GPS trip lifecycle: start/pause/resume/finish/recover
+│   │   └── vehicleStore.ts          # Vehicle CRUD + selection + widget sync
+│   │
+│   ├── tasks/
+│   │   └── backgroundLocationTask.ts  # Expo TaskManager background location handler
+│   │
+│   ├── types/                       # TypeScript domain types (document, expense, fuel, service, trip, vehicle)
+│   ├── utils/
+│   │   ├── attachmentStorage.ts, csvExport.ts, date.ts, dateInput.ts
+│   │   ├── format.ts, releaseParser.ts, shareSummary.ts
+│   │   ├── statsHelpers.ts, uuid.ts, version.ts
+│   │
+│   └── widgets/
+│       ├── cockpit/                 # GPS Cockpit widget sub-components (helpers, palette, svgs, types)
+│       ├── GpsCockpitWidget.tsx     # GPS Cockpit HUD widget 4×2
+│       ├── VehicleGlanceWidget.tsx  # Vehicle Quick Glance widget 4×2
+│       ├── widgetDataService.tsx    # Widget snapshot builder — reads SQLite only
+│       └── widgetTaskHandler.tsx    # Widget tap action dispatcher
 │
-├── widgets/                    # Android home screen widget
-├── docs/                       # Architecture, audit, and guidelines docs
-└── index.html                  # Web landing page (static, no build step)
+├── android/                         # Android native project files
+├── plugins/                         # Expo config plugins
+├── docs/                            # Architecture, refactor plan, and guidelines docs
+├── index.html                       # Web landing page (GitHub Pages)
+├── css/style.css, js/script.js      # Landing page assets
+└── assets/                          # App icon, splash, fonts, images
 ```
 
 ---
@@ -114,20 +160,33 @@ The screens **never** write to the database directly. All mutations go through s
 - Holds `entries`, `stats`, `partialEstimates`, `isLoading`
 - `loadEntries(vehicleId, fuelType?)` — call with `selectedVehicle.fuel_type` to avoid an internal vehicle lookup
 - `addFuelEntry(input, vehicle)` — returns `{ entry, warning }`
-- `deleteFuelEntry(entryId, vehicle)` — recalculates all downstream mileage
+- `deleteFuelEntry(entryId, vehicle)` — recalculates all downstream mileage via `mileageEngine.recalculateDownstreamMileage`
 
 ### vehicleStore
 - Holds `vehicles`, `selectedVehicle`, `isLoading`, `error`
 - Registers itself with `storeRegistry` on first `loadVehicles()` call
 - All `syncWidgetState()` calls are guarded by `Platform.OS === 'android'`
 
-### storeRegistry
-- Tiny singleton that lets `fuelStore` trigger `vehicleStore.loadVehicles()` after a delete without creating a circular import
-- Not a general-purpose event bus — only the vehicle refresh pattern is registered here
+### tripStore (largest store)
+- Full GPS trip lifecycle: `activeTrip`, `activeTripLocations`, `tripStatus`, pause windows, diagnostics
+- Coordinates start/pause/resume/finish/recover across app foreground, widget taps, and background task
+- `finishGpsTrip` triggers `postTripFuelPromptService` (deferred when headless)
+
+### checklistStore
+- Pre-trip checklist items and completion state per vehicle
+- Persisted to SQLite via `maintenanceComponentRepo`
+
+### serviceStore
+- Service records CRUD + interval countdown tracking
+- Delegates reminder scheduling to `notificationService`
 
 ### preferencesStore
 - Persisted to AsyncStorage via Zustand's persist middleware
-- Exposes `getPreferences()` for use outside React components (e.g. inside vehicleStore)
+- Exposes `getPreferences()` for use outside React components (e.g., vehicleStore, widgetDataService)
+
+### storeRegistry
+- Tiny singleton that lets `fuelStore` trigger `vehicleStore.loadVehicles()` after a delete without creating a circular import
+- Not a general-purpose event bus — only the vehicle refresh pattern is registered here
 
 ---
 
@@ -205,10 +264,12 @@ On restore:
 
 ## Performance & Optimization Architecture
 
+- **Render Memoization**: Home screen (`app/(tabs)/index.tsx`) memoizes all 12+ expensive derived values via `useMemo` (fuel level estimates, vehicle-type flags, monthly spend, service status). Pure helper functions (`docExpiryText`, `formatTripTime`) live outside the component body — never re-allocated.
 - **Data Invalidation**: `dataRevisionTracker` maintains monotonic per-dataset revision counters, preventing unnecessary re-queries on tab focus or store transitions.
 - **Evidence-Based Indexing**: Partial composite SQLite indexes (`idx_fuel_entries_active_date`, `idx_service_records_active_date`, etc.) cover `(vehicle_id, date DESC, id DESC) WHERE deleted_at IS NULL`, eliminating temporary B-tree sorting in query plans.
 - **History Virtualization**: `FlatList` cursor-based pagination with search and date pushdowns bounds memory and query duration.
 - **Report Snapshot Caching**: `ReportExportModal` caches a single-session snapshot of vehicle data across multiple export/share formats, eliminating redundant synchronous table scans.
+- **GPS Batching**: `backgroundLocationTask` batches location updates; incremental distance computed in memory before one atomic SQLite commit per 10-sample buffer.
 - **Observability**: `perfObserver` provides zero-cost in-memory diagnostic telemetry for queries, GPS batches, widget evaluations, and notification reconciliation.
 
 ---
@@ -233,3 +294,38 @@ npm test -- --coverage  # Coverage report
 Test files live at `__tests__/` alongside the module they test.
 Pure business logic (engine, utils) is tested without mocking.
 Store tests mock the repository layer.
+
+---
+
+## Android Home-Screen Widgets
+
+| Widget | Size | Purpose |
+|--------|------|---------|
+| `VehicleGlanceWidget` | 4×2 | Odometer, mileage, monthly spend, tyre pressure, service/document alerts, logging shortcuts |
+| `GpsCockpitWidget` | 4×2 | Live GPS speed HUD, trip controls (Pause/Resume/End), active vehicle |
+| GPS Strip | 4×1 | Compact row: live speed, distance, timer |
+
+**Design constraints:**
+- `widgetDataService` reads SQLite only — never starts or modifies a trip
+- `widgetTaskHandler` dispatches taps to `tripCoordinatorService`
+- Widget refresh does not depend on mounted React components or Zustand subscriptions
+
+---
+
+## Notification & Reminder System
+
+`notificationService` coordinates:
+- Service interval reminders (km-based and date-based) via `reminderRules.ts`
+- Document expiry warnings (30-day advance and overdue)
+- Scheduling via `expo-notifications` with idempotent reconciliation
+- Lazily loaded to maintain Expo Go compatibility (SDK 53+)
+
+---
+
+## Landing Page & APK Distribution
+
+`index.html` is deployed to GitHub Pages via `.github/workflows/deploysite.yaml`.
+
+**APK download (web):** `js/script.js` calls the GitHub Releases API on page load. When a `.apk` asset is found, `.download-apk-btn` hrefs are updated to the direct `browser_download_url` **and** the `download` attribute is set — forcing mobile Chrome/Android to download the file instead of opening it in a browser tab.
+
+**APK download (in-app):** Settings → "Check for Updates" → `updateChecker.ts`. "Download APK" calls `Linking.openURL(apkUrl)` which routes to Android's native download manager (not `WebBrowser.openBrowserAsync` which would open a WebView).

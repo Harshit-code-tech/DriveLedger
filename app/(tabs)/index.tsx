@@ -60,6 +60,24 @@ import {
 
 const EMPTY_CHECKED_LIST: string[] = [];
 
+// ── Pure helpers (defined outside component — never re-allocated on render) ──
+
+/** Formats document expiry days into a user-facing string. */
+function docExpiryText(days: number): string {
+  if (days < 0) return `Expired ${Math.abs(days)} day${Math.abs(days) !== 1 ? 's' : ''} ago`;
+  if (days === 0) return 'Expires today!';
+  return `Expires in ${days} day${days !== 1 ? 's' : ''}`;
+}
+
+/** Formats elapsed seconds as MM:SS or HH:MM:SS. */
+function formatTripTime(totalSeconds: number): string {
+  const hrs = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return hrs > 0 ? `${pad(hrs)}:${pad(mins)}:${pad(secs)}` : `${pad(mins)}:${pad(secs)}`;
+}
+
 export default function HomeScreen() {
   const colors = useThemeColors();
   const router = useRouter();
@@ -363,64 +381,86 @@ export default function HomeScreen() {
     );
   }
 
-  const lastEntry = entries.length > 0 ? entries[0] : null;
-  const lastService = serviceRecords.length > 0 ? serviceRecords[0] : null;
+  // ── Memoized derived values ──────────────────────────────────────────
+  // These are computed once and cached; re-evaluated only when their specific
+  // dependencies change. This prevents expensive recalculation on every render
+  // triggered by liveMetrics ticks, focus events, or other state updates.
 
-  const { total: monthlyTotal } = getCurrentMonthTotalSpend(entries, serviceRecords, expenses);
+  const lastEntry = useMemo(() => (entries.length > 0 ? entries[0] : null), [entries]);
+  const lastService = useMemo(() => (serviceRecords.length > 0 ? serviceRecords[0] : null), [serviceRecords]);
 
-  const isBiFuelVehicle = isBiFuel(selectedVehicle.fuel_type as FuelType);
-  const isPureCng = selectedVehicle.fuel_type === FuelType.CNG;
-  const isEV = selectedVehicle.fuel_type === FuelType.ELECTRIC;
-  const primaryUnit = (selectedVehicle.fuel_type === FuelType.CNG || isBiFuelVehicle)
-    ? 'kg'
-    : isEV
-      ? 'kWh'
-      : 'L';
-  const tankName = isBiFuelVehicle
-    ? `Primary ${getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'primary')} Cylinder`
-    : isEV
-      ? 'Battery Pack'
-      : 'Fuel Tank';
-
-  const primarySystemLabel = isBiFuelVehicle
-    ? getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'primary')
-    : 'Primary Tank';
-  const secondarySystemLabel = isBiFuelVehicle
-    ? getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'secondary')
-    : 'Secondary Tank';
-
-  const primaryAvgMileage = isBiFuelVehicle
-    ? (stats.primarySystemStats?.runningAverage?.value ?? stats.runningAverage?.value ?? null)
-    : (stats.runningAverage?.value ?? null);
-
-  const secondaryAvgMileage = isBiFuelVehicle
-    ? (stats.secondarySystemStats?.runningAverage?.value ?? null)
-    : null;
-
-  // Primary fuel level estimate
-  const primaryFuelLevel = estimateFuelLevel(
-    entries,
-    selectedVehicle.tank_capacity,
-    selectedVehicle.current_odometer,
-    primaryAvgMileage,
-    primaryUnit,
-    isBiFuelVehicle ? 'primary' : undefined
+  // Vehicle fuel-type flags — depend only on fuel_type string
+  const isBiFuelVehicle = useMemo(
+    () => isBiFuel(selectedVehicle.fuel_type as FuelType),
+    [selectedVehicle.fuel_type]
+  );
+  const isPureCng = useMemo(
+    () => selectedVehicle.fuel_type === FuelType.CNG,
+    [selectedVehicle.fuel_type]
+  );
+  const isEV = useMemo(
+    () => selectedVehicle.fuel_type === FuelType.ELECTRIC,
+    [selectedVehicle.fuel_type]
   );
 
-  // Secondary fuel level estimate (for Bi-Fuel vehicles)
-  const secondaryFuelLevel = isBiFuelVehicle && selectedVehicle.secondary_tank_capacity
-    ? estimateFuelLevel(
-      entries,
-      selectedVehicle.secondary_tank_capacity,
-      selectedVehicle.current_odometer,
-      secondaryAvgMileage,
-      'L',
-      'secondary'
-    )
-    : null;
+  // Derived labels and units — change only when fuel type changes
+  const { primaryUnit, tankName, primarySystemLabel, secondarySystemLabel } = useMemo(() => {
+    const _isBiFuel = isBiFuel(selectedVehicle.fuel_type as FuelType);
+    const _isEV = selectedVehicle.fuel_type === FuelType.ELECTRIC;
+    return {
+      primaryUnit: (selectedVehicle.fuel_type === FuelType.CNG || _isBiFuel) ? 'kg' : _isEV ? 'kWh' : 'L',
+      tankName: _isBiFuel
+        ? `Primary ${getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'primary')} Cylinder`
+        : _isEV ? 'Battery Pack' : 'Fuel Tank',
+      primarySystemLabel: _isBiFuel
+        ? getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'primary')
+        : 'Primary Tank',
+      secondarySystemLabel: _isBiFuel
+        ? getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'secondary')
+        : 'Secondary Tank',
+    };
+  }, [selectedVehicle.fuel_type]);
 
-  /** Tips for why fuel/battery levels can't be shown yet */
-  const primaryFuelLevelTip: string | null =
+  // Average mileage values — depend on stats and fuel type
+  const primaryAvgMileage = useMemo(
+    () => isBiFuelVehicle
+      ? (stats.primarySystemStats?.runningAverage?.value ?? stats.runningAverage?.value ?? null)
+      : (stats.runningAverage?.value ?? null),
+    [isBiFuelVehicle, stats]
+  );
+  const secondaryAvgMileage = useMemo(
+    () => isBiFuelVehicle ? (stats.secondarySystemStats?.runningAverage?.value ?? null) : null,
+    [isBiFuelVehicle, stats]
+  );
+
+  // Fuel level estimates — O(n) over entries; memoized to avoid re-running each render tick
+  const primaryFuelLevel = useMemo(
+    () => estimateFuelLevel(
+      entries,
+      selectedVehicle.tank_capacity,
+      selectedVehicle.current_odometer,
+      primaryAvgMileage,
+      primaryUnit,
+      isBiFuelVehicle ? 'primary' : undefined
+    ),
+    [entries, selectedVehicle.tank_capacity, selectedVehicle.current_odometer, primaryAvgMileage, primaryUnit, isBiFuelVehicle]
+  );
+  const secondaryFuelLevel = useMemo(
+    () => (isBiFuelVehicle && selectedVehicle.secondary_tank_capacity)
+      ? estimateFuelLevel(
+          entries,
+          selectedVehicle.secondary_tank_capacity,
+          selectedVehicle.current_odometer,
+          secondaryAvgMileage,
+          'L',
+          'secondary'
+        )
+      : null,
+    [isBiFuelVehicle, entries, selectedVehicle.secondary_tank_capacity, selectedVehicle.current_odometer, secondaryAvgMileage]
+  );
+
+  // Fuel level tip strings
+  const primaryFuelLevelTip = useMemo((): string | null =>
     primaryFuelLevel !== null
       ? null
       : !selectedVehicle.tank_capacity
@@ -429,42 +469,41 @@ export default function HomeScreen() {
           ? isEV
             ? 'Log two charge sessions to unlock the estimated battery level.'
             : `Log two full-tank fill-ups${isBiFuelVehicle ? ` for ${primarySystemLabel}` : ''} to unlock the estimated fuel level.`
-          : null;
-
-  const secondaryFuelLevelTip: string | null =
+          : null,
+    [primaryFuelLevel, selectedVehicle.tank_capacity, isBiFuelVehicle, isEV, primaryAvgMileage, primarySystemLabel]
+  );
+  const secondaryFuelLevelTip = useMemo((): string | null =>
     !isBiFuelVehicle || secondaryFuelLevel !== null
       ? null
       : !selectedVehicle.secondary_tank_capacity
         ? `Add your fallback ${secondarySystemLabel} tank capacity (Edit Vehicle) to see estimated fuel level.`
         : !secondaryAvgMileage
           ? `Log two full-tank fill-ups for fallback ${secondarySystemLabel} to unlock estimated fuel level.`
-          : null;
+          : null,
+    [isBiFuelVehicle, secondaryFuelLevel, selectedVehicle.secondary_tank_capacity, secondaryAvgMileage, secondarySystemLabel]
+  );
 
-  // ── Inline rendering helpers ─────────────────────────────────────────
+  // Monthly total spend — O(n) over 3 arrays
+  const monthlyTotal = useMemo(
+    () => getCurrentMonthTotalSpend(entries, serviceRecords, expenses).total,
+    [entries, serviceRecords, expenses]
+  );
 
-  /** Formats document expiry days into a user-facing string. */
-  const docExpiryText = (days: number): string => {
-    if (days < 0) return `Expired ${Math.abs(days)} day${Math.abs(days) !== 1 ? 's' : ''} ago`;
-    if (days === 0) return 'Expires today!';
-    return `Expires in ${days} day${days !== 1 ? 's' : ''}`;
-  };
+  // Service due status — date arithmetic
+  const serviceDueStatus = useMemo(
+    () => getServiceDueStatus(selectedVehicle, lastService),
+    [selectedVehicle, lastService]
+  );
 
-  const serviceDueStatus = getServiceDueStatus(selectedVehicle, lastService);
+  // Live speed in km/h (ticks with every GPS sample; keep cheap)
+  const currentSpeedKmh = useMemo(
+    () => liveMetrics.currentSpeed !== null ? Math.round(liveMetrics.currentSpeed * 3.6) : 0,
+    [liveMetrics.currentSpeed]
+  );
 
-  // ── GPS Trip & Live Driving HUD Handlers ──
-  const formatTripTime = (totalSeconds: number) => {
-    const hrs = Math.floor(totalSeconds / 3600);
-    const mins = Math.floor((totalSeconds % 3600) / 60);
-    const secs = totalSeconds % 60;
-    const pad = (n: number) => n.toString().padStart(2, '0');
-    return hrs > 0 ? `${pad(hrs)}:${pad(mins)}:${pad(secs)}` : `${pad(mins)}:${pad(secs)}`;
-  };
+  // ── GPS Trip Handlers (stable references — prevent child re-renders) ──
 
-  const currentSpeedKmh = liveMetrics.currentSpeed !== null
-    ? Math.round(liveMetrics.currentSpeed * 3.6)
-    : 0;
-
-  const handleStartGpsTrip = async () => {
+  const handleStartGpsTrip = useCallback(async () => {
     if (!selectedVehicle) return;
     if (activeTrip && String(activeTrip.vehicle_id) !== String(selectedVehicle.id)) {
       const otherVehicle = vehicles.find((v) => String(v.id) === String(activeTrip.vehicle_id));
@@ -490,9 +529,9 @@ export default function HomeScreen() {
         res.error || 'Failed to start GPS tracking. Please ensure location permissions are granted.'
       );
     }
-  };
+  }, [selectedVehicle, activeTrip, vehicles, startGpsTrip, selectVehicle]);
 
-  const handleDiscardGpsTrip = () => {
+  const handleDiscardGpsTrip = useCallback(() => {
     Alert.alert(
       'Discard Trip?',
       'Are you sure you want to stop and discard this recorded trip? All recorded location points will be discarded.',
@@ -507,7 +546,7 @@ export default function HomeScreen() {
         },
       ]
     );
-  };
+  }, [cancelGpsTrip]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
