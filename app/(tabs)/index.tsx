@@ -1,40 +1,20 @@
 /**
- * Home / Vehicle Dashboard
+ * DriveLedger — Home Page (Automotive Cockpit)
  *
- * THE MOST IMPORTANT SCREEN. This is what the user sees 80% of the time.
+ * Implemented according to docs/refurnish/home.md:
+ * 1. App Header (HomeHeader)
+ * 2. Vehicle Selector (HomeVehicleSelector)
+ * 3. GPS Cockpit (HomeGpsCockpit — isolated GPS subscriptions)
+ * 4. Vehicle Overview (HomeVehicleOverview — 2x2 grid)
+ * 5. Needs Attention (HomeNeedsAttention — service alerts & expiring docs)
+ * 6. Vehicle Essentials (HomeVehicleEssentials — fuel/battery & tyre pressures)
+ * 7. Quick Access (HomeQuickAccess — targets, checklist, fuel/expense shortcuts)
  *
- * Charter requirements:
- * - Last selected vehicle dashboard on open
- * - Mileage card (last fill + running average)
- * - Quick stats (total spent, last service, this month, km until service)
- * - [+ Add Fuel] — biggest button on screen
- * - Vehicle switcher (top area)
- * - Document expiry warnings
- *
- * Flow: Open App → Dashboard → Tap [+ Add Fuel] → Fill → Save → See mileage → Close
+ * All database queries, stores, deep links, and widget coordination are preserved.
  */
 
-import { CngTankIcon } from '@/components/CngTankIcon';
-import { PreTripChecklistModal } from '@/components/PreTripChecklistModal';
-import { VehicleContextHeader } from '@/components/VehicleContextHeader';
-import { DOCUMENT_TYPE_LABELS } from '@/constants/documentTypes';
-import { FuelType, getFuelSystemLabel, isBiFuel, MILEAGE_UNIT_LABELS } from '@/constants/fuelTypes';
-import { Sizing, Spacing, Typography } from '@/constants/theme';
-import { useThemeColors } from '@/hooks/useThemeColors';
-import { buildPreTripChecklist, getChecklistStats, useChecklistStore } from '@/stores/checklistStore';
-import { useDocumentStore } from '@/stores/documentStore';
-import { useExpenseStore } from '@/stores/expenseStore';
-import { useFuelStore } from '@/stores/fuelStore';
-import { convertPressure, getPressureLabel } from '@/stores/preferencesStore';
-import { getServiceDueStatus, useServiceStore } from '@/stores/serviceStore';
-import { useVehicleStore } from '@/stores/vehicleStore';
-import { daysUntil, formatDisplayDateLong } from '@/utils/date';
-import { formatCurrency, formatMileage, formatOdometer } from '@/utils/format';
-import { estimateFuelLevel, getCurrentMonthTotalSpend } from '@/utils/statsHelpers';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -42,15 +22,18 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SmartInsightsCard } from '@/components/SmartInsightsCard';
-import { ActiveTripModal } from '@/components/ActiveTripModal';
-import { TripReviewModal } from '@/components/TripReviewModal';
-import { ManualTripModal } from '@/components/ManualTripModal';
-import { MaintenanceProfilesModal } from '@/components/MaintenanceProfilesModal';
-import { TripHistoryModal } from '@/components/TripHistoryModal';
-import { FuelBarSection } from '@/components/FuelBarSection';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// Domain Stores & Services
+import { useVehicleStore } from '@/stores/vehicleStore';
+import { useFuelStore } from '@/stores/fuelStore';
+import { useServiceStore, getServiceDueStatus } from '@/stores/serviceStore';
+import { useExpenseStore } from '@/stores/expenseStore';
+import { useDocumentStore } from '@/stores/documentStore';
 import { useTripStore } from '@/stores/tripStore';
 import { useMaintenanceProfileStore } from '@/stores/maintenanceProfileStore';
+import { useChecklistStore, buildPreTripChecklist, getChecklistStats } from '@/stores/checklistStore';
 import { dataRevisionTracker } from '@/services/dataRevisionTracker';
 import {
   showPostTripFuelPrompt,
@@ -58,31 +41,37 @@ import {
   resolveTripEndOdometer,
 } from '@/services/postTripFuelPromptService';
 
+// Helpers & Types
+import { FuelType, isBiFuel, isElectricFuel, getFuelSystemLabel } from '@/constants/fuelTypes';
+import { estimateFuelLevel, getCurrentMonthTotalSpend } from '@/utils/statsHelpers';
+import { Spacing } from '@/constants/theme';
+
+// Theme & Sub-components
+import { useHomeColors } from '@/components/home/homeTheme';
+import { HomeVehicleSelector } from '@/components/home/HomeVehicleSelector';
+import { HomeGpsCockpit } from '@/components/home/HomeGpsCockpit';
+import { HomeVehicleOverview } from '@/components/home/HomeVehicleOverview';
+import { HomeNeedsAttention } from '@/components/home/HomeNeedsAttention';
+import { HomeVehicleEssentials } from '@/components/home/HomeVehicleEssentials';
+import { HomeQuickAccess } from '@/components/home/HomeQuickAccess';
+
+// Modals
+import { PreTripChecklistModal } from '@/components/PreTripChecklistModal';
+import { MaintenanceProfilesModal } from '@/components/MaintenanceProfilesModal';
+import { TripHistoryModal } from '@/components/TripHistoryModal';
+import { ActiveTripModal } from '@/components/ActiveTripModal';
+import { TripReviewModal } from '@/components/TripReviewModal';
+import { ManualTripModal } from '@/components/ManualTripModal';
+
 const EMPTY_CHECKED_LIST: string[] = [];
 
-// ── Pure helpers (defined outside component — never re-allocated on render) ──
-
-/** Formats document expiry days into a user-facing string. */
-function docExpiryText(days: number): string {
-  if (days < 0) return `Expired ${Math.abs(days)} day${Math.abs(days) !== 1 ? 's' : ''} ago`;
-  if (days === 0) return 'Expires today!';
-  return `Expires in ${days} day${days !== 1 ? 's' : ''}`;
-}
-
-/** Formats elapsed seconds as MM:SS or HH:MM:SS. */
-function formatTripTime(totalSeconds: number): string {
-  const hrs = Math.floor(totalSeconds / 3600);
-  const mins = Math.floor((totalSeconds % 3600) / 60);
-  const secs = totalSeconds % 60;
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  return hrs > 0 ? `${pad(hrs)}:${pad(mins)}:${pad(secs)}` : `${pad(mins)}:${pad(secs)}`;
-}
-
 export default function HomeScreen() {
-  const colors = useThemeColors();
+  const colors = useHomeColors();
   const router = useRouter();
-
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ vehicleId?: string; action?: string }>();
+
+  // ── Vehicle Store ──
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
   const selectVehicle = useVehicleStore((s) => s.selectVehicle);
   const loadVehicles = useVehicleStore((s) => s.loadVehicles);
@@ -93,9 +82,9 @@ export default function HomeScreen() {
     }
   }, [params.vehicleId]);
 
+  // ── Domain Stores ──
   const entries = useFuelStore((s) => s.entries);
   const stats = useFuelStore((s) => s.stats);
-  const partialEstimates = useFuelStore((s) => s.partialEstimates);
   const loadEntries = useFuelStore((s) => s.loadEntries);
 
   const serviceRecords = useServiceStore((s) => s.records);
@@ -108,6 +97,17 @@ export default function HomeScreen() {
   const expiringDocs = useDocumentStore((s) => s.expiringDocs);
   const loadDocuments = useDocumentStore((s) => s.loadDocuments);
 
+  const loadTrips = useTripStore((s) => s.loadTrips);
+  const loadProfiles = useMaintenanceProfileStore((s) => s.loadProfiles);
+  const recoverInterruptedTrips = useTripStore((s) => s.recoverInterruptedTrips);
+
+  // ── Checklist Store ──
+  const checkedItemsByVehicle = useChecklistStore((s) => s.checkedItemsByVehicle);
+  const checkedChecklistItems =
+    (selectedVehicle && checkedItemsByVehicle[selectedVehicle.id]) || EMPTY_CHECKED_LIST;
+  const loadChecklist = useChecklistStore((s) => s.loadChecklist);
+
+  // ── Modal State ──
   const [showChecklistModal, setShowChecklistModal] = useState(false);
   const [showProfilesModal, setShowProfilesModal] = useState(false);
   const [showTripHistoryModal, setShowTripHistoryModal] = useState(false);
@@ -115,52 +115,14 @@ export default function HomeScreen() {
   const [showTripReviewModal, setShowTripReviewModal] = useState(false);
   const [showManualTripModal, setShowManualTripModal] = useState(false);
 
-  const checkedItemsByVehicle = useChecklistStore((s) => s.checkedItemsByVehicle);
-  const checkedChecklistItems = (selectedVehicle && checkedItemsByVehicle[selectedVehicle.id]) || EMPTY_CHECKED_LIST;
-  const loadChecklist = useChecklistStore((s) => s.loadChecklist);
-
-  // ── P2 Trip & Profile Stores ──
-  const vehicles = useVehicleStore((s) => s.vehicles);
-  const trips = useTripStore((s) => s.trips);
-  const activeTrip = useTripStore((s) => s.activeTrip);
-  const recordingState = useTripStore((s) => s.recordingState);
-  const liveMetrics = useTripStore((s) => s.liveMetrics);
-  const loadTrips = useTripStore((s) => s.loadTrips);
-  const startGpsTrip = useTripStore((s) => s.startGpsTrip);
-  const pauseGpsTrip = useTripStore((s) => s.pauseGpsTrip);
-  const resumeGpsTrip = useTripStore((s) => s.resumeGpsTrip);
-  const cancelGpsTrip = useTripStore((s) => s.cancelGpsTrip);
-  const recoverInterruptedTrips = useTripStore((s) => s.recoverInterruptedTrips);
-
-  const tripVehicle = useMemo(() => {
-    if (!activeTrip) return null;
-    return vehicles.find((v) => String(v.id) === String(activeTrip.vehicle_id)) || null;
-  }, [activeTrip, vehicles]);
-
-  const isTripOnSelectedVehicle = Boolean(
-    activeTrip && selectedVehicle && String(activeTrip.vehicle_id) === String(selectedVehicle.id)
-  );
-  const isTripOnAnotherVehicle = Boolean(
-    activeTrip && selectedVehicle && String(activeTrip.vehicle_id) !== String(selectedVehicle.id)
-  );
-
-  // Auto-switch UI to the active trip's vehicle whenever the active trip modal or review modal is opened
-  useEffect(() => {
-    if ((showActiveTripModal || showTripReviewModal) && tripVehicle && selectedVehicle?.id !== tripVehicle.id) {
-      selectVehicle(tripVehicle.id);
-    }
-  }, [showActiveTripModal, showTripReviewModal, tripVehicle, selectedVehicle?.id, selectVehicle]);
-
-  const loadProfiles = useMaintenanceProfileStore((s) => s.loadProfiles);
-
-  // Recover any interrupted trips from previous app crashes on mount
+  // Interrupted trip recovery on app start
   useEffect(() => {
     recoverInterruptedTrips();
-  }, []);
+  }, [recoverInterruptedTrips]);
 
+  // ── Deep Link Actions (Widgets & Shortcuts) ──
   const lastProcessedActionKey = useRef<string | null>(null);
 
-  // Handle deep link actions (e.g. from Home Screen widgets & launcher shortcuts)
   useEffect(() => {
     if (!params.action) {
       lastProcessedActionKey.current = null;
@@ -180,7 +142,6 @@ export default function HomeScreen() {
       useVehicleStore.getState().selectedVehicle?.id ||
       useVehicleStore.getState().vehicles[0]?.id;
 
-    // Immediately consume and clear params from URL so finished trips or re-renders never loop
     router.setParams({ action: undefined, vehicleId: undefined });
 
     if (targetVehicleId && targetVehicleId !== selectedVehicle?.id) {
@@ -204,7 +165,7 @@ export default function HomeScreen() {
       if (currentRecState === 'recording' || currentRecState === 'paused') {
         setShowActiveTripModal(true);
       } else if (targetVehicleId) {
-        startGpsTrip(targetVehicleId).then((res) => {
+        useTripStore.getState().startGpsTrip(targetVehicleId).then((res) => {
           if (res.success) {
             setShowActiveTripModal(true);
           } else {
@@ -222,7 +183,7 @@ export default function HomeScreen() {
     } else if (currentAction === 'resume_gps' || currentAction === 'resume_trip') {
       const currentRecState = useTripStore.getState().recordingState;
       if (currentRecState === 'paused') {
-        resumeGpsTrip().then(() => {
+        useTripStore.getState().resumeGpsTrip().then(() => {
           setShowActiveTripModal(true);
         });
       } else {
@@ -242,109 +203,100 @@ export default function HomeScreen() {
       recoverInterruptedTrips();
       setShowTripReviewModal(true);
     }
-  }, [params.action, params.vehicleId, selectedVehicle?.id, selectVehicle, startGpsTrip, resumeGpsTrip, recoverInterruptedTrips]);
+  }, [params.action, params.vehicleId, selectedVehicle?.id, selectVehicle, recoverInterruptedTrips]);
 
-  // ── Data loading ─────────────────────────────────────────────────────
-  // useFocusEffect fires on initial mount AND every time this tab gains
-  // focus (e.g. returning from History after an edit/delete).
-  // Single hook — no redundant useEffect needed.
+  // ── Targeted Revision-based Invalidation ──
   const lastLoadedVehicleId = useRef<string | null>(null);
   const lastLoadedRevisions = useRef<Record<string, number>>({});
 
-  const loadAll = useCallback((force = false) => {
-    const currentVehicleId = selectedVehicle?.id ?? null;
-    const vehicleChanged = currentVehicleId !== lastLoadedVehicleId.current;
+  const loadAll = useCallback(
+    (force = false) => {
+      const currentVehicleId = selectedVehicle?.id ?? null;
+      const vehicleChanged = currentVehicleId !== lastLoadedVehicleId.current;
 
-    // Refresh vehicles only if forced, vehicle changed, or vehicle dataset revision changed
-    const currentVehiclesRev = dataRevisionTracker.getRevision('vehicles');
-    if (force || vehicleChanged || currentVehiclesRev > (lastLoadedRevisions.current['vehicles'] ?? -1)) {
-      loadVehicles();
-      lastLoadedRevisions.current['vehicles'] = currentVehiclesRev;
-    }
-
-    if (selectedVehicle) {
-      const vId = selectedVehicle.id;
-
-      // Fuel entries
-      const fuelRev = dataRevisionTracker.getRevision('fuel', vId);
-      if (force || vehicleChanged || fuelRev > (lastLoadedRevisions.current[`fuel_${vId}`] ?? -1)) {
-        loadEntries(vId);
-        lastLoadedRevisions.current[`fuel_${vId}`] = fuelRev;
+      const currentVehiclesRev = dataRevisionTracker.getRevision('vehicles');
+      if (force || vehicleChanged || currentVehiclesRev > (lastLoadedRevisions.current['vehicles'] ?? -1)) {
+        loadVehicles();
+        lastLoadedRevisions.current['vehicles'] = currentVehiclesRev;
       }
 
-      // Service records
-      const serviceRev = dataRevisionTracker.getRevision('services', vId);
-      if (force || vehicleChanged || serviceRev > (lastLoadedRevisions.current[`services_${vId}`] ?? -1)) {
-        loadRecords(vId);
-        lastLoadedRevisions.current[`services_${vId}`] = serviceRev;
+      if (selectedVehicle) {
+        const vId = selectedVehicle.id;
+
+        const fuelRev = dataRevisionTracker.getRevision('fuel', vId);
+        if (force || vehicleChanged || fuelRev > (lastLoadedRevisions.current[`fuel_${vId}`] ?? -1)) {
+          loadEntries(vId);
+          lastLoadedRevisions.current[`fuel_${vId}`] = fuelRev;
+        }
+
+        const serviceRev = dataRevisionTracker.getRevision('services', vId);
+        if (force || vehicleChanged || serviceRev > (lastLoadedRevisions.current[`services_${vId}`] ?? -1)) {
+          loadRecords(vId);
+          lastLoadedRevisions.current[`services_${vId}`] = serviceRev;
+        }
+
+        const expenseRev = dataRevisionTracker.getRevision('expenses', vId);
+        if (force || vehicleChanged || expenseRev > (lastLoadedRevisions.current[`expenses_${vId}`] ?? -1)) {
+          loadExpenses(vId);
+          lastLoadedRevisions.current[`expenses_${vId}`] = expenseRev;
+        }
+
+        const docRev = dataRevisionTracker.getRevision('documents', vId);
+        if (force || vehicleChanged || docRev > (lastLoadedRevisions.current[`documents_${vId}`] ?? -1)) {
+          loadDocuments(vId);
+          lastLoadedRevisions.current[`documents_${vId}`] = docRev;
+        }
+
+        const tripRev = dataRevisionTracker.getRevision('trips', vId);
+        if (force || vehicleChanged || tripRev > (lastLoadedRevisions.current[`trips_${vId}`] ?? -1)) {
+          loadTrips(vId);
+          lastLoadedRevisions.current[`trips_${vId}`] = tripRev;
+        }
+
+        const profileRev = dataRevisionTracker.getRevision('maintenanceProfiles', vId);
+        if (force || vehicleChanged || profileRev > (lastLoadedRevisions.current[`profiles_${vId}`] ?? -1)) {
+          loadProfiles(vId, selectedVehicle.current_odometer);
+          lastLoadedRevisions.current[`profiles_${vId}`] = profileRev;
+        }
       }
 
-      // Expenses
-      const expenseRev = dataRevisionTracker.getRevision('expenses', vId);
-      if (force || vehicleChanged || expenseRev > (lastLoadedRevisions.current[`expenses_${vId}`] ?? -1)) {
-        loadExpenses(vId);
-        lastLoadedRevisions.current[`expenses_${vId}`] = expenseRev;
-      }
+      lastLoadedVehicleId.current = currentVehicleId;
+    },
+    [selectedVehicle?.id, selectedVehicle?.current_odometer, loadVehicles, loadEntries, loadRecords, loadExpenses, loadDocuments, loadTrips, loadProfiles]
+  );
 
-      // Documents
-      const docRev = dataRevisionTracker.getRevision('documents', vId);
-      if (force || vehicleChanged || docRev > (lastLoadedRevisions.current[`documents_${vId}`] ?? -1)) {
-        loadDocuments(vId);
-        lastLoadedRevisions.current[`documents_${vId}`] = docRev;
-      }
+  useFocusEffect(
+    useCallback(() => {
+      loadAll(false);
+      // Check for deferred post-trip fuel prompt (e.g. from headless task)
+      getAndClearPendingPostTripPrompt().then((pending) => {
+        if (pending) {
+          showPostTripFuelPrompt({
+            vehicleId: pending.vehicleId,
+            tripId: pending.tripId,
+            odometer: pending.odometer,
+            onAddFuel: (odo) => {
+              router.push({
+                pathname: '/add-fuel',
+                params: {
+                  vehicleId: pending.vehicleId,
+                  ...(typeof odo === 'number' && !isNaN(odo) ? { odometer: String(odo) } : {}),
+                },
+              });
+            },
+          });
+        }
+      });
+    }, [loadAll, router])
+  );
 
-      // Trips
-      const tripRev = dataRevisionTracker.getRevision('trips', vId);
-      if (force || vehicleChanged || tripRev > (lastLoadedRevisions.current[`trips_${vId}`] ?? -1)) {
-        loadTrips(vId);
-        lastLoadedRevisions.current[`trips_${vId}`] = tripRev;
-      }
-
-      // Maintenance Profiles
-      const profileRev = dataRevisionTracker.getRevision('maintenanceProfiles', vId);
-      if (force || vehicleChanged || profileRev > (lastLoadedRevisions.current[`profiles_${vId}`] ?? -1)) {
-        loadProfiles(vId, selectedVehicle.current_odometer);
-        lastLoadedRevisions.current[`profiles_${vId}`] = profileRev;
-      }
-    }
-
-    lastLoadedVehicleId.current = currentVehicleId;
-  }, [selectedVehicle?.id, selectedVehicle?.current_odometer]);
-
-  useFocusEffect(useCallback(() => {
-    loadAll(false);
-    // Check for deferred post-trip fuel prompt (e.g. from background widget completion)
-    getAndClearPendingPostTripPrompt().then((pending) => {
-      if (pending) {
-        showPostTripFuelPrompt({
-          vehicleId: pending.vehicleId,
-          tripId: pending.tripId,
-          odometer: pending.odometer,
-          onAddFuel: (odo) => {
-            router.push({
-              pathname: '/add-fuel',
-              params: {
-                vehicleId: pending.vehicleId,
-                ...(typeof odo === 'number' && !isNaN(odo) ? { odometer: String(odo) } : {}),
-              },
-            });
-          },
-        });
-      }
-    });
-  }, [loadAll, router]));
-
-  // Load checklist state once per vehicle change (not on every tab focus).
-  // AsyncStorage is significantly slower than SQLite, so keeping this
-  // separate from useFocusEffect prevents tab-switch lag.
   useEffect(() => {
     if (selectedVehicle) {
       loadChecklist(selectedVehicle.id);
     }
-  }, [selectedVehicle?.id]);
+  }, [selectedVehicle?.id, loadChecklist]);
 
-  // ── Pull-to-refresh ──────────────────────────────────────────────────
-  // Loads are synchronous (SQLite), so the spinner is just brief feedback.
+  // Pull-to-refresh
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -352,7 +304,79 @@ export default function HomeScreen() {
     setTimeout(() => setRefreshing(false), 500);
   }, [loadAll]);
 
-  // ── Pre-Trip Checklist Hook Calculations (must run before any conditional returns) ──
+  // ── Memoized Computations ──
+  const lastService = useMemo(
+    () => (serviceRecords.length > 0 ? serviceRecords[0] : null),
+    [serviceRecords]
+  );
+
+  const isBiFuelVehicle = useMemo(
+    () => (selectedVehicle ? isBiFuel(selectedVehicle.fuel_type as FuelType) : false),
+    [selectedVehicle?.fuel_type]
+  );
+
+  const isEV = useMemo(
+    () => (selectedVehicle ? isElectricFuel(selectedVehicle.fuel_type as FuelType) : false),
+    [selectedVehicle?.fuel_type]
+  );
+
+  const primaryUnit = useMemo(() => {
+    if (!selectedVehicle) return 'L';
+    return selectedVehicle.fuel_type === FuelType.CNG || isBiFuelVehicle
+      ? 'kg'
+      : isEV
+      ? 'kWh'
+      : 'L';
+  }, [selectedVehicle?.fuel_type, isBiFuelVehicle, isEV]);
+
+  const primaryAvgMileage = useMemo(() => {
+    if (!selectedVehicle) return null;
+    return isBiFuelVehicle
+      ? stats.primarySystemStats?.runningAverage?.value ?? stats.runningAverage?.value ?? null
+      : stats.runningAverage?.value ?? null;
+  }, [selectedVehicle, isBiFuelVehicle, stats]);
+
+  const secondaryAvgMileage = useMemo(() => {
+    if (!selectedVehicle || !isBiFuelVehicle) return null;
+    return stats.secondarySystemStats?.runningAverage?.value ?? null;
+  }, [selectedVehicle, isBiFuelVehicle, stats]);
+
+  const primaryFuelLevel = useMemo(() => {
+    if (!selectedVehicle) return null;
+    return estimateFuelLevel(
+      entries,
+      selectedVehicle.tank_capacity,
+      selectedVehicle.current_odometer,
+      primaryAvgMileage,
+      primaryUnit,
+      isBiFuelVehicle ? 'primary' : undefined
+    );
+  }, [entries, selectedVehicle, primaryAvgMileage, primaryUnit, isBiFuelVehicle]);
+
+  const secondaryFuelLevel = useMemo(() => {
+    if (!selectedVehicle || !isBiFuelVehicle || !selectedVehicle.secondary_tank_capacity) {
+      return null;
+    }
+    return estimateFuelLevel(
+      entries,
+      selectedVehicle.secondary_tank_capacity,
+      selectedVehicle.current_odometer,
+      secondaryAvgMileage,
+      'L',
+      'secondary'
+    );
+  }, [selectedVehicle, isBiFuelVehicle, entries, secondaryAvgMileage]);
+
+  const monthlyTotal = useMemo(
+    () => getCurrentMonthTotalSpend(entries, serviceRecords, expenses).total,
+    [entries, serviceRecords, expenses]
+  );
+
+  const serviceDueStatus = useMemo(
+    () => (selectedVehicle ? getServiceDueStatus(selectedVehicle, lastService) : { urgency: 'none' as const, headline: '', subtext: '' }),
+    [selectedVehicle, lastService]
+  );
+
   const checklistItems = useMemo(() => {
     if (!selectedVehicle) return [];
     return buildPreTripChecklist(selectedVehicle, documents, checkedChecklistItems);
@@ -360,936 +384,95 @@ export default function HomeScreen() {
 
   const checklistStats = useMemo(() => getChecklistStats(checklistItems), [checklistItems]);
 
+  // ── Empty State if no vehicle exists ──
   if (!selectedVehicle) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.emptyState}>
-          <Text style={[styles.emptyEmoji]}>🚗</Text>
-          <Text style={[Typography.h2, { color: colors.text }]}>No vehicles yet</Text>
-          <Text style={[Typography.body, { color: colors.textSecondary, textAlign: 'center', marginTop: Spacing.sm }]}>
-            Add your first vehicle to start tracking!
+          <Text style={styles.emptyEmoji}>🚗</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>No Vehicle Added</Text>
+          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+            Add your vehicle to enter the Automotive Cockpit!
           </Text>
           <TouchableOpacity
-            style={[styles.addVehicleButton, { backgroundColor: colors.primary }]}
+            style={[styles.addVehicleBtn, { backgroundColor: colors.accent }]}
             onPress={() => router.push('/add-vehicle')}
             activeOpacity={0.85}
           >
-            <Text style={[Typography.button, { color: colors.textOnPrimary }]}>+ Add Vehicle</Text>
+            <Text style={styles.addVehicleBtnText}>+ Add Vehicle</Text>
           </TouchableOpacity>
         </View>
       </View>
     );
   }
 
-  // ── Memoized derived values ──────────────────────────────────────────
-  // These are computed once and cached; re-evaluated only when their specific
-  // dependencies change. This prevents expensive recalculation on every render
-  // triggered by liveMetrics ticks, focus events, or other state updates.
-
-  const lastEntry = useMemo(() => (entries.length > 0 ? entries[0] : null), [entries]);
-  const lastService = useMemo(() => (serviceRecords.length > 0 ? serviceRecords[0] : null), [serviceRecords]);
-
-  // Vehicle fuel-type flags — depend only on fuel_type string
-  const isBiFuelVehicle = useMemo(
-    () => isBiFuel(selectedVehicle.fuel_type as FuelType),
-    [selectedVehicle.fuel_type]
-  );
-  const isPureCng = useMemo(
-    () => selectedVehicle.fuel_type === FuelType.CNG,
-    [selectedVehicle.fuel_type]
-  );
-  const isEV = useMemo(
-    () => selectedVehicle.fuel_type === FuelType.ELECTRIC,
-    [selectedVehicle.fuel_type]
-  );
-
-  // Derived labels and units — change only when fuel type changes
-  const { primaryUnit, tankName, primarySystemLabel, secondarySystemLabel } = useMemo(() => {
-    const _isBiFuel = isBiFuel(selectedVehicle.fuel_type as FuelType);
-    const _isEV = selectedVehicle.fuel_type === FuelType.ELECTRIC;
-    return {
-      primaryUnit: (selectedVehicle.fuel_type === FuelType.CNG || _isBiFuel) ? 'kg' : _isEV ? 'kWh' : 'L',
-      tankName: _isBiFuel
-        ? `Primary ${getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'primary')} Cylinder`
-        : _isEV ? 'Battery Pack' : 'Fuel Tank',
-      primarySystemLabel: _isBiFuel
-        ? getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'primary')
-        : 'Primary Tank',
-      secondarySystemLabel: _isBiFuel
-        ? getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'secondary')
-        : 'Secondary Tank',
-    };
-  }, [selectedVehicle.fuel_type]);
-
-  // Average mileage values — depend on stats and fuel type
-  const primaryAvgMileage = useMemo(
-    () => isBiFuelVehicle
-      ? (stats.primarySystemStats?.runningAverage?.value ?? stats.runningAverage?.value ?? null)
-      : (stats.runningAverage?.value ?? null),
-    [isBiFuelVehicle, stats]
-  );
-  const secondaryAvgMileage = useMemo(
-    () => isBiFuelVehicle ? (stats.secondarySystemStats?.runningAverage?.value ?? null) : null,
-    [isBiFuelVehicle, stats]
-  );
-
-  // Fuel level estimates — O(n) over entries; memoized to avoid re-running each render tick
-  const primaryFuelLevel = useMemo(
-    () => estimateFuelLevel(
-      entries,
-      selectedVehicle.tank_capacity,
-      selectedVehicle.current_odometer,
-      primaryAvgMileage,
-      primaryUnit,
-      isBiFuelVehicle ? 'primary' : undefined
-    ),
-    [entries, selectedVehicle.tank_capacity, selectedVehicle.current_odometer, primaryAvgMileage, primaryUnit, isBiFuelVehicle]
-  );
-  const secondaryFuelLevel = useMemo(
-    () => (isBiFuelVehicle && selectedVehicle.secondary_tank_capacity)
-      ? estimateFuelLevel(
-          entries,
-          selectedVehicle.secondary_tank_capacity,
-          selectedVehicle.current_odometer,
-          secondaryAvgMileage,
-          'L',
-          'secondary'
-        )
-      : null,
-    [isBiFuelVehicle, entries, selectedVehicle.secondary_tank_capacity, selectedVehicle.current_odometer, secondaryAvgMileage]
-  );
-
-  // Fuel level tip strings
-  const primaryFuelLevelTip = useMemo((): string | null =>
-    primaryFuelLevel !== null
-      ? null
-      : !selectedVehicle.tank_capacity
-        ? `Add your ${isBiFuelVehicle ? 'primary cylinder' : isEV ? 'battery' : 'tank'} capacity (Edit Vehicle) to see an estimated ${isEV ? 'battery' : 'fuel'} level.`
-        : !primaryAvgMileage
-          ? isEV
-            ? 'Log two charge sessions to unlock the estimated battery level.'
-            : `Log two full-tank fill-ups${isBiFuelVehicle ? ` for ${primarySystemLabel}` : ''} to unlock the estimated fuel level.`
-          : null,
-    [primaryFuelLevel, selectedVehicle.tank_capacity, isBiFuelVehicle, isEV, primaryAvgMileage, primarySystemLabel]
-  );
-  const secondaryFuelLevelTip = useMemo((): string | null =>
-    !isBiFuelVehicle || secondaryFuelLevel !== null
-      ? null
-      : !selectedVehicle.secondary_tank_capacity
-        ? `Add your fallback ${secondarySystemLabel} tank capacity (Edit Vehicle) to see estimated fuel level.`
-        : !secondaryAvgMileage
-          ? `Log two full-tank fill-ups for fallback ${secondarySystemLabel} to unlock estimated fuel level.`
-          : null,
-    [isBiFuelVehicle, secondaryFuelLevel, selectedVehicle.secondary_tank_capacity, secondaryAvgMileage, secondarySystemLabel]
-  );
-
-  // Monthly total spend — O(n) over 3 arrays
-  const monthlyTotal = useMemo(
-    () => getCurrentMonthTotalSpend(entries, serviceRecords, expenses).total,
-    [entries, serviceRecords, expenses]
-  );
-
-  // Service due status — date arithmetic
-  const serviceDueStatus = useMemo(
-    () => getServiceDueStatus(selectedVehicle, lastService),
-    [selectedVehicle, lastService]
-  );
-
-  // Live speed in km/h (ticks with every GPS sample; keep cheap)
-  const currentSpeedKmh = useMemo(
-    () => liveMetrics.currentSpeed !== null ? Math.round(liveMetrics.currentSpeed * 3.6) : 0,
-    [liveMetrics.currentSpeed]
-  );
-
-  // ── GPS Trip Handlers (stable references — prevent child re-renders) ──
-
-  const handleStartGpsTrip = useCallback(async () => {
-    if (!selectedVehicle) return;
-    if (activeTrip && String(activeTrip.vehicle_id) !== String(selectedVehicle.id)) {
-      const otherVehicle = vehicles.find((v) => String(v.id) === String(activeTrip.vehicle_id));
-      Alert.alert(
-        'Trip Already Active',
-        `A GPS trip is already recording for ${otherVehicle?.nickname || 'another vehicle'}. Only one vehicle can record a trip at a time.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: `Switch to ${otherVehicle?.nickname || 'Active Vehicle'}`,
-            onPress: () => otherVehicle && selectVehicle(otherVehicle.id),
-          },
-        ]
-      );
-      return;
-    }
-    const res = await startGpsTrip(selectedVehicle.id, selectedVehicle.current_odometer ?? undefined);
-    if (res.success) {
-      setShowActiveTripModal(true);
-    } else {
-      Alert.alert(
-        'GPS Trip Recording',
-        res.error || 'Failed to start GPS tracking. Please ensure location permissions are granted.'
-      );
-    }
-  }, [selectedVehicle, activeTrip, vehicles, startGpsTrip, selectVehicle]);
-
-  const handleDiscardGpsTrip = useCallback(() => {
-    Alert.alert(
-      'Discard Trip?',
-      'Are you sure you want to stop and discard this recorded trip? All recorded location points will be discarded.',
-      [
-        { text: 'Keep Recording', style: 'cancel' },
-        {
-          text: 'Discard Trip',
-          style: 'destructive',
-          onPress: async () => {
-            await cancelGpsTrip();
-          },
-        },
-      ]
-    );
-  }, [cancelGpsTrip]);
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: Math.max(insets.top, 8), paddingBottom: insets.bottom + 24 },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={colors.primary}
-            colors={[colors.primary]}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
           />
         }
       >
-        {/* ── Vehicle Context Header ── */}
-        <VehicleContextHeader hideIfSingle />
+        {/* Section 4: Vehicle Selector */}
+        <HomeVehicleSelector vehicle={selectedVehicle} colors={colors} />
 
-        {/* ── Vehicle Header ── */}
-        <View style={styles.vehicleHeader}>
-          <Text style={[Typography.h1, { color: colors.text }]}>
-            {selectedVehicle.nickname}
-          </Text>
-          <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
-            {selectedVehicle.registration_number}
-          </Text>
-        </View>
-
-        {/* ── Mileage Card ── */}
-        <View style={[styles.mileageCard, { backgroundColor: colors.primary }]}>
-          {stats.lastFillMileage ? (
-            <>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                <Text style={[styles.mileageLabel, { color: 'rgba(255,255,255,0.85)' }]}>
-                  {isEV ? 'Last Charge Efficiency' : 'Last Fill Mileage'}
-                </Text>
-                {isBiFuelVehicle && lastEntry && (
-                  <View style={{ backgroundColor: 'rgba(255,255,255,0.22)', paddingVertical: 2, paddingHorizontal: 8, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    {lastEntry.fuel_system === 'secondary' ? (
-                      <Text style={{ fontSize: 11 }}>⛽</Text>
-                    ) : (
-                      <CngTankIcon size={12} color="#FFFFFF" showLabel={false} />
-                    )}
-                    <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
-                      {getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, lastEntry.fuel_system ?? 'primary')}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              <Text style={[Typography.stat, { color: '#FFFFFF' }]}>
-                {formatMileage(
-                  stats.lastFillMileage.value,
-                  MILEAGE_UNIT_LABELS[stats.lastFillMileage.unit]
-                )}
-              </Text>
-              {stats.runningAverage && (
-                <Text style={[Typography.bodySmall, { color: 'rgba(255,255,255,0.7)', marginTop: Spacing.xs }]}>
-                  {isEV ? 'Running efficiency: ' : 'Running avg: '}
-                  {formatMileage(
-                    stats.runningAverage.value,
-                    MILEAGE_UNIT_LABELS[stats.runningAverage.unit]
-                  )}
-                </Text>
-              )}
-            </>
-          ) : (
-            <>
-              <Text style={[Typography.h3, { color: '#FFFFFF' }]}>
-                {entries.length === 0
-                  ? (isEV ? 'No charge sessions yet' : 'No fuel entries yet')
-                  : 'Not enough data yet'}
-              </Text>
-              <Text style={[Typography.bodySmall, { color: 'rgba(255,255,255,0.7)', marginTop: Spacing.sm }]}>
-                {entries.length === 0
-                  ? (isEV ? 'Charge up and tap + to log your first session! ⚡' : 'Fill up and tap + to log your first refill! ⛽')
-                  : (isEV ? 'Log one more charge session to calculate efficiency! ⚡' : 'One more full-tank fill and we can calculate your mileage! 🎉')}
-              </Text>
-            </>
-          )}
-        </View>
-
-        {/* ── Estimated Fuel Level Bar(s) ── */}
-        {(primaryFuelLevel || secondaryFuelLevel || primaryFuelLevelTip || secondaryFuelLevelTip) && (
-          <View style={[styles.fuelBarCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            {/* Primary Fuel System (Gas/CNG, or Petrol/Diesel/EV for single-fuel) */}
-            <FuelBarSection
-              title={
-                isBiFuelVehicle
-                  ? `Est. ${primarySystemLabel} Level`
-                  : selectedVehicle.fuel_type === FuelType.ELECTRIC
-                    ? 'Est. Battery Level'
-                    : 'Est. Fuel Level'
-              }
-              icon={
-                isBiFuelVehicle || isPureCng ? (
-                  <CngTankIcon size={15} color={colors.primary} />
-                ) : selectedVehicle.fuel_type === FuelType.ELECTRIC ? (
-                  <Text style={{ fontSize: 13 }}>⚡</Text>
-                ) : (
-                  <Text style={{ fontSize: 13 }}>⛽</Text>
-                )
-              }
-              level={primaryFuelLevel}
-              tip={primaryFuelLevelTip}
-              tankDescription={
-                selectedVehicle.tank_capacity
-                  ? `Est. based on avg mileage · ${tankName}: ${selectedVehicle.tank_capacity} ${primaryUnit}`
-                  : undefined
-              }
-              colors={colors}
-            />
-
-            {/* Secondary Fuel System for Bi-Fuel / Hybrid */}
-            {isBiFuelVehicle && (
-              <View style={{ marginTop: Spacing.md, paddingTop: Spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
-                <FuelBarSection
-                  title={`Est. Fallback ${secondarySystemLabel} Level`}
-                  icon={<Text style={{ fontSize: 13 }}>⛽</Text>}
-                  level={secondaryFuelLevel}
-                  tip={secondaryFuelLevelTip}
-                  tankDescription={
-                    selectedVehicle.secondary_tank_capacity
-                      ? `Est. based on avg mileage · Fallback ${secondarySystemLabel} Tank: ${selectedVehicle.secondary_tank_capacity} L`
-                      : undefined
-                  }
-                  colors={colors}
-                />
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* ── Document Expiry Warnings ── */}
-        {expiringDocs.length > 0 && (
-          <TouchableOpacity
-            onPress={() => router.push('/(tabs)/documents')}
-            style={[styles.expiryBanner, { backgroundColor: colors.dangerLight, borderColor: colors.danger }]}
-            activeOpacity={0.7}
-          >
-            <Text style={[Typography.body, { color: colors.danger, fontWeight: '700', marginBottom: Spacing.xs }]}>
-              ⚠️ Document Alert
-            </Text>
-            {expiringDocs.map((doc) => {
-              const days = daysUntil(doc.expiry_date!);
-              const label = DOCUMENT_TYPE_LABELS[doc.type as keyof typeof DOCUMENT_TYPE_LABELS] || doc.type;
-              return (
-                <Text key={doc.id} style={[Typography.bodySmall, { color: colors.danger }]}>
-                  {label}: {docExpiryText(days)}
-                </Text>
-              );
-            })}
-            <Text style={[Typography.caption, { color: colors.danger, marginTop: Spacing.xs, opacity: 0.7 }]}>
-              Tap to view documents →
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {/* ── Vehicle Vitals (Odometer, Last Fill, Last Service, Spend) ── */}
-        <View style={[styles.vitalsCard, { backgroundColor: colors.surface, borderColor: colors.borderLight, ...Sizing.cardShadow }]}>
-          <View style={styles.vitalsRow}>
-            <View style={styles.vitalItem}>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Odometer</Text>
-              <Text style={[Typography.statMedium, { color: colors.text, marginTop: 2 }]}>
-                {selectedVehicle.current_odometer
-                  ? formatOdometer(selectedVehicle.current_odometer)
-                  : '—'}
-              </Text>
-            </View>
-            <View style={[styles.vitalDivider, { backgroundColor: colors.borderLight }]} />
-            <View style={styles.vitalItem}>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                {isEV ? 'Last Charge' : 'Last Fill'}
-              </Text>
-              <Text style={[Typography.statMedium, { color: colors.text, marginTop: 2 }]} numberOfLines={1}>
-                {lastEntry ? formatDisplayDateLong(lastEntry.date) : '—'}
-              </Text>
-            </View>
-          </View>
-          <View style={[styles.vitalHorizontalDivider, { backgroundColor: colors.borderLight }]} />
-          <View style={styles.vitalsRow}>
-            <View style={styles.vitalItem}>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Last Service</Text>
-              <Text style={[Typography.statMedium, { color: colors.text, marginTop: 2 }]} numberOfLines={1}>
-                {lastService ? formatDisplayDateLong(lastService.date) : '—'}
-              </Text>
-              {lastService && (
-                <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 1 }]} numberOfLines={1}>
-                  {lastService.service_type}
-                </Text>
-              )}
-            </View>
-            <View style={[styles.vitalDivider, { backgroundColor: colors.borderLight }]} />
-            <View style={styles.vitalItem}>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Spend (This Month)</Text>
-              <Text style={[Typography.statMedium, { color: monthlyTotal > 0 ? colors.accent : colors.text, marginTop: 2 }]}>
-                {monthlyTotal > 0 ? formatCurrency(monthlyTotal) : '—'}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* ── Dual-Dimension Service Status: Overdue or Due Soon ── */}
-        {(serviceDueStatus.urgency === 'overdue' || serviceDueStatus.urgency === 'due_soon') && (() => {
-          const isOverdue = serviceDueStatus.urgency === 'overdue';
-          const cardBg = isOverdue ? (colors.dangerLight ?? '#FEE2E2') : (colors.warningLight ?? '#FEF3C7');
-          const badgeBg = isOverdue ? colors.danger : (colors.warning ?? '#F59E0B');
-          const textColor = isOverdue ? colors.danger : (colors.accentDark ?? '#D97706');
-          const pillText = isOverdue ? '⚠️ ACTION REQUIRED' : '🔧 SERVICE DUE SOON';
-
-          return (
-            <View style={[styles.serviceAlertCard, { backgroundColor: cardBg, borderColor: badgeBg }]}>
-              {/* Top Badge Strip: Action / Urgency + Vehicle Context */}
-              <View style={styles.serviceAlertTopRow}>
-                <View style={[styles.serviceAlertPill, { backgroundColor: badgeBg }]}>
-                  <Text style={styles.serviceAlertPillText}>{pillText}</Text>
-                </View>
-                <Text style={[Typography.caption, { color: textColor, fontWeight: '700' }]} numberOfLines={1}>
-                  {selectedVehicle.nickname} · Regular Service
-                </Text>
-              </View>
-
-              {/* Clear Headline */}
-              <Text style={[Typography.body, { color: textColor, fontWeight: '800', marginTop: Spacing.xs }]}>
-                {serviceDueStatus.headline.replace(/^[^\w]+/, '')}
-              </Text>
-
-              {/* Clear Subtext explaining odometer/time breach */}
-              <Text style={[Typography.bodySmall, { color: colors.text, marginTop: 4, lineHeight: 19 }]}>
-                {serviceDueStatus.subtext}
-              </Text>
-
-              {/* Explicit Action Button */}
-              <TouchableOpacity
-                style={[styles.serviceAlertActionBtn, { backgroundColor: badgeBg }]}
-                onPress={() => router.push({ pathname: '/add-service', params: { vehicleId: selectedVehicle.id } })}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.serviceAlertActionBtnText}>
-                  Log Service Record →
-                </Text>
-              </TouchableOpacity>
-            </View>
-          );
-        })()}
-
-        {/* ── Tyre Pressure Recommendation ── */}
-        {(selectedVehicle.front_tyre_pressure != null || selectedVehicle.rear_tyre_pressure != null) && (
-          <View style={[styles.tyrePressureCard, { backgroundColor: colors.surface, ...Sizing.cardShadow }]}>
-            <Text style={[styles.statLabel, { color: colors.textSecondary, marginBottom: Spacing.sm }]}>
-              🚨 Recommended Tyre Pressure
-            </Text>
-            <View style={styles.tyrePressureRow}>
-              {selectedVehicle.front_tyre_pressure != null && (
-                <View style={styles.tyrePressureItem}>
-                  <Text style={[Typography.caption, { color: colors.textTertiary }]}>Front</Text>
-                  <Text style={[Typography.statMedium, { color: colors.text }]}>
-                    {convertPressure(selectedVehicle.front_tyre_pressure)} {getPressureLabel()}
-                  </Text>
-                </View>
-              )}
-              {selectedVehicle.rear_tyre_pressure != null && (
-                <View style={styles.tyrePressureItem}>
-                  <Text style={[Typography.caption, { color: colors.textTertiary }]}>Rear</Text>
-                  <Text style={[Typography.statMedium, { color: colors.text }]}>
-                    {convertPressure(selectedVehicle.rear_tyre_pressure)} {getPressureLabel()}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-        )}
-
-        {/* ── LIVE DRIVING HUD CARD (Only shown when trip is on THIS selected vehicle) ── */}
-        {isTripOnSelectedVehicle ? (
-          <View
-            style={[
-              styles.activeTripHudCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: recordingState === 'paused' ? colors.warning : colors.primary,
-                ...Sizing.cardShadow,
-              },
-            ]}
-          >
-            {/* Top Status Header */}
-            <View style={styles.hudHeaderRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <View
-                  style={[
-                    styles.hudLivePulse,
-                    { backgroundColor: recordingState === 'paused' ? colors.warning : colors.danger },
-                  ]}
-                />
-                <Text style={[Typography.bodySmall, { color: colors.text, fontWeight: '700' }]}>
-                  {recordingState === 'paused' ? 'Trip Paused' : 'Recording Trip'}
-                </Text>
-              </View>
-
-              {/* GPS Signal Quality Badge */}
-              <View
-                style={[
-                  styles.hudGpsBadge,
-                  {
-                    backgroundColor:
-                      liveMetrics.gpsQuality === 'good'
-                        ? colors.successLight
-                        : liveMetrics.gpsQuality === 'fair'
-                        ? colors.warningLight
-                        : colors.dangerLight,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    Typography.caption,
-                    {
-                      color:
-                        liveMetrics.gpsQuality === 'good'
-                          ? colors.success
-                          : liveMetrics.gpsQuality === 'fair'
-                          ? colors.warning
-                          : colors.danger,
-                      fontWeight: '700',
-                    },
-                  ]}
-                >
-                  {liveMetrics.gpsQuality === 'good'
-                    ? `🟢 GPS Good (${Math.round(liveMetrics.currentAccuracy ?? 0)}m)`
-                    : liveMetrics.gpsQuality === 'fair'
-                    ? `🟡 GPS Fair (${Math.round(liveMetrics.currentAccuracy ?? 0)}m)`
-                    : '🔴 Acquiring GPS...'}
-                </Text>
-              </View>
-            </View>
-
-            {/* Vehicle context subtext */}
-            <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: Spacing.xs }]}>
-              Recording route for <Text style={{ fontWeight: '700', color: colors.text }}>{selectedVehicle.nickname}</Text> · {liveMetrics.samplesCount} GPS points logged
-            </Text>
-
-            {/* Main HUD Metrics Row */}
-            <View style={[styles.hudMetricsContainer, { backgroundColor: colors.background, borderColor: colors.borderLight }]}>
-              {/* Distance */}
-              <View style={styles.hudMetricCol}>
-                <Text style={[Typography.caption, { color: colors.textSecondary }]}>DISTANCE</Text>
-                <Text style={[styles.hudBigNumber, { color: colors.primary }]}>
-                  {liveMetrics.distanceKm.toFixed(2)}
-                </Text>
-                <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700' }]}>KM</Text>
-              </View>
-
-              <View style={[styles.hudMetricDivider, { backgroundColor: colors.borderLight }]} />
-
-              {/* Speed */}
-              <View style={styles.hudMetricCol}>
-                <Text style={[Typography.caption, { color: colors.textSecondary }]}>SPEED</Text>
-                <Text style={[styles.hudMedNumber, { color: colors.text }]}>
-                  {currentSpeedKmh}
-                </Text>
-                <Text style={[Typography.caption, { color: colors.textSecondary }]}>km/h</Text>
-              </View>
-
-              <View style={[styles.hudMetricDivider, { backgroundColor: colors.borderLight }]} />
-
-              {/* Time */}
-              <View style={styles.hudMetricCol}>
-                <Text style={[Typography.caption, { color: colors.textSecondary }]}>ELAPSED</Text>
-                <Text style={[styles.hudMedNumber, { color: colors.text }]}>
-                  {formatTripTime(liveMetrics.elapsedSeconds)}
-                </Text>
-                <Text style={[Typography.caption, { color: colors.textSecondary }]}>time</Text>
-              </View>
-            </View>
-
-            {/* Direct Action Controls Right On The Dashboard */}
-            <View style={styles.hudActionButtonsRow}>
-              {/* Pause / Resume */}
-              {recordingState === 'recording' ? (
-                <TouchableOpacity
-                  style={[styles.hudSecondaryActionBtn, { borderColor: colors.warning, backgroundColor: colors.warningLight }]}
-                  onPress={pauseGpsTrip}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[Typography.button, { color: colors.warning, fontSize: 13 }]}>
-                    ⏸️ Pause
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={[styles.hudSecondaryActionBtn, { borderColor: colors.primary, backgroundColor: colors.primaryLight }]}
-                  onPress={resumeGpsTrip}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[Typography.button, { color: colors.primary, fontSize: 13 }]}>
-                    ▶️ Resume
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              {/* End & Save Trip */}
-              <TouchableOpacity
-                style={[styles.hudPrimaryActionBtn, { backgroundColor: colors.danger }]}
-                onPress={() => setShowTripReviewModal(true)}
-                activeOpacity={0.85}
-              >
-                <Text style={[Typography.button, { color: '#FFFFFF', fontSize: 14 }]}>
-                  🏁 End & Save Trip
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Secondary links: Expand Fullscreen HUD & Discard */}
-            <View style={styles.hudSecondaryRow}>
-              <TouchableOpacity
-                onPress={() => setShowActiveTripModal(true)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={[Typography.bodySmall, { color: colors.primary, fontWeight: '700' }]}>
-                  📱 Speedometer View →
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={handleDiscardGpsTrip}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={[Typography.caption, { color: colors.danger, fontWeight: '600' }]}>
-                  Discard Trip
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          /* ── Idle GPS Launcher Card (or Banner if trip is on another vehicle) ── */
-          <>
-            {isTripOnAnotherVehicle && (
-              <TouchableOpacity
-                style={[
-                  styles.activeTripHudCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: recordingState === 'paused' ? colors.warning : colors.primary,
-                    paddingVertical: Spacing.sm,
-                    paddingHorizontal: Spacing.md,
-                    marginBottom: Spacing.md,
-                    ...Sizing.cardShadow,
-                  },
-                ]}
-                onPress={() => tripVehicle && selectVehicle(tripVehicle.id)}
-                activeOpacity={0.85}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-                    <View
-                      style={[
-                        styles.hudLivePulse,
-                        { backgroundColor: recordingState === 'paused' ? colors.warning : colors.danger },
-                      ]}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[Typography.bodySmall, { color: colors.text, fontWeight: '700' }]}>
-                        {recordingState === 'paused' ? '⏸️ Trip Paused' : '🔴 Trip Active'} on {tripVehicle?.nickname || 'other vehicle'}
-                      </Text>
-                      <Text style={[Typography.caption, { color: colors.textSecondary }]}>
-                        {liveMetrics.distanceKm.toFixed(1)} km recorded · Tap to switch to {tripVehicle?.nickname}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={[Typography.button, { color: colors.primary, fontSize: 13 }]}>
-                    Switch →
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            )}
-
-            {/* ── GPS TRIP TRACKER CARD (Clean & Minimal) ── */}
-            <View
-              style={[
-                styles.gpsLauncherCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.borderLight,
-                  ...Sizing.cardShadow,
-                },
-              ]}
-            >
-              {/* Header: Icon + Title + 100% Offline Badge */}
-              <View style={styles.gpsLauncherHeader}>
-                <View style={[styles.toolIconWrap, { backgroundColor: colors.primaryLight ?? (colors.primary + '18') }]}>
-                  <Text style={{ fontSize: 20 }}>📍</Text>
-                </View>
-                <View style={{ flex: 1, marginLeft: Spacing.sm }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text style={[Typography.body, { color: colors.text, fontWeight: '700', fontSize: 16 }]}>
-                      GPS Trip Tracker
-                    </Text>
-                    <View style={[styles.offlineBadge, { backgroundColor: colors.successLight }]}>
-                      <Text style={[Typography.caption, { color: colors.success, fontWeight: '700', fontSize: 10 }]}>
-                        100% Offline
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
-                    {isTripOnAnotherVehicle
-                      ? `A trip is currently active on ${tripVehicle?.nickname || 'another vehicle'}.`
-                      : 'Track driving route, live speed, and distance.'}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Primary Start Button */}
-              <TouchableOpacity
-                style={[
-                  styles.startGpsPrimaryBtn,
-                  {
-                    backgroundColor: isTripOnAnotherVehicle ? colors.border : colors.primary,
-                    opacity: isTripOnAnotherVehicle ? 0.7 : 1,
-                  },
-                ]}
-                onPress={handleStartGpsTrip}
-                activeOpacity={0.85}
-              >
-                <Text style={{ fontSize: 16, marginRight: 8 }}>
-                  {isTripOnAnotherVehicle ? '⚠️' : '▶️'}
-                </Text>
-                <Text style={[Typography.button, { color: isTripOnAnotherVehicle ? colors.textSecondary : colors.primaryText, fontSize: 15 }]}>
-                  {isTripOnAnotherVehicle ? `Trip Active on ${tripVehicle?.nickname}` : 'Start GPS Trip'}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Sub-actions: Manual Trip & History */}
-              <View style={styles.gpsLauncherLinksRow}>
-                <TouchableOpacity
-                  style={styles.gpsLauncherSubLink}
-                  onPress={() => setShowManualTripModal(true)}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={[Typography.caption, { color: colors.textSecondary, fontWeight: '600' }]}>
-                    ✍️ Log Manual Trip
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.gpsLauncherSubLink}
-                  onPress={() => setShowTripHistoryModal(true)}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700' }]}>
-                    Trip History ({trips.length}) →
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </>
-        )}
-
-        {/* ── Quick Tools Grid: Targets & Highway Checks ── */}
-        <View style={styles.quickToolsGrid}>
-          <TouchableOpacity
-            style={[styles.toolGridCard, { backgroundColor: colors.surface, borderColor: colors.borderLight, ...Sizing.cardShadow }]}
-            onPress={() => setShowProfilesModal(true)}
-            activeOpacity={0.75}
-          >
-            <View style={styles.toolCardTop}>
-              <View style={[styles.toolIconWrap, { backgroundColor: colors.accentLight ?? (colors.accent + '18') }]}>
-                <Text style={{ fontSize: 20 }}>🎯</Text>
-              </View>
-              <Text style={[styles.toolCardArrow, { color: colors.accent }]}>→</Text>
-            </View>
-            <Text style={[Typography.body, { color: colors.text, fontWeight: '700', marginTop: Spacing.sm }]}>
-              Targets
-            </Text>
-            <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, lineHeight: 16 }]}>
-              Custom intervals
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.toolGridCard, { backgroundColor: colors.surface, borderColor: colors.borderLight, ...Sizing.cardShadow }]}
-            onPress={() => setShowChecklistModal(true)}
-            activeOpacity={0.75}
-          >
-            <View style={styles.toolCardTop}>
-              <View style={[styles.toolIconWrap, { backgroundColor: colors.successLight ?? (colors.success + '18') }]}>
-                <Text style={{ fontSize: 20 }}>🛣️</Text>
-              </View>
-              <Text style={[styles.toolCardArrow, { color: colors.success }]}>→</Text>
-            </View>
-            <Text style={[Typography.body, { color: colors.text, fontWeight: '700', marginTop: Spacing.sm }]}>
-              Highway Checks
-            </Text>
-            <Text style={[Typography.caption, { color: colors.textSecondary, marginTop: 2, lineHeight: 16 }]}>
-              {checklistStats.isComplete ? 'Ready ✅' : `${checklistStats.completed}/${checklistStats.total} inspected`}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Smart Maintenance & Mileage Insights (Part A) ── */}
-        <SmartInsightsCard
+        {/* Section 5: GPS Cockpit (Self-contained Live GPS subscriptions) */}
+        <HomeGpsCockpit
           vehicle={selectedVehicle}
-          onOpenProfiles={() => setShowProfilesModal(true)}
-          onOpenTrips={() => setShowTripHistoryModal(true)}
+          colors={colors}
+          onOpenActiveTripModal={() => setShowActiveTripModal(true)}
+          onOpenTripReviewModal={() => setShowTripReviewModal(true)}
+          onOpenManualTripModal={() => setShowManualTripModal(true)}
+          onOpenTripHistoryModal={() => setShowTripHistoryModal(true)}
         />
 
-        {/* ── Highway Road Trip Readiness Checklist (Feature 4.3) ── */}
-        <TouchableOpacity
-          style={[
-            styles.checklistCard,
-            {
-              backgroundColor: colors.surface,
-              borderColor: checklistStats.isComplete ? colors.success : colors.borderLight,
-              ...Sizing.cardShadow,
-            },
-          ]}
-          onPress={() => setShowChecklistModal(true)}
-          activeOpacity={0.8}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-              <Text style={{ fontSize: 16 }}>🛣️</Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                Highway Trip Readiness
-              </Text>
-            </View>
-            <View
-              style={{
-                backgroundColor: checklistStats.isComplete ? colors.successLight : colors.primaryLight,
-                paddingHorizontal: 8,
-                paddingVertical: 3,
-                borderRadius: 12,
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontWeight: '700',
-                  color: checklistStats.isComplete ? colors.success : colors.primary,
-                }}
-              >
-                {checklistStats.isComplete ? 'Ready ✅' : `${checklistStats.completed}/${checklistStats.total} Checks`}
-              </Text>
-            </View>
-          </View>
+        {/* Section 6: Vehicle Overview (2x2 Grid) */}
+        <HomeVehicleOverview
+          vehicle={selectedVehicle}
+          entries={entries}
+          stats={stats}
+          monthlyTotal={monthlyTotal}
+          colors={colors}
+        />
 
-          <Text style={[Typography.bodySmall, { color: colors.text, fontWeight: '600', marginTop: 2 }]}>
-            {checklistStats.isComplete
-              ? 'Vehicle is 100% inspected and ready for highway driving.'
-              : 'Inspect tyre PSI, engine oil, stepney, PUC & FASTag.'}
-          </Text>
+        {/* Section 7: Needs Attention (Service & Document alerts) */}
+        <HomeNeedsAttention
+          vehicle={selectedVehicle}
+          serviceDueStatus={serviceDueStatus}
+          expiringDocs={expiringDocs}
+          colors={colors}
+        />
 
-          {/* Mini progress bar */}
-          <View style={[styles.miniProgressTrack, { backgroundColor: colors.borderLight, marginTop: Spacing.sm }]}>
-            <View
-              style={[
-                styles.miniProgressBar,
-                {
-                  width: `${checklistStats.percent}%`,
-                  backgroundColor: checklistStats.isComplete ? colors.success : colors.primary,
-                },
-              ]}
-            />
-          </View>
-        </TouchableOpacity>
+        {/* Section 8: Vehicle Essentials (Fuel/Battery levels & Tyre pressures) */}
+        <HomeVehicleEssentials
+          vehicle={selectedVehicle}
+          primaryFuelLevel={primaryFuelLevel}
+          secondaryFuelLevel={secondaryFuelLevel}
+          primaryUnit={primaryUnit}
+          colors={colors}
+        />
 
-        {/* ── Recent Entries ── */}
-        {entries.length > 0 && (
-          <View style={styles.section}>
-            <Text style={[Typography.h3, { color: colors.text, marginBottom: Spacing.md }]}>
-              Recent Fuel Entries
-            </Text>
-            {entries.slice(0, 5).map((entry) => {
-              const estimate = partialEstimates[entry.id];
-              // Resolve unit label once per entry (e.g. "km/L", "km/kg", "km/kWh")
-              const mileageUnitLabel = entry.mileage_unit
-                ? MILEAGE_UNIT_LABELS[entry.mileage_unit]
-                : '';
-              return (
-                <View
-                  key={entry.id}
-                  style={[styles.entryRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                >
-                  <View style={styles.entryLeft}>
-                    <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>
-                      {formatDisplayDateLong(entry.date)}
-                    </Text>
-                    <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
-                      {entry.fuel_amount} {entry.fuel_unit} · {formatCurrency(entry.total_cost)}
-                    </Text>
-                  </View>
-                  <View style={styles.entryRight}>
-                    {entry.calculated_mileage ? (
-                      // Accurate mileage — show value + unit
-                      <Text style={[Typography.body, { color: colors.success, fontWeight: '700' }]}>
-                        {entry.calculated_mileage.toFixed(1)} {mileageUnitLabel}
-                      </Text>
-                    ) : estimate ? (
-                      // Estimated (partial fill) — show with ~ prefix and est. label
-                      <>
-                        <Text style={[Typography.body, { color: colors.warning, fontWeight: '700' }]}>
-                          ~{estimate.value.toFixed(1)} {MILEAGE_UNIT_LABELS[estimate.unit]}
-                        </Text>
-                        <Text style={[Typography.caption, { color: colors.textTertiary }]}>est.</Text>
-                      </>
-                    ) : (
-                      // First fill or partial with no prior full tank
-                      <Text style={[Typography.bodySmall, { color: colors.textTertiary }]}>
-                        {entry.is_full_tank === 1 ? '—' : 'Partial'}
-                      </Text>
-                    )}
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        )}
-
-        {/* Bottom padding for FAB */}
-        <View style={{ height: 100 }} />
+        {/* Section 9: Quick Access (Shortcuts) */}
+        <HomeQuickAccess
+          vehicle={selectedVehicle}
+          checklistCount={checklistStats}
+          onOpenProfilesModal={() => setShowProfilesModal(true)}
+          onOpenChecklistModal={() => setShowChecklistModal(true)}
+          colors={colors}
+        />
       </ScrollView>
 
-      {/* ── FAB: Add Fuel / Add Charge (biggest button on screen) ── */}
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: colors.accent }]}
-        activeOpacity={0.85}
-        onPress={() => router.push('/add-fuel')}
-      >
-        <View style={styles.fabIconContainer}>
-          {isEV ? (
-            <Text style={styles.fabIcon}>⚡</Text>
-          ) : isPureCng ? (
-            <CngTankIcon size={18} color="#1A1C1E" showLabel={false} />
-          ) : (
-            <Text style={styles.fabIcon}>⛽</Text>
-          )}
-        </View>
-        <Text style={[styles.fabText, { color: '#1A1C1E' }]}>
-          {isEV ? 'Add Charge' : isPureCng ? 'Add CNG' : 'Add Fuel'}
-        </Text>
-      </TouchableOpacity>
-
-      {/* ── Pre-Trip Highway Checklist Modal (Feature 4.3) ── */}
+      {/* ── Dialog Modals ── */}
       {showChecklistModal && (
         <PreTripChecklistModal
           visible={showChecklistModal}
@@ -1299,7 +482,6 @@ export default function HomeScreen() {
         />
       )}
 
-      {/* ── Maintenance Profiles & Targets Modal (Part B) ── */}
       {showProfilesModal && (
         <MaintenanceProfilesModal
           visible={showProfilesModal}
@@ -1308,18 +490,18 @@ export default function HomeScreen() {
         />
       )}
 
-      {/* ── Trip History Modal (Part C & D) ── */}
       {showTripHistoryModal && (
         <TripHistoryModal
           visible={showTripHistoryModal}
           vehicle={selectedVehicle}
           onStartGpsTrip={async () => {
             setShowTripHistoryModal(false);
-            const res = await startGpsTrip(selectedVehicle.id, selectedVehicle.current_odometer ?? undefined);
+            const res = await useTripStore.getState().startGpsTrip(
+              selectedVehicle.id,
+              selectedVehicle.current_odometer ?? undefined
+            );
             if (res.success) {
               setShowActiveTripModal(true);
-            } else {
-              Alert.alert('GPS Recording', res.error || 'Failed to start GPS tracking.');
             }
           }}
           onLogManualTrip={() => {
@@ -1330,11 +512,10 @@ export default function HomeScreen() {
         />
       )}
 
-      {/* ── Active GPS Trip HUD (Part C) ── */}
       {showActiveTripModal && (
         <ActiveTripModal
           visible={showActiveTripModal}
-          vehicle={tripVehicle || selectedVehicle}
+          vehicle={selectedVehicle}
           onFinish={() => {
             setShowActiveTripModal(false);
             setShowTripReviewModal(true);
@@ -1343,33 +524,32 @@ export default function HomeScreen() {
         />
       )}
 
-      {/* ── Trip Review & Save Modal (Part C6) ── */}
       {showTripReviewModal && (
         <TripReviewModal
           visible={showTripReviewModal}
-          vehicle={tripVehicle || selectedVehicle}
+          vehicle={selectedVehicle}
           onSaved={(finalized) => {
             setShowTripReviewModal(false);
-            const targetVeh = tripVehicle || selectedVehicle;
-            if (targetVeh) {
-              loadVehicles();
-              loadTrips(targetVeh.id);
-              const tripOdometer = resolveTripEndOdometer(finalized, targetVeh.current_odometer);
-              showPostTripFuelPrompt({
-                vehicleId: targetVeh.id,
-                tripId: finalized?.id,
-                odometer: tripOdometer,
-                onAddFuel: (odo) => {
-                  router.push({
-                    pathname: '/add-fuel',
-                    params: {
-                      vehicleId: targetVeh.id,
-                      ...(typeof odo === 'number' && !isNaN(odo) ? { odometer: String(odo) } : {}),
-                    },
-                  });
-                },
-              });
-            }
+            loadVehicles();
+            loadTrips(selectedVehicle.id);
+            const tripOdometer = resolveTripEndOdometer(
+              finalized,
+              selectedVehicle.current_odometer
+            );
+            showPostTripFuelPrompt({
+              vehicleId: selectedVehicle.id,
+              tripId: finalized?.id,
+              odometer: tripOdometer,
+              onAddFuel: (odo) => {
+                router.push({
+                  pathname: '/add-fuel',
+                  params: {
+                    vehicleId: selectedVehicle.id,
+                    ...(typeof odo === 'number' && !isNaN(odo) ? { odometer: String(odo) } : {}),
+                  },
+                });
+              },
+            });
           }}
           onCancel={() => {
             setShowTripReviewModal(false);
@@ -1378,7 +558,6 @@ export default function HomeScreen() {
         />
       )}
 
-      {/* ── Manual Trip Modal (Part D1) ── */}
       {showManualTripModal && (
         <ManualTripModal
           visible={showManualTripModal}
@@ -1399,389 +578,36 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: Spacing.lg,
+    paddingBottom: Spacing.xl,
   },
-  // ── Vehicle Header ──
-  vehicleHeader: {
-    marginBottom: Spacing.xl,
-  },
-  // ── Mileage Card ──
-  mileageCard: {
-    borderRadius: Sizing.radiusLg,
-    padding: Spacing.xxl,
-    marginBottom: Spacing.lg,
-    minHeight: 140,
-    justifyContent: 'center',
-  },
-  mileageLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: Spacing.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  // ── Stats / Vitals Card ──
-  vitalsCard: {
-    borderRadius: Sizing.radiusMd,
-    borderWidth: 1,
-    padding: Spacing.md,
-    marginBottom: Spacing.lg,
-  },
-  vitalsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.xs,
-  },
-  vitalItem: {
-    flex: 1,
-    paddingHorizontal: Spacing.sm,
-  },
-  vitalDivider: {
-    width: 1,
-    height: '70%',
-    marginHorizontal: Spacing.xs,
-  },
-  vitalHorizontalDivider: {
-    height: StyleSheet.hairlineWidth,
-    width: '100%',
-    marginVertical: Spacing.sm,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    marginBottom: Spacing.md,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: Sizing.radiusMd,
-    padding: Spacing.lg,
-  },
-  statLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: Spacing.xs,
-  },
-  // ── Fuel Bar ──
-  fuelBarCard: {
-    borderRadius: Sizing.radiusMd,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-  },
-  fuelBarHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-  },
-  fuelBarsRow: {
-    flexDirection: 'row',
-    gap: 4,
-    marginBottom: Spacing.xs,
-  },
-  fuelBarSegment: {
-    flex: 1,
-    height: 20,
-    borderRadius: 4,
-  },
-  fuelBarLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: Spacing.xs,
-  },
-  // ── Service Overdue Alert Card ──
-  serviceAlertCard: {
-    borderRadius: Sizing.radiusMd,
-    borderWidth: 1.5,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-  },
-  serviceAlertTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 2,
-  },
-  serviceAlertPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  serviceAlertPillText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  serviceAlertActionBtn: {
-    marginTop: Spacing.md,
-    paddingVertical: 10,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: Sizing.radiusMd,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  serviceAlertActionBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  // ── Section ──
-  section: {
-    marginBottom: Spacing.xxl,
-  },
-  // ── Entry Row ──
-  entryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: Spacing.lg,
-    borderRadius: Sizing.radiusMd,
-    borderWidth: 1,
-    marginBottom: Spacing.sm,
-  },
-  entryLeft: {
-    flex: 1,
-  },
-  entryRight: {
-    marginLeft: Spacing.md,
-    alignItems: 'flex-end',
-  },
-  // ── FAB ──
-  fab: {
-    position: 'absolute',
-    bottom: Spacing.xxl,
-    right: Spacing.lg,
-    height: Sizing.fab,
-    borderRadius: Sizing.radiusFull,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xxl,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    gap: Spacing.sm,
-  },
-  fabIconContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fabIcon: {
-    fontSize: 22,
-  },
-  fabText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  // ── Empty State ──
   emptyState: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: Spacing.xxxl,
+    justifyContent: 'center',
+    padding: Spacing.xl,
   },
   emptyEmoji: {
-    fontSize: 64,
-    marginBottom: Spacing.lg,
-  },
-  addVehicleButton: {
-    marginTop: Spacing.xxl,
-    height: Sizing.primaryButton,
-    borderRadius: Sizing.radiusMd,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xxxl,
-  },
-  // ── Expiry Banner ──
-  expiryBanner: {
-    borderRadius: Sizing.radiusMd,
-    borderWidth: 1,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-  },
-  // ── Tyre Pressure ──
-  tyrePressureCard: {
-    borderRadius: Sizing.radiusMd,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-  },
-  tyrePressureRow: {
-    flexDirection: 'row',
-    gap: Spacing.xxl,
-  },
-  tyrePressureItem: {
-    alignItems: 'center',
-  },
-  // ── Road Trip Checklist ──
-  checklistCard: {
-    borderRadius: Sizing.radiusMd,
-    borderWidth: 1,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-  },
-  miniProgressTrack: {
-    height: 5,
-    borderRadius: 2.5,
-    overflow: 'hidden',
-  },
-  miniProgressBar: {
-    height: '100%',
-    borderRadius: 2.5,
-  },
-  activeTripBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: Spacing.md,
-    borderRadius: Sizing.radiusLg,
-    borderWidth: 1.5,
+    fontSize: 54,
     marginBottom: Spacing.md,
-    ...Sizing.cardShadow,
   },
-  // ── Live Driving HUD Card (Dashboard) ──
-  activeTripHudCard: {
-    borderRadius: Sizing.radiusLg,
-    borderWidth: 2,
-    padding: Spacing.lg,
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: Spacing.xs,
     marginBottom: Spacing.lg,
   },
-  hudHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  hudLivePulse: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  hudGpsBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  addVehicleBtn: {
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: 12,
     borderRadius: 12,
   },
-  hudMetricsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.sm,
-    borderRadius: Sizing.radiusMd,
-    borderWidth: 1,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.md,
-  },
-  hudMetricCol: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  hudBigNumber: {
-    fontSize: 28,
-    fontWeight: '800',
-    lineHeight: 32,
-    letterSpacing: -0.5,
-  },
-  hudMedNumber: {
-    fontSize: 22,
-    fontWeight: '700',
-    lineHeight: 26,
-  },
-  hudMetricDivider: {
-    width: 1,
-    height: 36,
-  },
-  hudActionButtonsRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
-  },
-  hudPrimaryActionBtn: {
-    flex: 1.5,
-    paddingVertical: 12,
-    borderRadius: Sizing.radiusMd,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  hudSecondaryActionBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: Sizing.radiusMd,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  hudSecondaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: Spacing.xs,
-  },
-  // ── GPS Launcher Card (Idle State) ──
-  gpsLauncherCard: {
-    borderRadius: Sizing.radiusLg,
-    borderWidth: 1,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-  },
-  gpsLauncherHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  offlineBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: Sizing.radiusFull,
-  },
-  startGpsPrimaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 13,
-    borderRadius: Sizing.radiusMd,
-    marginBottom: Spacing.sm,
-  },
-  gpsLauncherLinksRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 2,
-    paddingHorizontal: 4,
-  },
-  gpsLauncherSubLink: {
-    paddingVertical: 4,
-  },
-  quickToolsGrid: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    marginBottom: Spacing.lg,
-  },
-  toolGridCard: {
-    flex: 1,
-    borderRadius: Sizing.radiusLg,
-    borderWidth: 1,
-    padding: Spacing.md,
-    minHeight: 104,
-    justifyContent: 'space-between',
-  },
-  toolCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  toolIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  toolCardArrow: {
-    fontSize: 16,
+  addVehicleBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
     fontWeight: '700',
   },
 });

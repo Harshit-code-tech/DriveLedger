@@ -14,7 +14,7 @@
  */
 
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, View, Platform } from 'react-native';
+import { StyleSheet, Text, View, Platform, Image } from 'react-native';
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as QuickActions from 'expo-quick-actions';
@@ -110,6 +110,18 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
+          headerTitle: () => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Image
+                source={require('../../assets/images/icon.png')}
+                style={{ width: 24, height: 24, borderRadius: 5 }}
+                resizeMode="contain"
+              />
+              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>
+                DriveLedger
+              </Text>
+            </View>
+          ),
           tabBarIcon: ({ focused }) => (
             <TabIcon emoji="🏠" focused={focused} />
           ),
