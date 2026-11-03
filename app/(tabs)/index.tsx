@@ -115,6 +115,14 @@ export default function HomeScreen() {
   const [showTripReviewModal, setShowTripReviewModal] = useState(false);
   const [showManualTripModal, setShowManualTripModal] = useState(false);
 
+  // Stable modal openers (prevents React.memo downstream re-renders)
+  const handleOpenChecklistModal = useCallback(() => setShowChecklistModal(true), []);
+  const handleOpenProfilesModal = useCallback(() => setShowProfilesModal(true), []);
+  const handleOpenTripHistoryModal = useCallback(() => setShowTripHistoryModal(true), []);
+  const handleOpenActiveTripModal = useCallback(() => setShowActiveTripModal(true), []);
+  const handleOpenTripReviewModal = useCallback(() => setShowTripReviewModal(true), []);
+  const handleOpenManualTripModal = useCallback(() => setShowManualTripModal(true), []);
+
   // Interrupted trip recovery on app start
   useEffect(() => {
     recoverInterruptedTrips();
@@ -430,10 +438,10 @@ export default function HomeScreen() {
         <HomeGpsCockpit
           vehicle={selectedVehicle}
           colors={colors}
-          onOpenActiveTripModal={() => setShowActiveTripModal(true)}
-          onOpenTripReviewModal={() => setShowTripReviewModal(true)}
-          onOpenManualTripModal={() => setShowManualTripModal(true)}
-          onOpenTripHistoryModal={() => setShowTripHistoryModal(true)}
+          onOpenActiveTripModal={handleOpenActiveTripModal}
+          onOpenTripReviewModal={handleOpenTripReviewModal}
+          onOpenManualTripModal={handleOpenManualTripModal}
+          onOpenTripHistoryModal={handleOpenTripHistoryModal}
         />
 
         {/* Section 6: Vehicle Overview (2x2 Grid) */}
@@ -466,8 +474,8 @@ export default function HomeScreen() {
         <HomeQuickAccess
           vehicle={selectedVehicle}
           checklistCount={checklistStats}
-          onOpenProfilesModal={() => setShowProfilesModal(true)}
-          onOpenChecklistModal={() => setShowChecklistModal(true)}
+          onOpenProfilesModal={handleOpenProfilesModal}
+          onOpenChecklistModal={handleOpenChecklistModal}
           colors={colors}
         />
       </ScrollView>
