@@ -21,6 +21,7 @@ import * as QuickActions from 'expo-quick-actions';
 import { useQuickActionRouting } from 'expo-quick-actions/router';
 import { Sizing } from '@/constants/theme';
 import { useThemeColors } from '@/hooks/useThemeColors';
+import { useHomeColors } from '@/components/home/homeTheme';
 
 // Simple emoji-based tab icons (we'll upgrade to proper icons later)
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
@@ -33,6 +34,7 @@ function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
 
 export default function TabLayout() {
   const colors = useThemeColors();
+  const homeColors = useHomeColors();
   const insets = useSafeAreaInsets();
 
   // Handles one-tap routing when launched from an Android App Shortcut / iOS Quick Action
@@ -110,16 +112,46 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
+          headerTitleAlign: 'left',
+          headerStyle: {
+            backgroundColor: homeColors.background,
+            elevation: 0,
+            shadowOpacity: 0,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: homeColors.border,
+          },
           headerTitle: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <Image
                 source={require('../../assets/images/icon.png')}
-                style={{ width: 24, height: 24, borderRadius: 5 }}
+                style={{ width: 28, height: 28 }}
                 resizeMode="contain"
               />
-              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>
-                DriveLedger
-              </Text>
+
+              {/* Two-tone typographic wordmark */}
+              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                <Text
+                  style={{
+                    fontSize: 20,
+                    fontWeight: '900',
+                    color: homeColors.text,
+                    letterSpacing: -0.5,
+                  }}
+                >
+                  Drive
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 20,
+                    fontWeight: '400',
+                    color: homeColors.text,
+                    letterSpacing: -0.2,
+                    opacity: 0.85,
+                  }}
+                >
+                  Ledger
+                </Text>
+              </View>
             </View>
           ),
           tabBarIcon: ({ focused }) => (
