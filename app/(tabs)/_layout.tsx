@@ -160,12 +160,19 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="records"
+        options={{
+          title: 'Records',
+          headerShown: false,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon emoji="📋" focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="history"
         options={{
-          title: 'History',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="🕒" focused={focused} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen

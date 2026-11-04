@@ -33,7 +33,8 @@ DriveLedger/
 │   ├── (tabs)/                      # Bottom-tab screens
 │   │   ├── index.tsx                # Home / Vehicle Dashboard (primary screen)
 │   │   ├── stats.tsx                # Analytics & Reports
-│   │   ├── history.tsx              # Fuel/service/expense/trip history
+│   │   ├── records.tsx              # Chronological vehicle records (fuel/service/expense/trip)
+│   │   ├── history.tsx              # Backward-compatibility redirect to records
 │   │   ├── documents.tsx            # Document vault & expiry tracking
 │   │   └── settings.tsx             # Preferences, backup, vehicles, update check
 │   ├── add-fuel.tsx, add-service.tsx, add-expense.tsx, add-document.tsx

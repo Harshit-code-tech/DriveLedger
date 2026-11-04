@@ -308,7 +308,7 @@ function checkMileageAnomaly(
       },
       suggestedAction:
         'Recorded mileage has decreased across three completed intervals compared with your recent baseline. Review your recent entries and check tyre pressure or driving conditions if the pattern continues.',
-      actionRoute: '/(tabs)/history',
+      actionRoute: '/(tabs)/records',
     };
   }
 
@@ -432,7 +432,7 @@ function checkDataIntegrity(
           odometer: curr.odometer,
         },
         suggestedAction: 'Review and correct the odometer value in your fuel history to ensure accurate mileage metrics.',
-        actionRoute: '/(tabs)/history',
+        actionRoute: '/(tabs)/records',
       });
       break; // Report the first chronological conflict
     }
