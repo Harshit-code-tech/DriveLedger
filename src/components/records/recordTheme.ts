@@ -1,21 +1,13 @@
 /**
  * DriveLedger — Records Theme Tokens
  *
- * Visual palette defined in Section 6 of docs/refurnish/record.md:
- * Light:
- *   Page background: #F2EDE3
- *   Surface: #FFFFFF
- *   Primary text: #282725
- *   Secondary text: #77736D
- *   Accent: #C65B2E
- *   Divider: #D8D0C3
- * Dark:
- *   Page background: #1D1D1B
- *   Surface: #292927
- *   Primary text: #F2EDE3
- *   Secondary text: #AAA49A
- *   Accent: #E07848
- *   Divider: #41403C
+ * "Original Blue — Refined"
+ * Familiar, clean, technical:
+ * - Background: #F5F8FC (Ice Slate)
+ * - Surface: #FFFFFF (Crisp White)
+ * - Primary Text / Deep Accent: #183B63 (Deep Automotive Navy)
+ * - Primary Accent: #3983C7 (Refined Blue)
+ * - Border & Divider: #DCE6F1 (Ice Blue)
  */
 
 import { useColorScheme } from 'react-native';
@@ -46,47 +38,47 @@ export interface RecordPalette {
 export const RecordColors: { light: RecordPalette; dark: RecordPalette } = {
   light: {
     isDark: false,
-    background: '#F2EDE3',
+    background: '#F5F8FC',
     surface: '#FFFFFF',
-    surfaceSecondary: '#EBE5D9',
+    surfaceSecondary: '#EDF3FA',
     surfaceElevated: '#FFFFFF',
-    text: '#282725',
-    textSecondary: '#77736D',
-    textTertiary: '#9E9991',
-    accent: '#C65B2E',
-    accentDark: '#A84820',
-    divider: '#D8D0C3',
-    border: '#D8D0C3',
-    borderLight: '#E8E2D5',
-    statusNormal: '#16A34A',
-    statusNormalBg: '#DCFCE7',
-    statusWarning: '#D97706',
+    text: '#183B63',
+    textSecondary: '#536B88',
+    textTertiary: '#8A9EB5',
+    accent: '#3983C7',
+    accentDark: '#183B63',
+    divider: '#DCE6F1',
+    border: '#DCE6F1',
+    borderLight: '#E8F0F7',
+    statusNormal: '#10B981',
+    statusNormalBg: '#E0F5EE',
+    statusWarning: '#F59E0B',
     statusWarningBg: '#FEF3C7',
-    statusCritical: '#DC2626',
+    statusCritical: '#EF4444',
     statusCriticalBg: '#FEE2E2',
-    overlay: 'rgba(29, 29, 27, 0.65)',
+    overlay: 'rgba(24, 59, 99, 0.65)',
   },
   dark: {
     isDark: true,
-    background: '#1D1D1B',
-    surface: '#292927',
-    surfaceSecondary: '#333330',
-    surfaceElevated: '#383835',
-    text: '#F2EDE3',
-    textSecondary: '#AAA49A',
-    textTertiary: '#77736D',
-    accent: '#E07848',
-    accentDark: '#C65B2E',
-    divider: '#41403C',
-    border: '#41403C',
-    borderLight: '#333330',
-    statusNormal: '#22C55E',
-    statusNormalBg: 'rgba(34, 197, 94, 0.15)',
-    statusWarning: '#F59E0B',
-    statusWarningBg: 'rgba(245, 158, 11, 0.15)',
-    statusCritical: '#EF4444',
-    statusCriticalBg: 'rgba(239, 68, 68, 0.15)',
-    overlay: 'rgba(0, 0, 0, 0.75)',
+    background: '#0E1A2B',
+    surface: '#14253D',
+    surfaceSecondary: '#1A2F4C',
+    surfaceElevated: '#1E3657',
+    text: '#F5F8FC',
+    textSecondary: '#96B0CC',
+    textTertiary: '#607C9A',
+    accent: '#4FA0E8',
+    accentDark: '#183B63',
+    divider: '#1F3858',
+    border: '#1F3858',
+    borderLight: '#182E49',
+    statusNormal: '#34D399',
+    statusNormalBg: 'rgba(52, 211, 153, 0.15)',
+    statusWarning: '#FBBF24',
+    statusWarningBg: 'rgba(251, 191, 36, 0.15)',
+    statusCritical: '#F87171',
+    statusCriticalBg: 'rgba(248, 113, 113, 0.15)',
+    overlay: 'rgba(10, 20, 35, 0.8)',
   },
 };
 
