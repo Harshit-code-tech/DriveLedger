@@ -1,36 +1,19 @@
-/**
- * Tab Layout
- *
- * Bottom tab navigation matching the charter's navigation structure:
- *
- * 🏠 Home (Vehicle Dashboard)
- * 📊 History
- * 📄 Documents
- * 📈 Stats
- * ⚙️ Settings
- *
- * Design: Bottom-anchored tabs for one-handed operation.
- * Large touch targets (48dp+ per tab).
- */
-
-import React, { useEffect } from 'react';
-import { StyleSheet, Text, View, Platform, Image } from 'react-native';
-import { Tabs } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as QuickActions from 'expo-quick-actions';
-import { useQuickActionRouting } from 'expo-quick-actions/router';
-import { Sizing } from '@/constants/theme';
-import { useThemeColors } from '@/hooks/useThemeColors';
-import { useHomeColors } from '@/components/home/homeTheme';
-
-// Simple emoji-based tab icons (we'll upgrade to proper icons later)
-function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
-  return (
-    <View style={styles.tabIconContainer}>
-      <Text style={[styles.tabEmoji, { opacity: focused ? 1 : 0.5 }]}>{emoji}</Text>
-    </View>
-  );
-}
+import { useHomeColors } from "@/components/home/homeTheme";
+import {
+  TabDocumentsIcon,
+  TabHomeIcon,
+  TabRecordsIcon,
+  TabSettingsIcon,
+  TabStatsIcon,
+} from "@/components/navigation/TabBarSvgIcons";
+import { Sizing } from "@/constants/theme";
+import { useThemeColors } from "@/hooks/useThemeColors";
+import * as QuickActions from "expo-quick-actions";
+import { useQuickActionRouting } from "expo-quick-actions/router";
+import { Tabs } from "expo-router";
+import { useEffect } from "react";
+import { Image, Platform, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabLayout() {
   const colors = useThemeColors();
@@ -41,35 +24,43 @@ export default function TabLayout() {
   useQuickActionRouting();
 
   useEffect(() => {
-    if (Platform.OS !== 'web') {
+    if (Platform.OS !== "web") {
       QuickActions.setItems([
         {
-          id: 'add_fuel',
-          title: 'Log Fuel',
-          subtitle: 'Quick refill entry at pump',
-          icon: Platform.OS === 'ios' ? 'symbol:fuelpump.fill' : 'shortcut_fuel',
-          params: { href: '/add-fuel' },
+          id: "add_fuel",
+          title: "Log Fuel",
+          subtitle: "Quick refill entry at pump",
+          icon:
+            Platform.OS === "ios" ? "symbol:fuelpump.fill" : "shortcut_fuel",
+          params: { href: "/add-fuel" },
         },
         {
-          id: 'add_expense',
-          title: 'Log Expense',
-          subtitle: 'Tolls, parking & fastag',
-          icon: Platform.OS === 'ios' ? 'symbol:creditcard.fill' : 'shortcut_expense',
-          params: { href: '/add-expense' },
+          id: "add_expense",
+          title: "Log Expense",
+          subtitle: "Tolls, parking & fastag",
+          icon:
+            Platform.OS === "ios"
+              ? "symbol:creditcard.fill"
+              : "shortcut_expense",
+          params: { href: "/add-expense" },
         },
         {
-          id: 'add_service',
-          title: 'Log Service',
-          subtitle: 'Maintenance & repairs',
-          icon: Platform.OS === 'ios' ? 'symbol:wrench.and.screwdriver.fill' : 'shortcut_service',
-          params: { href: '/add-service' },
+          id: "add_service",
+          title: "Log Service",
+          subtitle: "Maintenance & repairs",
+          icon:
+            Platform.OS === "ios"
+              ? "symbol:wrench.and.screwdriver.fill"
+              : "shortcut_service",
+          params: { href: "/add-service" },
         },
         {
-          id: 'trip_checklist',
-          title: 'Trip Checklist',
-          subtitle: 'Highway readiness inspection',
-          icon: Platform.OS === 'ios' ? 'symbol:checklist' : 'shortcut_checklist',
-          params: { href: '/checklist' },
+          id: "trip_checklist",
+          title: "Trip Checklist",
+          subtitle: "Highway readiness inspection",
+          icon:
+            Platform.OS === "ios" ? "symbol:checklist" : "shortcut_checklist",
+          params: { href: "/checklist" },
         },
       ]).catch(() => {
         // Safe ignore on devices without quick actions support
@@ -88,7 +79,7 @@ export default function TabLayout() {
           borderBottomColor: colors.border,
         },
         headerTitleStyle: {
-          fontWeight: '600',
+          fontWeight: "600",
           fontSize: 18,
           color: colors.text,
         },
@@ -104,15 +95,15 @@ export default function TabLayout() {
         tabBarInactiveTintColor: homeColors.textTertiary,
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: '600',
+          fontWeight: "600",
         },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          headerTitleAlign: 'left',
+          title: "Home",
+          headerTitleAlign: "left",
           headerStyle: {
             backgroundColor: homeColors.background,
             elevation: 0,
@@ -121,19 +112,21 @@ export default function TabLayout() {
             borderBottomColor: homeColors.border,
           },
           headerTitle: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+            >
               <Image
-                source={require('../../assets/images/icon.png')}
+                source={require("../../assets/images/icon.png")}
                 style={{ width: 28, height: 28 }}
                 resizeMode="contain"
               />
 
               {/* Two-tone typographic wordmark */}
-              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+              <View style={{ flexDirection: "row", alignItems: "baseline" }}>
                 <Text
                   style={{
                     fontSize: 20,
-                    fontWeight: '900',
+                    fontWeight: "900",
                     color: homeColors.text,
                     letterSpacing: -0.5,
                   }}
@@ -143,7 +136,7 @@ export default function TabLayout() {
                 <Text
                   style={{
                     fontSize: 20,
-                    fontWeight: '400',
+                    fontWeight: "400",
                     color: homeColors.text,
                     letterSpacing: -0.2,
                     opacity: 0.85,
@@ -154,18 +147,22 @@ export default function TabLayout() {
               </View>
             </View>
           ),
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="🏠" focused={focused} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={styles.tabIconContainer}>
+              <TabHomeIcon color={color} size={size} focused={focused} />
+            </View>
           ),
         }}
       />
       <Tabs.Screen
         name="records"
         options={{
-          title: 'Records',
+          title: "Records",
           headerShown: false,
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="📋" focused={focused} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={styles.tabIconContainer}>
+              <TabRecordsIcon color={color} size={size} focused={focused} />
+            </View>
           ),
         }}
       />
@@ -178,27 +175,33 @@ export default function TabLayout() {
       <Tabs.Screen
         name="documents"
         options={{
-          title: 'Documents',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="🧾" focused={focused} />
+          title: "Documents",
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={styles.tabIconContainer}>
+              <TabDocumentsIcon color={color} size={size} focused={focused} />
+            </View>
           ),
         }}
       />
       <Tabs.Screen
         name="stats"
         options={{
-          title: 'Stats',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="🧮" focused={focused} />
+          title: "Stats",
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={styles.tabIconContainer}>
+              <TabStatsIcon color={color} size={size} focused={focused} />
+            </View>
           ),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Settings',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="⚙️" focused={focused} />
+          title: "Settings",
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={styles.tabIconContainer}>
+              <TabSettingsIcon color={color} size={size} focused={focused} />
+            </View>
           ),
         }}
       />
@@ -210,10 +213,7 @@ const styles = StyleSheet.create({
   tabIconContainer: {
     width: Sizing.touchTarget,
     height: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tabEmoji: {
-    fontSize: 20,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
