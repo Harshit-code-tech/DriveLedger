@@ -176,6 +176,7 @@ export default function TabLayout() {
         name="documents"
         options={{
           title: "Documents",
+          headerShown: false,
           tabBarIcon: ({ color, size, focused }) => (
             <View style={styles.tabIconContainer}>
               <TabDocumentsIcon color={color} size={size} focused={focused} />

@@ -1,33 +1,71 @@
 /**
- * Documents Screen
+ * DriveLedger — Vehicle Documents Screen
  *
- * Shows vehicle documents (RC, Insurance, PUC, FASTag, Warranty).
- * Highlights documents nearing expiry with color-coded badges.
+ * Section 1: Objective & Section 4: Final Page Structure
+ * Completely redesigned Vehicle Documents management interface:
+ * 1. Global Vehicle Selector (reusing HomeVehicleSelector)
+ * 2. Vehicle Documents Title and Export Report Action (DocumentHeaderBar)
+ * 3. Document Navigation: Active / Renewal History (DocumentNavigation)
+ * 4. Document Status Overview (DocumentStatusOverview)
+ * 5. Document List & Information Hierarchy (DocumentCard)
+ * 6. Document Attachments with independent touch targets
+ * 7. Existing Bottom Navigation context
  *
- * P1 EXTENSIONS:
- * - Renewal history tab: view superseded documents preserved in the renewal chain
- * - Clear "Superseded" distinction so active policies are never confused with old ones
- * - Full offline file access (images and PDFs) for historical claims and audit reference
+ * Design principle: Organised information density, not minimalism.
+ * Fully offline-first, resource-efficient, and preserved database schema.
  */
 
-import { VehicleContextHeader } from '@/components/VehicleContextHeader';
-import { DOCUMENT_TYPE_ICONS, DOCUMENT_TYPE_LABELS } from '@/constants/documentTypes';
-import { Sizing, Spacing, Typography } from '@/constants/theme';
-import { useThemeColors } from '@/hooks/useThemeColors';
-import { useDocumentStore } from '@/stores/documentStore';
-import { useVehicleStore } from '@/stores/vehicleStore';
-import type { VehicleDocument } from '@/types/document';
-import { daysUntil, formatDisplayDateLong } from '@/utils/date';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  FlatList,
+  Image,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import { Alert, FlatList, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// Stores & Repositories
+import { useVehicleStore } from '@/stores/vehicleStore';
+import { useDocumentStore } from '@/stores/documentStore';
+import type { VehicleDocument } from '@/types/document';
+import { DOCUMENT_TYPE_LABELS } from '@/constants/documentTypes';
+import { Spacing } from '@/constants/theme';
+
+// Attachment & Export Utilities
+import {
+  openAttachment,
+  checkFileExists,
+} from '@/utils/attachmentStorage';
 import { ReportExportModal } from '@/components/ReportExportModal';
-import { openAttachment, isPdfAttachment, getThumbnailUri } from '@/utils/attachmentStorage';
+import { NoVehicleState } from '@/components/NoVehicleState';
+import { HomeVehicleSelector } from '@/components/home/HomeVehicleSelector';
+
+// Document Components & Theme
+import { useDocumentColors } from '@/components/documents/documentTheme';
+import { DocumentsHeader } from '@/components/documents/DocumentsHeader';
+import {
+  DocumentNavigation,
+  type DocumentTab,
+} from '@/components/documents/DocumentNavigation';
+import { DocumentHeaderBar } from '@/components/documents/DocumentHeaderBar';
+import { DocumentStatusOverview } from '@/components/documents/DocumentStatusOverview';
+import { DocumentCard } from '@/components/documents/DocumentCard';
+import { DocumentEmptyState } from '@/components/documents/DocumentEmptyState';
+import { getDocumentOverviewCounts } from '@/components/documents/documentHelpers';
 
 export default function DocumentsScreen() {
-  const colors = useThemeColors();
+  const colors = useDocumentColors();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ vehicleId?: string }>();
+
+  // ── Global Vehicle State ──
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
   const selectVehicle = useVehicleStore((s) => s.selectVehicle);
 
@@ -35,124 +73,95 @@ export default function DocumentsScreen() {
     if (params.vehicleId && params.vehicleId !== selectedVehicle?.id) {
       selectVehicle(params.vehicleId);
     }
-  }, [params.vehicleId]);
+  }, [params.vehicleId, selectedVehicle?.id, selectVehicle]);
 
+  // ── Document Store ──
   const documents = useDocumentStore((s) => s.documents);
   const allDocuments = useDocumentStore((s) => s.allDocuments);
   const loadDocuments = useDocumentStore((s) => s.loadDocuments);
   const deleteDocument = useDocumentStore((s) => s.deleteDocument);
 
-  // Tab: 'active' | 'history'
-  const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
-
-  // Fullscreen image viewer state
+  // ── Navigation & Presentation State ──
+  const [activeTab, setActiveTab] = useState<DocumentTab>('active');
   const [viewerUri, setViewerUri] = useState<string | null>(null);
   const [showExportModal, setShowExportModal] = useState<boolean>(false);
 
-  // Reload when screen comes into focus
+  // Reload when screen gains focus or selected vehicle changes
   useFocusEffect(
     useCallback(() => {
       if (selectedVehicle) {
         loadDocuments(selectedVehicle.id);
       }
-    }, [selectedVehicle?.id])
+    }, [selectedVehicle?.id, loadDocuments])
   );
 
+  // Derived renewal history documents (superseded records)
   const supersededDocuments = useMemo(() => {
     return allDocuments.filter((d) => d.superseded_by !== null);
   }, [allDocuments]);
 
-  const getExpiryBadge = (expiryDate: string | null, type?: string) => {
-    if (!expiryDate) return { label: 'No Expiry', color: colors.textTertiary, bgColor: colors.shimmer };
-    const days = daysUntil(expiryDate);
-    if (days < 0) {
-      return {
-        label: type === 'PUC' ? '🚨 Expired (₹10k Fine)' : 'Expired',
-        color: colors.danger,
-        bgColor: colors.dangerLight,
-      };
-    }
-    if (days <= 7) {
-      return {
-        label: type === 'PUC' ? `🚨 ${days}d left (Renew)` : `${days}d left`,
-        color: colors.danger,
-        bgColor: colors.dangerLight,
-      };
-    }
-    if (days <= 15 && type === 'PUC') {
-      return {
-        label: `⚠️ ${days}d left`,
-        color: colors.warning,
-        bgColor: colors.warningLight,
-      };
-    }
-    if (days <= 30) return { label: `${days}d left`, color: colors.warning, bgColor: colors.warningLight };
-    if (days <= 90) return { label: `${days}d left`, color: colors.accent, bgColor: colors.accentLight };
-    return { label: 'Valid', color: colors.success, bgColor: colors.successLight };
-  };
+  // Document status overview metrics
+  const stats = useMemo(() => {
+    return getDocumentOverviewCounts(documents, supersededDocuments);
+  }, [documents, supersededDocuments]);
 
-  const handleRenew = (doc: VehicleDocument) => {
-    const label = DOCUMENT_TYPE_LABELS[doc.type as keyof typeof DOCUMENT_TYPE_LABELS] || doc.type;
-    Alert.alert(
-      `Renew ${label} 🔄`,
-      `Time to freshen up that ${label}! A new record will be created and the current one will be moved to Renewal History.\n\nFill in the new details on the next screen.`,
-      [
-        { text: 'Maybe Later', style: 'cancel' },
-        {
-          text: "Let's Renew! 🎉",
-          onPress: () => {
-            router.push({
-              pathname: '/add-document',
-              params: { renewFrom: doc.id, renewType: doc.type },
-            });
-          },
-        },
-      ]
-    );
-  };
-
-  const openDocumentFile = async (uri: string) => {
-    if (isPdfAttachment(uri)) {
-      const res = await openAttachment(uri, 'Open PDF');
-      if (!res.success && res.message) {
-        Alert.alert('📄 Could Not Open Document', res.message);
-      }
-    } else {
-      setViewerUri(uri);
-    }
-  };
+  // ── User Actions ──
 
   const handleEdit = useCallback(
     (item: VehicleDocument) => {
-      router.push({ pathname: '/add-document', params: { id: item.id } });
+      router.push({
+        pathname: '/add-document',
+        params: { id: item.id },
+      });
     },
     [router]
   );
 
-  const handleView = useCallback(
-    (item: VehicleDocument) => {
-      if (item.file_uri) {
-        openDocumentFile(item.file_uri);
-      } else {
-        router.push({ pathname: '/add-document', params: { id: item.id } });
-      }
+  const handleRenew = useCallback(
+    (doc: VehicleDocument) => {
+      const label =
+        DOCUMENT_TYPE_LABELS[doc.type as keyof typeof DOCUMENT_TYPE_LABELS] || doc.type;
+      Alert.alert(
+        `Renew ${label} 🔄`,
+        `Renewing will create a new current record and archive this record into Renewal History.\n\nProceed to fill renewal details?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Renew Now',
+            onPress: () => {
+              router.push({
+                pathname: '/add-document',
+                params: { renewFrom: doc.id, renewType: doc.type },
+              });
+            },
+          },
+        ]
+      );
     },
     [router]
   );
 
   const handleDelete = useCallback(
     (item: VehicleDocument) => {
+      const label =
+        DOCUMENT_TYPE_LABELS[item.type as keyof typeof DOCUMENT_TYPE_LABELS] || item.type;
+      const ref = item.document_number ? ` (${item.document_number})` : '';
+
       Alert.alert(
-        'Delete This? 🗑️',
-        `You're about to delete this ${DOCUMENT_TYPE_LABELS[item.type as keyof typeof DOCUMENT_TYPE_LABELS] || item.type} record.`,
+        'Delete Document 🗑️',
+        `Are you sure you want to delete this ${label}${ref}?`,
         [
           { text: 'Keep It', style: 'cancel' },
           {
-            text: 'Delete It',
+            text: 'Delete',
             style: 'destructive',
             onPress: () => {
               if (selectedVehicle) {
-                deleteDocument(item.id, selectedVehicle.id);
+                try {
+                  deleteDocument(item.id, selectedVehicle.id);
+                } catch {
+                  Alert.alert('Error', 'Failed to delete document. Please try again.');
+                }
               }
             },
           },
@@ -162,13 +171,53 @@ export default function DocumentsScreen() {
     [selectedVehicle, deleteDocument]
   );
 
+  const handleViewPdf = useCallback(async (uri: string, title?: string) => {
+    try {
+      const exists = await checkFileExists(uri);
+      if (!exists) {
+        Alert.alert(
+          'File Unavailable',
+          'The attached PDF file could not be found on device storage.'
+        );
+        return;
+      }
+      const res = await openAttachment(uri, title || 'Open PDF');
+      if (!res.success && res.message) {
+        Alert.alert('Document Viewer', res.message);
+      }
+    } catch {
+      Alert.alert('Document Viewer', 'An error occurred while opening the PDF document.');
+    }
+  }, []);
+
+  const handleViewImage = useCallback(async (uri: string) => {
+    try {
+      const exists = await checkFileExists(uri);
+      if (!exists) {
+        Alert.alert(
+          'File Unavailable',
+          'The attached image file could not be found on device storage.'
+        );
+        return;
+      }
+      setViewerUri(uri);
+    } catch {
+      Alert.alert('Image Viewer', 'Could not open image file.');
+    }
+  }, []);
+
+  const handleAddDocument = useCallback(() => {
+    router.push({
+      pathname: '/add-document',
+      params: { vehicleId: selectedVehicle?.id },
+    });
+  }, [router, selectedVehicle?.id]);
+
   if (!selectedVehicle) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.emptyState}>
-          <Text style={{ fontSize: 48, marginBottom: Spacing.lg }}>📄</Text>
-          <Text style={[Typography.h3, { color: colors.text }]}>No vehicle selected</Text>
-        </View>
+      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+        <DocumentsHeader totalCount={0} colors={colors} />
+        <NoVehicleState />
       </View>
     );
   }
@@ -176,134 +225,114 @@ export default function DocumentsScreen() {
   const displayedDocs = activeTab === 'active' ? documents : supersededDocuments;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* ── Vehicle Context ── */}
-      <VehicleContextHeader label="Documents for" />
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+      {/* ── Top Header: Tab Name "Documents" ── */}
+      <DocumentsHeader totalCount={documents.length} colors={colors} />
 
-      {/* ── Screen Action Bar ── */}
-      <View style={[styles.topActionBar, { borderBottomColor: colors.borderLight }]}>
-        <View style={styles.topActionTextGroup}>
-          <Text style={[Typography.h3, { color: colors.text }]}>Vehicle Documents</Text>
-          <Text style={[Typography.caption, { color: colors.textSecondary }]}>
-            {documents.length} active · {supersededDocuments.length} renewed
-          </Text>
-        </View>
+      {/* ── 1. Global Vehicle Selector ── */}
+      <HomeVehicleSelector vehicle={selectedVehicle} colors={colors} />
 
-        <TouchableOpacity
-          style={[styles.exportButton, { borderColor: colors.primary, backgroundColor: colors.primaryLight }]}
-          onPress={() => setShowExportModal(true)}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel="Export vehicle reports"
-        >
-          <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700' }]}>
-            📄 Export Reports
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── Tab Selector: Active vs. Renewal History ── */}
-      <View style={[styles.tabSelectorRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <TouchableOpacity
-          style={[
-            styles.tabButton,
-            activeTab === 'active' && { backgroundColor: colors.primary },
-          ]}
-          onPress={() => setActiveTab('active')}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              { color: activeTab === 'active' ? colors.textOnPrimary : colors.textSecondary },
-            ]}
-          >
-            Active ({documents.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.tabButton,
-            activeTab === 'history' && { backgroundColor: colors.primary },
-          ]}
-          onPress={() => setActiveTab('history')}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              { color: activeTab === 'history' ? colors.textOnPrimary : colors.textSecondary },
-            ]}
-          >
-            Renewal History ({supersededDocuments.length})
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {activeTab === 'history' && supersededDocuments.length > 0 && (
-        <View style={[styles.historyNotice, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 18 }}>
-            📜 <Text style={{ fontWeight: '700', color: colors.text }}>Archived Policies & Certificates:</Text>{' '}
-            These past records were superseded upon renewal. Kept safe offline for legal, claim, and tax history.
-          </Text>
-        </View>
-      )}
-
+      {/* ── Document List & Integrated Presentation Sections ── */}
       <FlatList
         data={displayedDocs}
         keyExtractor={(item) => item.id}
+        initialNumToRender={8}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === 'android'}
+        ListHeaderComponent={
+          <View style={styles.headerContainer}>
+            {/* ── 2. Title & Export Action ── */}
+            <DocumentHeaderBar
+              onExport={() => setShowExportModal(true)}
+              colors={colors}
+            />
+
+            {/* ── 3. Document Navigation: Active / Renewal History ── */}
+            <DocumentNavigation
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              activeCount={documents.length}
+              historyCount={supersededDocuments.length}
+              colors={colors}
+            />
+
+            {/* ── 4. Document Status Overview ── */}
+            <DocumentStatusOverview
+              activeTab={activeTab}
+              totalActive={stats.totalActive}
+              expiringSoon={stats.expiringSoon}
+              expired={stats.expired}
+              totalSuperseded={stats.totalSuperseded}
+              colors={colors}
+            />
+
+            {/* Renewal History Informational Notice */}
+            {activeTab === 'history' && supersededDocuments.length > 0 && (
+              <View
+                style={[
+                  styles.historyNotice,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.borderLight,
+                  },
+                ]}
+              >
+                <Text style={[styles.historyNoticeText, { color: colors.textSecondary }]}>
+                  📜 <Text style={[styles.historyNoticeBold, { color: colors.text }]}>Archived Policies & Certificates:</Text>{' '}
+                  Past records superseded upon renewal, retained safely offline for legal, claim, and audit reference.
+                </Text>
+              </View>
+            )}
+
+            {/* List Section Title */}
+            <View style={styles.listSectionHeader}>
+              <Text style={[styles.listSectionTitle, { color: colors.textSecondary }]}>
+                {activeTab === 'active' ? 'ALL DOCUMENTS' : 'RENEWAL ARCHIVE'}
+              </Text>
+              <Text style={[styles.listSectionCount, { color: colors.textTertiary }]}>
+                {displayedDocs.length} {displayedDocs.length === 1 ? 'record' : 'records'}
+              </Text>
+            </View>
+          </View>
+        }
         renderItem={({ item }) => (
           <DocumentCard
             item={item}
             isSuperseded={activeTab === 'history'}
-            badge={
-              activeTab === 'history'
-                ? { label: 'SUPERSEDED 🔄', color: colors.textSecondary, bgColor: colors.borderLight }
-                : getExpiryBadge(item.expiry_date, item.type)
-            }
             onEdit={handleEdit}
-            onView={handleView}
             onDelete={handleDelete}
+            onViewImage={handleViewImage}
+            onViewPdf={handleViewPdf}
             onRenew={handleRenew}
             colors={colors}
           />
         )}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={styles.listContent}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={{ fontSize: 48, marginBottom: Spacing.lg }}>
-              {activeTab === 'active' ? '📄' : '📜'}
-            </Text>
-            <Text style={[Typography.h3, { color: colors.text }]}>
-              {activeTab === 'active' ? 'No active documents yet' : 'No renewal history yet'}
-            </Text>
-            <Text
-              style={[
-                Typography.bodySmall,
-                { color: colors.textSecondary, marginTop: Spacing.sm, textAlign: 'center' },
-              ]}
-            >
-              {activeTab === 'active'
-                ? 'Store your RC, Insurance, PUC, and FASTag digitally.'
-                : 'When you renew insurance or PUC, older versions are saved here automatically.'}
-            </Text>
-          </View>
+          <DocumentEmptyState
+            activeTab={activeTab}
+            onAddDocument={handleAddDocument}
+            colors={colors}
+          />
         }
       />
 
       {/* ── FAB: Add Document ── */}
       <TouchableOpacity
-        style={[styles.fab, { backgroundColor: colors.primary }]}
+        style={[styles.fab, { backgroundColor: colors.accentDark }]}
         activeOpacity={0.85}
-        onPress={() => router.push({ pathname: '/add-document', params: { vehicleId: selectedVehicle?.id } })}
+        onPress={handleAddDocument}
+        accessibilityRole="button"
+        accessibilityLabel="Add document"
       >
         <Text style={styles.fabIcon}>+</Text>
-        <Text style={[styles.fabText, { color: colors.textOnPrimary }]}>Add Document</Text>
+        <Text style={styles.fabText}>Add Document</Text>
       </TouchableOpacity>
 
-      {/* ── Fullscreen Image Viewer Modal ── */}
+      {/* ── Fullscreen Image Preview Modal ── */}
       <Modal
-        visible={!!viewerUri}
+        visible={Boolean(viewerUri)}
         transparent
         animationType="fade"
         onRequestClose={() => setViewerUri(null)}
@@ -313,6 +342,8 @@ export default function DocumentsScreen() {
             style={styles.modalClose}
             onPress={() => setViewerUri(null)}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Close image viewer"
           >
             <Text style={styles.modalCloseText}>✕ Close</Text>
           </TouchableOpacity>
@@ -326,7 +357,7 @@ export default function DocumentsScreen() {
         </View>
       </Modal>
 
-      {/* ── Vehicle Report Export Modal ── */}
+      {/* ── Vehicle Reports Export Modal ── */}
       {selectedVehicle && (
         <ReportExportModal
           visible={showExportModal}
@@ -338,278 +369,79 @@ export default function DocumentsScreen() {
   );
 }
 
-interface DocumentCardProps {
-  item: VehicleDocument;
-  isSuperseded?: boolean;
-  badge: { label: string; color: string; bgColor: string };
-  onEdit: (item: VehicleDocument) => void;
-  onView: (item: VehicleDocument) => void;
-  onDelete: (item: VehicleDocument) => void;
-  onRenew: (item: VehicleDocument) => void;
-  colors: ReturnType<typeof useThemeColors>;
-}
-
-function DocumentCard({
-  item,
-  isSuperseded,
-  badge,
-  onEdit,
-  onView,
-  onDelete,
-  onRenew,
-  colors,
-}: DocumentCardProps) {
-  const lastTapRef = useRef<number>(0);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-    };
-  }, []);
-
-  const isExpiredOrExpiring = item.expiry_date && daysUntil(item.expiry_date) <= 30;
-  const isPDF = isPdfAttachment(item.file_uri);
-  const [photoUri, setPhotoUri] = useState<string | null>(
-    () => (item.file_uri ? getThumbnailUri(item.file_uri) || item.file_uri : null)
-  );
-
-  useEffect(() => {
-    if (item.file_uri) {
-      setPhotoUri(getThumbnailUri(item.file_uri) || item.file_uri);
-    } else {
-      setPhotoUri(null);
-    }
-  }, [item.file_uri]);
-
-  const handleTap = () => {
-    const now = Date.now();
-    if (now - lastTapRef.current < 300) {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-      lastTapRef.current = 0;
-      onView(item);
-    } else {
-      lastTapRef.current = now;
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-      timerRef.current = setTimeout(() => {
-        if (lastTapRef.current !== 0) {
-          lastTapRef.current = 0;
-          onEdit(item);
-        }
-      }, 310);
-    }
-  };
-
-  return (
-    <TouchableOpacity
-      onPress={handleTap}
-      onLongPress={() => onDelete(item)}
-      activeOpacity={0.7}
-      style={[
-        styles.docCard,
-        {
-          backgroundColor: colors.surface,
-          borderColor: isSuperseded ? colors.borderLight : colors.border,
-          opacity: isSuperseded ? 0.85 : 1,
-        },
-      ]}
-    >
-      <View style={styles.docRow}>
-        <Text style={styles.docIcon}>
-          {DOCUMENT_TYPE_ICONS[item.type as keyof typeof DOCUMENT_TYPE_ICONS] || '📄'}
-        </Text>
-        <View style={styles.docInfo}>
-          <Text style={[Typography.body, { color: colors.text, fontWeight: '600' }]}>
-            {DOCUMENT_TYPE_LABELS[item.type as keyof typeof DOCUMENT_TYPE_LABELS] || item.type}
-          </Text>
-          {item.document_number && (
-            <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
-              {item.document_number}
-            </Text>
-          )}
-          {item.insurer_name && (
-            <Text style={[Typography.bodySmall, { color: colors.textSecondary }]}>
-              {item.insurer_name}
-            </Text>
-          )}
-          {item.issue_date && (
-            <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
-              Issued: {formatDisplayDateLong(item.issue_date)}
-            </Text>
-          )}
-          {item.expiry_date && (
-            <Text style={[Typography.caption, { color: colors.textTertiary }]}>
-              Expired: {formatDisplayDateLong(item.expiry_date)}
-            </Text>
-          )}
-        </View>
-        <View style={{ alignItems: 'flex-end', gap: Spacing.xs }}>
-          <View style={[styles.badge, { backgroundColor: badge.bgColor }]}>
-            <Text style={[Typography.caption, { color: badge.color, fontWeight: '700' }]}>{badge.label}</Text>
-          </View>
-          {item.file_uri && (
-            <Text style={{ fontSize: 14 }}>{isPDF ? '📄' : '📷'}</Text>
-          )}
-        </View>
-      </View>
-
-      {photoUri && !isPDF && (
-        <Image
-          source={{ uri: photoUri }}
-          style={styles.docPhoto}
-          resizeMode="cover"
-          onError={() => {
-            if (photoUri !== item.file_uri && item.file_uri) {
-              setPhotoUri(item.file_uri);
-            }
-          }}
-        />
-      )}
-      {item.file_uri && isPDF && (
-        <TouchableOpacity
-          onPress={() => onView(item)}
-          activeOpacity={0.7}
-          style={[styles.pdfBanner, { backgroundColor: colors.background, borderColor: colors.border }]}
-        >
-          <Text style={{ fontSize: 20 }}>📄</Text>
-          <Text style={[Typography.bodySmall, { color: colors.primary, marginLeft: Spacing.sm, fontWeight: '600' }]}>
-            PDF attached — tap to open ↗
-          </Text>
-        </TouchableOpacity>
-      )}
-
-      {/* ── Renew Button (Active only) ── */}
-      {!isSuperseded && isExpiredOrExpiring && (
-        <TouchableOpacity
-          style={[
-            styles.renewButton,
-            {
-              backgroundColor: daysUntil(item.expiry_date!) < 0 ? colors.danger : colors.warning,
-            },
-          ]}
-          onPress={() => onRenew(item)}
-          activeOpacity={0.8}
-        >
-          <Text style={[Typography.caption, { color: '#FFFFFF', fontWeight: '700' }]}>
-            🔄 Renew Now
-          </Text>
-        </TouchableOpacity>
-      )}
-
-      <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
-        Tap to edit · Double tap to view file · Long press to delete
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  topActionBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  container: {
+    flex: 1,
+  },
+  headerContainer: {
+    paddingBottom: Spacing.xs,
+  },
+  listContent: {
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  topActionTextGroup: {
-    flex: 1,
-  },
-  exportButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Sizing.radiusFull,
-    borderWidth: 1,
-  },
-  tabSelectorRow: {
-    flexDirection: 'row',
-    marginHorizontal: Spacing.lg,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.xs,
-    borderRadius: Sizing.radiusFull,
-    borderWidth: 1,
-    padding: 3,
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: Spacing.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: Sizing.radiusFull,
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: '700',
+    paddingBottom: 100,
   },
   historyNotice: {
     marginHorizontal: Spacing.lg,
     marginTop: Spacing.sm,
     padding: Spacing.md,
-    borderRadius: Sizing.radiusMd,
+    borderRadius: 12,
     borderWidth: 1,
   },
-  list: { padding: Spacing.lg, gap: Spacing.sm, paddingBottom: 100 },
-  docCard: {
-    borderRadius: Sizing.radiusMd,
-    borderWidth: 1,
-    padding: Spacing.lg,
+  historyNoticeText: {
+    fontSize: 12,
+    lineHeight: 18,
   },
-  docPhoto: {
-    width: '100%',
-    height: 120,
-    borderRadius: Sizing.radiusMd,
-    marginTop: Spacing.sm,
+  historyNoticeBold: {
+    fontWeight: '700',
   },
-  docRow: {
+  listSectionHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  docIcon: {
-    fontSize: 28,
-    marginRight: Spacing.md,
-  },
-  docInfo: {
-    flex: 1,
-  },
-  badge: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: Sizing.radiusFull,
-    marginLeft: Spacing.sm,
-  },
-  renewButton: {
-    marginTop: Spacing.sm,
-    paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.lg,
-    borderRadius: Sizing.radiusFull,
-    alignSelf: 'flex-start',
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
   },
-  pdfBanner: {
+  listSectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  listSectionCount: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: Spacing.xxl,
+    right: Spacing.lg,
+    height: 48,
+    borderRadius: 24,
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: Spacing.sm,
-    padding: Spacing.md,
-    borderRadius: Sizing.radiusMd,
-    borderWidth: 1,
+    paddingHorizontal: Spacing.xl,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    gap: Spacing.xs,
   },
-  emptyState: {
-    alignItems: 'center',
-    paddingTop: Spacing.section * 2,
-    paddingHorizontal: Spacing.xxxl,
+  fabIcon: {
+    fontSize: 20,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    marginTop: -1,
+  },
+  fabText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.92)',
+    backgroundColor: 'rgba(0, 0, 0, 0.92)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -617,7 +449,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 56,
     right: 24,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
@@ -626,29 +458,11 @@ const styles = StyleSheet.create({
   modalCloseText: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   modalImage: {
     width: '95%',
     height: '80%',
     borderRadius: 12,
   },
-  fab: {
-    position: 'absolute',
-    bottom: Spacing.xxl,
-    right: Spacing.lg,
-    height: Sizing.fab,
-    borderRadius: Sizing.radiusFull,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xxl,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    gap: Spacing.sm,
-  },
-  fabIcon: { fontSize: 24, color: '#FFFFFF', fontWeight: '700' },
-  fabText: { fontSize: 16, fontWeight: '700' },
 });
