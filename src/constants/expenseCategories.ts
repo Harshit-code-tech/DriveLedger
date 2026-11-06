@@ -31,7 +31,7 @@ export const EXPENSE_CATEGORY_LIST = EXPENSE_CATEGORIES.map((c) => c.name);
 /**
  * Cost-breakdown chart bucket for each expense category id.
  *
- * Used by aggregateCostBreakdown() in statsHelpers.ts.
+ * Used by aggregateCostBreakdown() in insightsHelpers.ts.
  * Centralised here so adding a new category only requires one file change:
  *   1. Add the category to EXPENSE_CATEGORIES above.
  *   2. Map it to the appropriate bucket below.

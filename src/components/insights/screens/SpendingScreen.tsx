@@ -17,7 +17,7 @@ import type { VehicleExpense } from "@/types/expense";
 import type { FuelEntry } from "@/types/fuel";
 import type { ServiceRecord } from "@/types/service";
 import { formatCurrency } from "@/utils/format";
-import type { CostCategorySlice } from "@/utils/statsHelpers";
+import type { CostCategorySlice } from "@/utils/insightsHelpers";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { InsightsPalette } from "../insightsTheme";

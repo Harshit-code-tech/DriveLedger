@@ -17,7 +17,7 @@ import { formatCurrency, formatOdometer, formatMileage } from '@/utils/format';
 import { MILEAGE_UNIT_LABELS } from '@/constants/fuelTypes';
 import { computeMileageStats } from '@/engine/mileageEngine';
 import { computeCostPerKm } from '@/utils/shareSummary';
-import { aggregateCostBreakdown } from '@/utils/statsHelpers';
+import { aggregateCostBreakdown } from '@/utils/insightsHelpers';
 import { escapeHtml } from './reportHtmlHelpers';
 
 export interface VehicleHistoryReportData {

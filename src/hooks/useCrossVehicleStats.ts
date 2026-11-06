@@ -2,7 +2,7 @@
  * useCrossVehicleStats Hook
  *
  * Computes a per-vehicle summary (avg mileage, total cost, and monthly spend breakdown)
- * for all active vehicles. Used by the Fleet Comparison section in the Stats screen.
+ * for all active vehicles. Used by the Fleet Comparison section in the Insights tab.
  */
 
 import { useMemo } from 'react';

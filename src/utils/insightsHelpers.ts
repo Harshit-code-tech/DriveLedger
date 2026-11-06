@@ -1,9 +1,9 @@
 /**
- * Stats Helpers
+ * Insights Helpers
  *
- * Shared computation functions for monthly cost breakdowns
- * and fuel level estimation.
- * Extracted from dashboard (index.tsx) and stats screen (stats.tsx)
+ * Shared computation functions for monthly cost breakdowns,
+ * time-range filtering, cost breakdown aggregation, and fuel level estimation.
+ * Extracted from dashboard (index.tsx) and Insights tab (insights.tsx)
  * where the same filter-reduce pattern was duplicated.
  */
 
@@ -51,12 +51,13 @@ export interface FuelLevelResult {
  * driving style, terrain, load, A/C usage, etc. Always display with
  * an "Est." label so users understand it's not a sensor reading.
  *
- * @param entries        Fuel entries for the vehicle, newest first (date DESC).
- * @param tankCapacity   Vehicle's full primary tank capacity.
+ * @param entries         Fuel entries for the vehicle, newest first (date DESC).
+ * @param tankCapacity    Vehicle's full primary tank capacity.
  * @param currentOdometer Vehicle's current odometer reading in km.
- * @param avgMileage     Running average mileage (null if not yet calculated).
- * @param unitLabel      Unit string ('L', 'kg', 'kWh'). Defaults to 'L'.
- * @returns              FuelLevelResult or null if estimation is not possible.
+ * @param avgMileage      Running average mileage (null if not yet calculated).
+ * @param unitLabel       Unit string ('L', 'kg', 'kWh'). Defaults to 'L'.
+ * @param targetSystem    Optional stream filter for Bi-Fuel vehicles ('primary' | 'secondary').
+ * @returns               FuelLevelResult or null if estimation is not possible.
  */
 export function estimateFuelLevel(
   entries: FuelEntry[],
@@ -288,7 +289,8 @@ export function getMonthlySpendHistory(
 
 // ─── Time Range Filtering ──────────────────────────────────────────
 
-export type StatsTimeRange = 'month' | '6m' | 'year' | 'all';
+export type InsightsTimeRange = 'month' | '6m' | 'year' | 'all';
+export type StatsTimeRange = InsightsTimeRange;
 
 /**
  * Filters records by the selected time range.
@@ -301,7 +303,7 @@ export type StatsTimeRange = 'month' | '6m' | 'year' | 'all';
 export function filterRecordsByTimeRange<T>(
   records: T[],
   getDate: (record: T) => string,
-  timeRange: StatsTimeRange,
+  timeRange: InsightsTimeRange | StatsTimeRange,
   refDate: Date = new Date()
 ): T[] {
   if (timeRange === 'all') return records;
@@ -384,4 +386,3 @@ export function aggregateCostBreakdown(
 
   return { slices, totalCost };
 }
-

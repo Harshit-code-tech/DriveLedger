@@ -13,7 +13,7 @@ import type { FuelEntry } from '@/types/fuel';
 import type { ServiceRecord } from '@/types/service';
 import type { Expense } from '@/types/expense';
 import type { Vehicle } from '@/types/vehicle';
-import { filterRecordsByTimeRange } from '@/utils/statsHelpers';
+import { filterRecordsByTimeRange } from '@/utils/insightsHelpers';
 import { computeCostPerKm } from '@/utils/shareSummary';
 
 export type InsightsSection = 'overview' | 'spending' | 'efficiency' | 'statistics' | 'fleet';

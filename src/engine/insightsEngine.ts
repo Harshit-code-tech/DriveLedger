@@ -354,7 +354,7 @@ function checkCostPatterns(
       reason: `Maintenance spending over the last 90 days (₹${Math.round(recentServicesCost).toLocaleString('en-IN')}) is more than double the prior 90-day period (₹${Math.round(priorServicesCost).toLocaleString('en-IN')}).`,
       details: { cost: recentServicesCost },
       suggestedAction: 'Review your recent service history to monitor repair costs and warranty coverage.',
-      actionRoute: '/(tabs)/stats',
+      actionRoute: '/(tabs)/insights',
     });
   }
 
@@ -376,7 +376,7 @@ function checkCostPatterns(
           reason: `${cat} accounts for ${Math.round((amt / totalExp) * 100)}% (₹${Math.round(amt).toLocaleString('en-IN')}) of total non-fuel expenses on record.`,
           details: { cost: amt },
           suggestedAction: 'Inspect itemized expenses to evaluate upcoming recurring costs.',
-          actionRoute: '/(tabs)/stats',
+          actionRoute: '/(tabs)/insights',
         });
         break; // Only report top category
       }

@@ -12,7 +12,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { type Vehicle } from '@/types/vehicle';
 import { FuelType, isBiFuel, isElectricFuel, getFuelSystemLabel } from '@/constants/fuelTypes';
 import { convertPressure, getPressureLabel } from '@/stores/preferencesStore';
-import { type FuelLevelResult } from '@/utils/statsHelpers';
+import { type FuelLevelResult } from '@/utils/insightsHelpers';
 import { CngTankIcon } from '@/components/CngTankIcon';
 import { TyreIcon } from '@/components/TyreIcon';
 import { Spacing } from '@/constants/theme';

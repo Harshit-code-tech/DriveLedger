@@ -4,7 +4,7 @@ import {
   TabHomeIcon,
   TabRecordsIcon,
   TabSettingsIcon,
-  TabStatsIcon,
+  TabInsightsIcon,
 } from "@/components/navigation/TabBarSvgIcons";
 import { Sizing } from "@/constants/theme";
 import { useThemeColors } from "@/hooks/useThemeColors";
@@ -185,13 +185,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="stats"
+        name="insights"
         options={{
-          title: "Stats",
+          title: "Insights",
           headerShown: false,
           tabBarIcon: ({ color, size, focused }) => (
             <View style={styles.tabIconContainer}>
-              <TabStatsIcon color={color} size={size} focused={focused} />
+              <TabInsightsIcon color={color} size={size} focused={focused} />
             </View>
           ),
         }}

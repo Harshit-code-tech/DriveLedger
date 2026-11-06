@@ -79,8 +79,8 @@ export const TabDocumentsIcon: React.FC<TabBarIconProps> = ({ color, size = 22, 
   );
 };
 
-/** 4. Stats Tab Icon: Analytics Trend & Upward Performance Curve */
-export const TabStatsIcon: React.FC<TabBarIconProps> = ({ color, size = 22, focused = false }) => {
+/** 4. Insights Tab Icon: Analytics Trend & Upward Performance Curve */
+export const TabInsightsIcon: React.FC<TabBarIconProps> = ({ color, size = 22, focused = false }) => {
   const strokeW = focused ? 2.3 : 1.8;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -96,6 +96,8 @@ export const TabStatsIcon: React.FC<TabBarIconProps> = ({ color, size = 22, focu
     </Svg>
   );
 };
+
+export const TabStatsIcon = TabInsightsIcon;
 
 /** 5. Settings Tab Icon: Mechanical Gear / Vehicle Configuration */
 export const TabSettingsIcon: React.FC<TabBarIconProps> = ({ color, size = 22, focused = false }) => {

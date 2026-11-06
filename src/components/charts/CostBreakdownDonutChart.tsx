@@ -30,7 +30,7 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-import type { CostCategorySlice } from "@/utils/statsHelpers";
+import type { CostCategorySlice } from "@/utils/insightsHelpers";
 export type { CostCategorySlice };
 
 interface CostBreakdownDonutChartProps {

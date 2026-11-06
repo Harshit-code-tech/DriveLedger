@@ -14,7 +14,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Typography, Spacing } from '@/constants/theme';
-import type { FuelLevelResult } from '@/utils/statsHelpers';
+import type { FuelLevelResult } from '@/utils/insightsHelpers';
 import type { useThemeColors } from '@/hooks/useThemeColors';
 
 export interface FuelBarSectionProps {

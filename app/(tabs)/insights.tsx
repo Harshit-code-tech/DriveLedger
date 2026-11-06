@@ -1,5 +1,5 @@
 /**
- * Stats / Insights Screen
+ * Insights Tab / Screen
  *
  * Section 3: Phase 2 — New Insights Information Architecture
  * - Insights Overview: Compact, high-level operational overview
@@ -40,7 +40,7 @@ import {
   StatsTimeRange,
   aggregateCostBreakdown,
   filterRecordsByTimeRange,
-} from "@/utils/statsHelpers";
+} from "@/utils/insightsHelpers";
 
 // Components & Theme
 import type { MileagePoint } from "@/components/charts/MileageTrendChart";
@@ -61,7 +61,7 @@ import { StatisticsScreen } from "@/components/insights/screens/StatisticsScreen
 import { NoVehicleState } from "@/components/NoVehicleState";
 import { ReportExportModal } from "@/components/ReportExportModal";
 
-export default function StatsScreen() {
+export default function InsightsScreen() {
   const colors = useInsightsColors();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{

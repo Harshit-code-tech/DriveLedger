@@ -32,7 +32,7 @@ DriveLedger/
 ├── app/                             # Expo Router screens (file-based routing)
 │   ├── (tabs)/                      # Bottom-tab screens
 │   │   ├── index.tsx                # Home / Vehicle Dashboard (primary screen)
-│   │   ├── stats.tsx                # Analytics & Reports
+│   │   ├── insights.tsx             # Insights tab (Analytics & Reports)
 │   │   ├── records.tsx              # Chronological vehicle records (fuel/service/expense/trip)
 │   │   ├── history.tsx              # Backward-compatibility redirect to records
 │   │   ├── documents.tsx            # Document vault & expiry tracking
@@ -117,7 +117,7 @@ DriveLedger/
 │   ├── utils/
 │   │   ├── attachmentStorage.ts, csvExport.ts, date.ts, dateInput.ts
 │   │   ├── format.ts, releaseParser.ts, shareSummary.ts
-│   │   ├── statsHelpers.ts, uuid.ts, version.ts
+│   │   ├── insightsHelpers.ts, uuid.ts, version.ts
 │   │
 │   └── widgets/
 │       ├── cockpit/                 # GPS Cockpit widget sub-components (helpers, palette, svgs, types)
@@ -280,7 +280,7 @@ On restore:
 1. Add the category to `EXPENSE_CATEGORIES` in [`src/constants/expenseCategories.ts`](../src/constants/expenseCategories.ts).
 2. Add its chart bucket to `EXPENSE_CHART_BUCKET` in the same file.
 
-`aggregateCostBreakdown` in `statsHelpers.ts` will automatically handle the new category with no further changes.
+`aggregateCostBreakdown` in `insightsHelpers.ts` will automatically handle the new category with no further changes.
 
 ---
 

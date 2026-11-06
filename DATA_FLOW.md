@@ -87,7 +87,7 @@ Screen comes into focus (useFocusEffect)
         │               ├─► expenses: expenseRepo.getExpensesByVehicle(vehicleId)
         │               └─► update screen's last-loaded revision ref
         │
-        └─► Fleet Comparison & Charts (Stats Screen):
+        └─► Fleet Comparison & Charts (Insights Tab / Screen):
                 └─► Uses targeted SQL aggregates (fuelRepo.getVehicleFuelAggregates,
                     serviceRepo.getVehicleServiceAggregates, expenseRepo.getVehicleExpenseAggregates)
                     instead of loading full entity rows across all vehicles.
@@ -170,10 +170,10 @@ starts from a new persisted anchor.
 
 ---
 
-## Stats Screen Data Flow
+## Insights Tab / Screen Data Flow
 
 ```
-StatsScreen mounts
+Stats / Insights Screen mounts
         │
         ├─► useFuelStore state (entries, stats) — from store (no extra DB call)
         ├─► useServiceStore state (records)
@@ -246,7 +246,7 @@ User completes GPS Trip in TripReviewModal (or widget/background stop)
         ├─► tripStore.finishGpsTrip(tripId, endOdometer, purpose, notes)
         │       ├─► tripRepo.updateTripStatus(tripId, 'completed', distance, duration, endOdo)
         │       ├─► vehicleRepo.updateVehicleOdometer(vehicleId, endOdometer)
-        │       ├─► statsHelpers.estimateFuelLevel() updates depleted level based on km driven & mileage
+        │       ├─► insightsHelpers.estimateFuelLevel() updates depleted level based on km driven & mileage
         │       ├─► dataRevisionTracker.bumpRevision('trips', vehicleId)
         │       └─► dataRevisionTracker.bumpRevision('vehicles')
         │

@@ -43,7 +43,7 @@ import {
 
 // Helpers & Types
 import { FuelType, isBiFuel, isElectricFuel, getFuelSystemLabel } from '@/constants/fuelTypes';
-import { estimateFuelLevel, getCurrentMonthTotalSpend } from '@/utils/statsHelpers';
+import { estimateFuelLevel, getCurrentMonthTotalSpend } from '@/utils/insightsHelpers';
 import { Spacing } from '@/constants/theme';
 
 // Theme & Sub-components

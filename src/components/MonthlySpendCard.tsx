@@ -14,7 +14,7 @@ import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Typography, Spacing, Sizing } from '@/constants/theme';
 import { formatCurrency } from '@/utils/format';
-import { getMonthlySpendHistory, getMonthlyTotalSpend } from '@/utils/statsHelpers';
+import { getMonthlySpendHistory, getMonthlyTotalSpend } from '@/utils/insightsHelpers';
 import type { FuelEntry } from '@/types/fuel';
 import type { ServiceRecord } from '@/types/service';
 import type { VehicleExpense } from '@/types/expense';

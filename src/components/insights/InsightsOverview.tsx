@@ -20,7 +20,7 @@ import { Spacing, Typography, Sizing } from '@/constants/theme';
 import { formatCurrency, formatMileage } from '@/utils/format';
 import { FuelType, MILEAGE_UNIT_LABELS, isElectricFuel } from '@/constants/fuelTypes';
 import { CngTankIcon } from '@/components/CngTankIcon';
-import type { StatsTimeRange } from '@/utils/statsHelpers';
+import type { StatsTimeRange } from '@/utils/insightsHelpers';
 import type { InsightsPalette } from './insightsTheme';
 import type { InsightsSection } from './insightsHelpers';
 import type { Vehicle } from '@/types/vehicle';
