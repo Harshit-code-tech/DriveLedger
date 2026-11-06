@@ -11,6 +11,7 @@
  */
 
 import { useColorScheme } from 'react-native';
+import { usePreferencesStore } from '@/stores/preferencesStore';
 
 export interface RecordPalette {
   isDark: boolean;
@@ -83,6 +84,8 @@ export const RecordColors: { light: RecordPalette; dark: RecordPalette } = {
 };
 
 export function useRecordColors(): RecordPalette {
-  const scheme = useColorScheme();
-  return scheme === 'dark' ? RecordColors.dark : RecordColors.light;
+  const systemScheme = useColorScheme();
+  const themeMode = usePreferencesStore((s) => s.themeMode);
+  const activeScheme = themeMode === 'system' ? systemScheme : themeMode;
+  return activeScheme === 'dark' ? RecordColors.dark : RecordColors.light;
 }

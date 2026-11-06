@@ -3,7 +3,7 @@
  *
  * Password entry dialog shown before creating an encrypted .dlbak backup.
  * Validates minimum length and confirmation match before calling onSubmit.
- * Extracted from app/(tabs)/settings.tsx to keep the screen file lean.
+ * Extracted from app/(tabs)/manage.tsx to keep the screen file lean.
  */
 
 import React, { useState } from 'react';

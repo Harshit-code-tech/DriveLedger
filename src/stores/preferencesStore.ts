@@ -25,6 +25,7 @@ export type DistanceUnit    = 'km' | 'miles';
 export type FuelVolumeUnit  = 'litres' | 'gallons';
 export type PressureUnit    = 'PSI' | 'bar' | 'kPa';
 export type GpsTrackingProfile = 'high_accuracy' | 'balanced' | 'battery_saver';
+export type ThemeMode = 'system' | 'light' | 'dark';
 
 export interface Preferences {
   currency: CurrencyCode;
@@ -32,6 +33,7 @@ export interface Preferences {
   fuelVolumeUnit: FuelVolumeUnit;
   pressureUnit: PressureUnit;
   gpsTrackingProfile: GpsTrackingProfile;
+  themeMode: ThemeMode;
   defaultVehicleId: string | null;
   hasCompletedOnboarding: boolean;
   notificationsEnabled: boolean;
@@ -42,6 +44,12 @@ export interface Preferences {
 }
 
 // --- Options for UI pickers ---
+
+export const THEME_MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
+  { value: 'system', label: 'System Default (Auto)' },
+  { value: 'light', label: 'Light Mode' },
+  { value: 'dark', label: 'Dark Mode' },
+];
 
 export const CURRENCY_OPTIONS: { value: CurrencyCode; label: string; symbol: string }[] = [
   { value: 'INR', label: 'Indian Rupee', symbol: 'Rs.' },
@@ -89,6 +97,7 @@ const KEYS = {
   fuelVolumeUnit:           'pref_fuel_volume_unit',
   pressureUnit:             'pref_pressure_unit',
   gpsTrackingProfile:       'pref_gps_tracking_profile',
+  themeMode:                'pref_theme_mode',
   defaultVehicleId:         'pref_default_vehicle_id',
   hasCompletedOnboarding:   'pref_has_completed_onboarding',
   notificationsEnabled:     'pref_notifications_enabled',
@@ -104,6 +113,7 @@ const DEFAULTS: Preferences = {
   fuelVolumeUnit: 'litres',
   pressureUnit: 'PSI',
   gpsTrackingProfile: 'high_accuracy',
+  themeMode: 'system',
   defaultVehicleId: null,
   hasCompletedOnboarding: false,
   notificationsEnabled: true,
@@ -123,6 +133,7 @@ interface PreferencesState extends Preferences {
   setFuelVolumeUnit:          (v: FuelVolumeUnit) => Promise<void>;
   setPressureUnit:            (v: PressureUnit)   => Promise<void>;
   setGpsTrackingProfile:      (v: GpsTrackingProfile) => Promise<void>;
+  setThemeMode:               (v: ThemeMode)      => Promise<void>;
   setDefaultVehicleId:        (v: string | null)  => Promise<void>;
   setHasCompletedOnboarding:  (v: boolean)        => Promise<void>;
   setNotificationsEnabled:    (v: boolean)        => Promise<void>;
@@ -144,6 +155,7 @@ export const usePreferencesStore = create<PreferencesState>((set) => ({
         KEYS.fuelVolumeUnit,
         KEYS.pressureUnit,
         KEYS.gpsTrackingProfile,
+        KEYS.themeMode,
         KEYS.defaultVehicleId,
         KEYS.hasCompletedOnboarding,
         KEYS.notificationsEnabled,
@@ -158,6 +170,7 @@ export const usePreferencesStore = create<PreferencesState>((set) => ({
         fuelVolumeUnit,
         pressureUnit,
         gpsTrackingProfile,
+        themeMode,
         defaultVehicleId,
         onboarding,
         notifEnabled,
@@ -172,6 +185,7 @@ export const usePreferencesStore = create<PreferencesState>((set) => ({
         fuelVolumeUnit:           (fuelVolumeUnit[1]   as FuelVolumeUnit) ?? DEFAULTS.fuelVolumeUnit,
         pressureUnit:             (pressureUnit[1]     as PressureUnit)   ?? DEFAULTS.pressureUnit,
         gpsTrackingProfile:       (gpsTrackingProfile[1] as GpsTrackingProfile) ?? DEFAULTS.gpsTrackingProfile,
+        themeMode:                (themeMode[1]        as ThemeMode)      ?? DEFAULTS.themeMode,
         defaultVehicleId:         defaultVehicleId[1] ?? null,
         hasCompletedOnboarding:   onboarding[1] === 'true',
         notificationsEnabled:     notifEnabled[1] !== 'false',
@@ -193,6 +207,10 @@ export const usePreferencesStore = create<PreferencesState>((set) => ({
   setGpsTrackingProfile: async (v) => {
     await AsyncStorage.setItem(KEYS.gpsTrackingProfile, v);
     set({ gpsTrackingProfile: v });
+  },
+  setThemeMode: async (v) => {
+    await AsyncStorage.setItem(KEYS.themeMode, v);
+    set({ themeMode: v });
   },
   setDefaultVehicleId: async (v) => {
     if (v === null) { await AsyncStorage.removeItem(KEYS.defaultVehicleId); }

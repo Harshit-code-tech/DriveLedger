@@ -13,6 +13,7 @@
  */
 
 import { useColorScheme } from 'react-native';
+import { usePreferencesStore } from '@/stores/preferencesStore';
 
 export interface InsightsPalette {
   isDark: boolean;
@@ -118,7 +119,9 @@ export const InsightsColors: { light: InsightsPalette; dark: InsightsPalette } =
 };
 
 export function useInsightsColors(): InsightsPalette {
-  const scheme = useColorScheme();
-  return scheme === 'dark' ? InsightsColors.dark : InsightsColors.light;
+  const systemScheme = useColorScheme();
+  const themeMode = usePreferencesStore((s) => s.themeMode);
+  const activeScheme = themeMode === 'system' ? systemScheme : themeMode;
+  return activeScheme === 'dark' ? InsightsColors.dark : InsightsColors.light;
 }
 

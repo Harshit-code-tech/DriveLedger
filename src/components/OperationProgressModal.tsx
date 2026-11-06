@@ -5,7 +5,7 @@
  * (backup, restore, CSV export, update check). Blocks interaction and
  * communicates the current operation via title + subtitle text.
  *
- * Extracted from app/(tabs)/settings.tsx to keep the screen file lean.
+ * Extracted from app/(tabs)/manage.tsx to keep the screen file lean.
  * The same visual design is used for both the "Checking for Updates" spinner
  * and the backup/restore/export progress spinners — unified here.
  */

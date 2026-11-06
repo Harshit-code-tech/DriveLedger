@@ -7,13 +7,16 @@
 
 import { useColorScheme } from 'react-native';
 import { Colors, type ThemeColors } from '@/constants/theme';
+import { usePreferencesStore } from '@/stores/preferencesStore';
 
 /**
- * Returns the active color palette based on the device's color scheme.
+ * Returns the active color palette based on user preference or device's color scheme.
  *
  * @returns ThemeColors object (light or dark palette)
  */
 export function useThemeColors(): ThemeColors {
-  const colorScheme = useColorScheme();
-  return colorScheme === 'dark' ? Colors.dark : Colors.light;
+  const systemScheme = useColorScheme();
+  const themeMode = usePreferencesStore((s) => s.themeMode);
+  const activeScheme = themeMode === 'system' ? systemScheme : themeMode;
+  return activeScheme === 'dark' ? Colors.dark : Colors.light;
 }

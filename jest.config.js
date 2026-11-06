@@ -19,6 +19,7 @@ module.exports = {
     '^expo-task-manager$': '<rootDir>/src/__mocks__/expo-task-manager.ts',
     '^expo-image-manipulator$': '<rootDir>/src/__mocks__/expo-image-manipulator.ts',
     '^react-native-android-widget$': '<rootDir>/src/__mocks__/react-native-android-widget.ts',
+    '^react-native-svg$': '<rootDir>/src/__mocks__/react-native-svg.ts',
   },
   transform: {
     '^.+\\.[tj]sx?$': ['ts-jest', {

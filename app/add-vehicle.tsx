@@ -1,10 +1,10 @@
 /**
  * Add Vehicle Screen
  *
- * A dedicated form for adding a new vehicle from Settings.
+ * A dedicated form for adding a new vehicle from Manage.
  * Unlike onboarding, this goes directly to the form — no welcome step.
  *
- * Opened as a modal from Settings → "+ Add Another Vehicle".
+ * Opened as a modal from Manage → "+ Add Another Vehicle".
  *
  * Smart tank UI:
  * - Electric: Shows "Battery Capacity (kWh)" instead of tank

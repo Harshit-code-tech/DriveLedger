@@ -12,6 +12,7 @@
  */
 
 import { useColorScheme } from 'react-native';
+import { usePreferencesStore } from '@/stores/preferencesStore';
 
 export interface DocumentPalette {
   isDark: boolean;
@@ -84,7 +85,9 @@ export const DocumentColors: { light: DocumentPalette; dark: DocumentPalette } =
 };
 
 export function useDocumentColors(): DocumentPalette {
-  const scheme = useColorScheme();
-  return scheme === 'dark' ? DocumentColors.dark : DocumentColors.light;
+  const systemScheme = useColorScheme();
+  const themeMode = usePreferencesStore((s) => s.themeMode);
+  const activeScheme = themeMode === 'system' ? systemScheme : themeMode;
+  return activeScheme === 'dark' ? DocumentColors.dark : DocumentColors.light;
 }
 

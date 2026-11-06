@@ -44,7 +44,7 @@ export function NoVehicleState({ showCloseButton = true }: NoVehicleStateProps) 
             { color: colors.textSecondary, textAlign: 'center', marginTop: Spacing.sm },
           ]}
         >
-          Add a vehicle first from the Home or Settings tab.
+          Add a vehicle first from the Home or Manage tab.
         </Text>
       </View>
     </View>

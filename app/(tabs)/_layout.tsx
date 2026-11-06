@@ -3,7 +3,7 @@ import {
   TabDocumentsIcon,
   TabHomeIcon,
   TabRecordsIcon,
-  TabSettingsIcon,
+  TabManageIcon,
   TabInsightsIcon,
 } from "@/components/navigation/TabBarSvgIcons";
 import { Sizing } from "@/constants/theme";
@@ -197,12 +197,14 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="settings"
+        name="manage"
         options={{
-          title: "Settings",
+          title: "Manage",
+          headerShown: false,
+          tabBarAccessibilityLabel: "Manage",
           tabBarIcon: ({ color, size, focused }) => (
             <View style={styles.tabIconContainer}>
-              <TabSettingsIcon color={color} size={size} focused={focused} />
+              <TabManageIcon color={color} size={size} focused={focused} />
             </View>
           ),
         }}

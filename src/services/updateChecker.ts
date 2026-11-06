@@ -18,7 +18,7 @@ export function showDataSafetyGuide() {
     `• Install the new APK over the existing app to preserve your data.\n\n` +
 
     `2. BACK UP YOUR DATA 💾\n` +
-    `• Go to Settings → Download Backup.\n` +
+    `• Go to Manage → Data & Backup → Download Backup.\n` +
     `• Save your .dlbak file before updating.\n\n` +
 
     `3. USE OFFICIAL BUILDS ✅\n` +
@@ -94,7 +94,7 @@ export async function checkForAppUpdate(options?: {
         `${result.releaseNotes}\n\n` +
         `🛡️ TWO GOLDEN RULES:\n` +
         `1. Don't uninstall! Just tap 'Download APK' and install over the existing app — all your records stay safe.\n` +
-        `2. Backup first in Settings if you want extra peace of mind.\n\n` +
+        `2. Backup first in Manage if you want extra peace of mind.\n\n` +
         `Ready to update? Let's go! 🚀`,
         [
           { text: 'Maybe Later', style: 'cancel' },

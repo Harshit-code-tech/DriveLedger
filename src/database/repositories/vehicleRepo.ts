@@ -111,7 +111,7 @@ export function getActiveVehicles(): Vehicle[] {
 
 /**
  * Returns all vehicles including archived ones.
- * Used in settings to allow un-archiving.
+ * Used in Manage to allow un-archiving.
  */
 export function getAllVehicles(): Vehicle[] {
   const db = getDatabase();

@@ -2,7 +2,7 @@
  * Backup Engine — Shared Types
  *
  * All exported interfaces and result types used across the backup
- * sub-modules and by external callers (settings screen, CSV export, etc.).
+ * sub-modules and by external callers (manage screen, CSV export, etc.).
  *
  * Import from here rather than from the top-level backupEngine.ts so that
  * type-only imports don't drag in crypto/file-system side-effect code.

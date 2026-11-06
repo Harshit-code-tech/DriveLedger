@@ -1,12 +1,11 @@
-﻿/**
+/**
  * SettingsRow
  *
- * A tappable row for use in settings screens.
+ * A tappable row for use in management & configuration screens.
  * Displays an emoji icon, a title, an optional subtitle, and an optional
  * right-aligned text badge or a chevron (>) default.
  *
- * Originally defined inline in app/(tabs)/settings.tsx; extracted so
- * it can be reused by any screen that builds a settings-style list.
+ * Extracted so it can be reused by any screen that builds a row-style list.
  *
  * USAGE:
  *   <SettingsRow

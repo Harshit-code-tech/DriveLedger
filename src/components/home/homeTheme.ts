@@ -11,6 +11,7 @@
  */
 
 import { useColorScheme } from 'react-native';
+import { usePreferencesStore } from '@/stores/preferencesStore';
 
 export interface HomePalette {
   isDark: boolean;
@@ -83,6 +84,8 @@ export const HomeColors: { light: HomePalette; dark: HomePalette } = {
 };
 
 export function useHomeColors(): HomePalette {
-  const scheme = useColorScheme();
-  return scheme === 'dark' ? HomeColors.dark : HomeColors.light;
+  const systemScheme = useColorScheme();
+  const themeMode = usePreferencesStore((s) => s.themeMode);
+  const activeScheme = themeMode === 'system' ? systemScheme : themeMode;
+  return activeScheme === 'dark' ? HomeColors.dark : HomeColors.light;
 }

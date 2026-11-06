@@ -4,7 +4,7 @@
  * Password entry dialog shown when a selected backup file requires decryption.
  * Handles verifying the password against the encrypted content via verifyBackupContent,
  * then calls onSuccess with the decrypted backup object.
- * Extracted from app/(tabs)/settings.tsx to keep the screen file lean.
+ * Extracted from app/(tabs)/manage.tsx to keep the screen file lean.
  */
 
 import React, { useState } from 'react';

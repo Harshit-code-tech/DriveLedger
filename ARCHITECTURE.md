@@ -36,7 +36,7 @@ DriveLedger/
 │   │   ├── records.tsx              # Chronological vehicle records (fuel/service/expense/trip)
 │   │   ├── history.tsx              # Backward-compatibility redirect to records
 │   │   ├── documents.tsx            # Document vault & expiry tracking
-│   │   └── settings.tsx             # Preferences, backup, vehicles, update check
+│   │   └── manage.tsx               # Manage hub: vehicles, preferences, GPS, backup, about
 │   ├── add-fuel.tsx, add-service.tsx, add-expense.tsx, add-document.tsx
 │   ├── add-vehicle.tsx, edit-vehicle.tsx
 │   ├── checklist.tsx                # Pre-trip checklist launcher
@@ -329,4 +329,4 @@ Store tests mock the repository layer.
 
 **APK download (web):** `js/script.js` calls the GitHub Releases API on page load. When a `.apk` asset is found, `.download-apk-btn` hrefs are updated to the direct `browser_download_url` **and** the `download` attribute is set — forcing mobile Chrome/Android to download the file instead of opening it in a browser tab.
 
-**APK download (in-app):** Settings → "Check for Updates" → `updateChecker.ts`. "Download APK" calls `Linking.openURL(apkUrl)` which routes to Android's native download manager (not `WebBrowser.openBrowserAsync` which would open a WebView).
+**APK download (in-app):** Manage → "Check for Updates" → `updateChecker.ts`. "Download APK" calls `Linking.openURL(apkUrl)` which routes to Android's native download manager (not `WebBrowser.openBrowserAsync` which would open a WebView).

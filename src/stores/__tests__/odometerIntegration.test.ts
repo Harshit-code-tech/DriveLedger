@@ -249,7 +249,7 @@ describe('Phase 3: Odometer Reconciliation & Fuel-History Integrity', () => {
     await useTripStore.getState().startGpsTrip(vehicle.id);
     const active = useTripStore.getState().activeTrip;
 
-    // User edits vehicle in settings
+    // User edits vehicle in Manage
     vehicleRepo.updateVehicle(vehicle.id, { current_odometer: 10200 });
     const currentVehicle = vehicleRepo.getVehicleById(vehicle.id);
 

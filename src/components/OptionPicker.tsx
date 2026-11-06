@@ -5,7 +5,7 @@
  * for a preference setting. The currently selected option is highlighted
  * with the primary colour and a checkmark.
  *
- * Originally defined inline in app/(tabs)/settings.tsx; extracted so
+ * Originally defined in the Manage screen; extracted so
  * it can be reused by any screen that needs a single-choice picker.
  *
  * USAGE:

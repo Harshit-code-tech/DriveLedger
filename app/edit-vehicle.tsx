@@ -2,7 +2,7 @@
  * Edit Vehicle Screen
  *
  * Allows the user to edit all details of an existing vehicle.
- * Opened as a modal from Settings → vehicle card → "Edit".
+ * Opened as a modal from Manage → vehicle card → "Edit".
  *
  * Pre-fills all fields from the existing vehicle record.
  * Smart tank UI: EV shows battery kWh, hybrid shows two tank fields.

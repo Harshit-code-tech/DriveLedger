@@ -98,7 +98,7 @@ Screen comes into focus (useFocusEffect)
 ## Backup Export Flow
 
 ```
-User taps "Backup Data" in Settings
+User taps "Download Encrypted Backup" in Manage
         │
         ▼
 backupEngine.exportToFile()
@@ -306,7 +306,7 @@ User opens index.html on mobile browser
 ### In-App (Android)
 
 ```
-User taps "Check for Updates" in Settings
+User taps "Check for Updates" in Manage
         │
         ▼
 checkForAppUpdate()  [updateChecker.ts]

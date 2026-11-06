@@ -7,7 +7,7 @@
  *
  * Supports two modes:
  * - First-launch mode: Walks through the slides, then transitions to Add Vehicle form.
- * - Replay mode (?mode=replay): Launched from Settings. Allows user to revisit the guide
+ * - Replay mode (?mode=replay): Launched from Manage. Allows user to revisit the guide
  *   anytime. Finishing or skipping safely navigates back without touching user data.
  */
 
