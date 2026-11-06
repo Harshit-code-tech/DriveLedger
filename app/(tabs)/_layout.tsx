@@ -188,6 +188,7 @@ export default function TabLayout() {
         name="stats"
         options={{
           title: "Stats",
+          headerShown: false,
           tabBarIcon: ({ color, size, focused }) => (
             <View style={styles.tabIconContainer}>
               <TabStatsIcon color={color} size={size} focused={focused} />
