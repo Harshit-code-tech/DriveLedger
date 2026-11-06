@@ -48,6 +48,7 @@ import { Spacing } from '@/constants/theme';
 
 // Theme & Sub-components
 import { useHomeColors } from '@/components/home/homeTheme';
+import { HomeHeader } from '@/components/home/HomeHeader';
 import { HomeVehicleSelector } from '@/components/home/HomeVehicleSelector';
 import { HomeGpsCockpit } from '@/components/home/HomeGpsCockpit';
 import { HomeVehicleOverview } from '@/components/home/HomeVehicleOverview';
@@ -431,6 +432,9 @@ export default function HomeScreen() {
           />
         }
       >
+        {/* Section 1: Dynamic Greeting & Temporal Context Header */}
+        <HomeHeader colors={colors} />
+
         {/* Section 4: Vehicle Selector */}
         <HomeVehicleSelector vehicle={selectedVehicle} colors={colors} />
 

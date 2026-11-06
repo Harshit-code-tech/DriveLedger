@@ -103,50 +103,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Home",
-          headerTitleAlign: "left",
-          headerStyle: {
-            backgroundColor: homeColors.background,
-            elevation: 0,
-            shadowOpacity: 0,
-            borderBottomWidth: StyleSheet.hairlineWidth,
-            borderBottomColor: homeColors.border,
-          },
-          headerTitle: () => (
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
-            >
-              <Image
-                source={require("../../assets/images/icon.png")}
-                style={{ width: 28, height: 28 }}
-                resizeMode="contain"
-              />
-
-              {/* Two-tone typographic wordmark */}
-              <View style={{ flexDirection: "row", alignItems: "baseline" }}>
-                <Text
-                  style={{
-                    fontSize: 20,
-                    fontWeight: "900",
-                    color: homeColors.text,
-                    letterSpacing: -0.5,
-                  }}
-                >
-                  Drive
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 20,
-                    fontWeight: "400",
-                    color: homeColors.text,
-                    letterSpacing: -0.2,
-                    opacity: 0.85,
-                  }}
-                >
-                  Ledger
-                </Text>
-              </View>
-            </View>
-          ),
+          headerShown: false,
           tabBarIcon: ({ color, size, focused }) => (
             <View style={styles.tabIconContainer}>
               <TabHomeIcon color={color} size={size} focused={focused} />

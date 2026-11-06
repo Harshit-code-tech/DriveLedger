@@ -16,6 +16,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Spacing, Typography, Sizing } from '@/constants/theme';
 import { formatCurrency, formatMileage } from '@/utils/format';
 import { FuelType, MILEAGE_UNIT_LABELS, isElectricFuel } from '@/constants/fuelTypes';
@@ -81,6 +82,10 @@ export const InsightsOverview: React.FC<InsightsOverviewProps> = ({
           ? 'Last 12 Months'
           : 'All Time';
 
+  const fuelPct = totalOwnershipCost > 0 ? Math.round((totalFuelCost / totalOwnershipCost) * 100) : 0;
+  const servicePct = totalOwnershipCost > 0 ? Math.round((totalServiceCost / totalOwnershipCost) * 100) : 0;
+  const expensePct = totalOwnershipCost > 0 ? Math.max(0, 100 - fuelPct - servicePct) : 0;
+
   return (
     <View style={styles.container}>
       {/* ── Overview Section Heading ── */}
@@ -132,9 +137,24 @@ export const InsightsOverview: React.FC<InsightsOverviewProps> = ({
       </View>
 
       {/* ── Recorded Running Cost (Hero Card) ── */}
-      <View style={[styles.heroCard, { backgroundColor: colors.primary }]}>
+      <LinearGradient
+        colors={
+          colors.isDark
+            ? ['#14253D', '#0F1E33', '#0B1728']
+            : ['#183B63', '#133256', '#0F2847']
+        }
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[
+          styles.heroCard,
+          {
+            borderColor: colors.isDark ? 'rgba(79, 160, 232, 0.22)' : 'rgba(24, 59, 99, 0.12)',
+            shadowColor: colors.isDark ? '#000000' : colors.primary,
+          },
+        ]}
+      >
         <View style={styles.heroHeaderRow}>
-          <Text style={[styles.heroLabel, { color: 'rgba(255,255,255,0.85)' }]}>
+          <Text style={[styles.heroLabel, { color: 'rgba(255,255,255,0.78)' }]}>
             Recorded Running Cost
           </Text>
           <View style={styles.heroFilterBadge}>
@@ -148,13 +168,57 @@ export const InsightsOverview: React.FC<InsightsOverviewProps> = ({
           {formatCurrency(totalOwnershipCost)}
         </Text>
 
-        <Text style={[styles.heroExcludesNotice, { color: 'rgba(255,255,255,0.75)' }]}>
+        <Text style={[styles.heroExcludesNotice, { color: 'rgba(255,255,255,0.68)' }]}>
           Excludes vehicle purchase, financing & depreciation
         </Text>
 
-        {/* Breakdown Pills */}
+        {/* Data-Driven Proportion Segmented Bar */}
+        <View style={styles.ratioBarTrack}>
+          {totalOwnershipCost > 0 ? (
+            <>
+              {totalFuelCost > 0 && (
+                <View
+                  style={[
+                    styles.ratioSegment,
+                    {
+                      flex: totalFuelCost,
+                      backgroundColor: '#38BDF8',
+                    },
+                  ]}
+                />
+              )}
+              {totalServiceCost > 0 && (
+                <View
+                  style={[
+                    styles.ratioSegment,
+                    {
+                      flex: totalServiceCost,
+                      backgroundColor: '#34D399',
+                    },
+                  ]}
+                />
+              )}
+              {totalExpenseCost > 0 && (
+                <View
+                  style={[
+                    styles.ratioSegment,
+                    {
+                      flex: totalExpenseCost,
+                      backgroundColor: '#A78BFA',
+                    },
+                  ]}
+                />
+              )}
+            </>
+          ) : (
+            <View style={[styles.ratioSegment, { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.12)' }]} />
+          )}
+        </View>
+
+        {/* Breakdown Pills with Category Dots & Percentages */}
         <View style={styles.heroBreakdown}>
-          <View style={[styles.heroBreakdownPill, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+          <View style={[styles.heroBreakdownPill, { flexDirection: 'row', alignItems: 'center', gap: 5 }]}>
+            <View style={[styles.pillColorDot, { backgroundColor: '#38BDF8' }]} />
             {isEV ? (
               <Text style={{ fontSize: 11 }}>⚡</Text>
             ) : isCNG ? (
@@ -165,21 +229,34 @@ export const InsightsOverview: React.FC<InsightsOverviewProps> = ({
             <Text style={[styles.heroPillText, { color: 'rgba(255,255,255,0.95)' }]}>
               {formatCurrency(totalFuelCost)}
             </Text>
+            {totalOwnershipCost > 0 && totalFuelCost > 0 && (
+              <Text style={styles.heroPillPct}>{fuelPct}%</Text>
+            )}
           </View>
 
-          <View style={styles.heroBreakdownPill}>
+          <View style={[styles.heroBreakdownPill, { flexDirection: 'row', alignItems: 'center', gap: 5 }]}>
+            <View style={[styles.pillColorDot, { backgroundColor: '#34D399' }]} />
+            <Text style={{ fontSize: 11 }}>🔧</Text>
             <Text style={[styles.heroPillText, { color: 'rgba(255,255,255,0.95)' }]}>
-              🔧 {formatCurrency(totalServiceCost)}
+              {formatCurrency(totalServiceCost)}
             </Text>
+            {totalOwnershipCost > 0 && totalServiceCost > 0 && (
+              <Text style={styles.heroPillPct}>{servicePct}%</Text>
+            )}
           </View>
 
-          <View style={styles.heroBreakdownPill}>
+          <View style={[styles.heroBreakdownPill, { flexDirection: 'row', alignItems: 'center', gap: 5 }]}>
+            <View style={[styles.pillColorDot, { backgroundColor: '#A78BFA' }]} />
+            <Text style={{ fontSize: 11 }}>💰</Text>
             <Text style={[styles.heroPillText, { color: 'rgba(255,255,255,0.95)' }]}>
-              💰 {formatCurrency(totalExpenseCost)}
+              {formatCurrency(totalExpenseCost)}
             </Text>
+            {totalOwnershipCost > 0 && totalExpenseCost > 0 && (
+              <Text style={styles.heroPillPct}>{expensePct}%</Text>
+            )}
           </View>
         </View>
-      </View>
+      </LinearGradient>
 
       {/* ── Key Metrics Grid ── */}
       <View style={styles.grid}>
@@ -453,6 +530,11 @@ const styles = StyleSheet.create({
     borderRadius: Sizing.radiusLg,
     padding: Spacing.lg,
     marginBottom: Spacing.lg,
+    borderWidth: 1,
+    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
   },
   heroHeaderRow: {
     flexDirection: 'row',
@@ -466,36 +548,64 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   heroFilterBadge: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: Sizing.radiusFull,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
   },
   heroTotal: {
-    fontSize: 25,
+    fontSize: 27,
     fontWeight: '800',
-    marginTop: 4,
-    letterSpacing: -0.5,
+    marginTop: 6,
+    letterSpacing: -0.6,
   },
   heroExcludesNotice: {
     fontSize: 11,
     marginTop: 2,
   },
+  ratioBarTrack: {
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    flexDirection: 'row',
+    overflow: 'hidden',
+    marginTop: Spacing.md,
+    marginBottom: Spacing.md,
+    gap: 2,
+  },
+  ratioSegment: {
+    height: '100%',
+    borderRadius: 2,
+  },
   heroBreakdown: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.sm,
-    marginTop: Spacing.md,
   },
   heroBreakdownPill: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
     paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: Sizing.radiusSm,
+  },
+  pillColorDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   heroPillText: {
     fontSize: 11,
     fontWeight: '700',
+  },
+  heroPillPct: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.65)',
+    marginLeft: 1,
   },
   grid: {
     flexDirection: 'row',

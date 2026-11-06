@@ -17,12 +17,12 @@ import React, { useCallback, useMemo } from 'react';
 import {
   View,
   Text,
-  ImageBackground,
   TouchableOpacity,
   StyleSheet,
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path, Defs, LinearGradient as SvgGradient, Stop, Circle, Line } from 'react-native-svg';
 import { useTripStore } from '@/stores/tripStore';
 import { useVehicleStore } from '@/stores/vehicleStore';
 import { type Vehicle } from '@/types/vehicle';
@@ -183,190 +183,306 @@ export const HomeGpsCockpit = React.memo(function HomeGpsCockpit({
         </TouchableOpacity>
       )}
 
-      {/* ── Hero Cockpit Card with Luminous Vignette ── */}
-      <View
+      {/* ── Hero Cockpit Card (Digital Instrument Cluster) ── */}
+      <LinearGradient
+        colors={
+          colors.isDark
+            ? ['#0A1222', '#060B16', '#03060C']
+            : ['#0E1A2E', '#091220', '#050A14']
+        }
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
         style={[
           styles.cockpitCard,
           {
-            borderColor: colors.isDark
-              ? 'rgba(224, 120, 72, 0.45)'
-              : 'rgba(198, 91, 46, 0.35)',
+            borderColor:
+              recordingState === 'recording'
+                ? 'rgba(34, 197, 94, 0.45)'
+                : recordingState === 'paused'
+                  ? 'rgba(245, 158, 11, 0.45)'
+                  : colors.isDark
+                    ? 'rgba(79, 160, 232, 0.22)'
+                    : 'rgba(24, 59, 99, 0.25)',
+            shadowColor:
+              recordingState === 'recording'
+                ? '#22C55E'
+                : '#000000',
           },
         ]}
       >
-        <ImageBackground
-          source={require('../../../assets/images/cockpit-highway-bg.jpg')}
-          style={styles.bgImage}
-          imageStyle={styles.bgImageStyle}
-          resizeMode="cover"
-        >
-          {/* Multi-stop gradient overlay: transparent center lets highway pop, dark bottom secures button readability */}
-          <LinearGradient
-            colors={[
-              'rgba(10, 15, 30, 0.58)',
-              'rgba(10, 15, 30, 0.22)',
-              'rgba(10, 15, 30, 0.45)',
-              'rgba(8, 12, 22, 0.94)',
-            ]}
-            locations={[0, 0.28, 0.62, 1]}
-            style={styles.darkOverlay}
-          >
-            {/* Top Bar: Telematics Status + GPS Accuracy Pill */}
-            <View style={styles.telematicsBar}>
-              <View style={styles.statusIndicator}>
-                <View
-                  style={[
-                    styles.statusDot,
-                    {
-                      backgroundColor:
-                        recordingState === 'recording'
-                          ? '#22C55E'
-                          : recordingState === 'paused'
-                          ? '#F59E0B'
-                          : '#94A3B8',
-                    },
-                  ]}
+        <View style={styles.clusterContent}>
+          {/* Top Bar: Telematics Status + GPS Accuracy Pill */}
+          <View style={styles.telematicsBar}>
+            <View style={styles.statusIndicator}>
+              <View
+                style={[
+                  styles.statusDot,
+                  {
+                    backgroundColor:
+                      recordingState === 'recording'
+                        ? '#22C55E'
+                        : recordingState === 'paused'
+                        ? '#F59E0B'
+                        : '#94A3B8',
+                  },
+                ]}
+              />
+              <Text style={styles.statusText}>
+                {recordingState === 'recording'
+                  ? 'TRACKING ACTIVE'
+                  : recordingState === 'paused'
+                  ? 'TRIP PAUSED'
+                  : 'GPS STANDBY'}
+              </Text>
+            </View>
+
+            <View style={[styles.gpsPill, { borderColor: gpsQuality.color }]}>
+              <View style={[styles.gpsPillDot, { backgroundColor: gpsQuality.dotColor }]} />
+              <Text style={[styles.gpsPillText, { color: gpsQuality.color }]}>
+                {gpsQuality.label}
+              </Text>
+            </View>
+          </View>
+
+          {/* Straight Dotted Accent Divider below Telematics */}
+          <View style={styles.dottedDividerRow}>
+            <Svg width="100%" height={2}>
+              <Line
+                x1="0"
+                y1="1"
+                x2="100%"
+                y2="1"
+                stroke="rgba(255, 255, 255, 0.16)"
+                strokeWidth={1.5}
+                strokeDasharray="2 6"
+                strokeLinecap="round"
+              />
+            </Svg>
+          </View>
+
+          {/* Center Area: Digital Speedometer Dial with Dotted Crown Arc & Full-Width Dotted Horizon Wings */}
+          <View style={styles.speedometerContainer}>
+            {/* Straight Dotted Horizon Wings extending all the way to the card edges */}
+            <View style={styles.fullWidthDottedHorizon}>
+              <View style={styles.wingSegment}>
+                <Svg width="100%" height={2}>
+                  <Line
+                    x1="0"
+                    y1="1"
+                    x2="100%"
+                    y2="1"
+                    stroke="rgba(255, 255, 255, 0.22)"
+                    strokeWidth={2}
+                    strokeDasharray="2 6"
+                    strokeLinecap="round"
+                  />
+                </Svg>
+              </View>
+              <View style={styles.dialCenterSpacer} />
+              <View style={styles.wingSegment}>
+                <Svg width="100%" height={2}>
+                  <Line
+                    x1="0"
+                    y1="1"
+                    x2="100%"
+                    y2="1"
+                    stroke="rgba(255, 255, 255, 0.22)"
+                    strokeWidth={2}
+                    strokeDasharray="2 6"
+                    strokeLinecap="round"
+                  />
+                </Svg>
+              </View>
+            </View>
+
+            <View style={styles.dialSvgWrapper}>
+              <Svg width={200} height={124} viewBox="0 0 200 124">
+                <Defs>
+                  <SvgGradient id="hudSpeedGrad" x1="0" y1="0" x2="1" y2="0">
+                    <Stop offset="0%" stopColor="#38BDF8" stopOpacity="0.85" />
+                    <Stop offset="65%" stopColor="#60A5FA" stopOpacity="0.95" />
+                    <Stop offset="100%" stopColor="#F59E0B" stopOpacity="1" />
+                  </SvgGradient>
+                </Defs>
+
+                {/* Outer Decorative Dotted Crown Arc */}
+                <Path
+                  d="M 54.0 106.0 A 60 60 0 1 1 146.0 106.0"
+                  stroke="rgba(255, 255, 255, 0.22)"
+                  strokeWidth={2.5}
+                  strokeDasharray="2 6"
+                  strokeLinecap="round"
+                  fill="none"
                 />
-                <Text style={styles.statusText}>
-                  {recordingState === 'recording'
-                    ? 'TRACKING ACTIVE'
-                    : recordingState === 'paused'
-                    ? 'TRIP PAUSED'
-                    : 'GPS STANDBY'}
-                </Text>
-              </View>
 
-              <View style={[styles.gpsPill, { borderColor: gpsQuality.color }]}>
-                <View style={[styles.gpsPillDot, { backgroundColor: gpsQuality.dotColor }]} />
-                <Text style={[styles.gpsPillText, { color: gpsQuality.color }]}>
-                  {gpsQuality.label}
-                </Text>
-              </View>
-            </View>
+                {/* Inner Base Gauge Track */}
+                <Path
+                  d="M 58.6 102.7 A 54 54 0 1 1 141.4 102.7"
+                  stroke="rgba(255, 255, 255, 0.10)"
+                  strokeWidth={3.5}
+                  strokeLinecap="round"
+                  fill="none"
+                />
 
-            {/* Center Area: Primary Speed Dial with Drop Shadow */}
-            <View style={styles.speedometerContainer}>
-              <View style={styles.speedRow}>
+                {/* Active Dynamic Speed Progress Arc */}
+                {currentSpeedKmh > 0 && (
+                  <Path
+                    d="M 58.6 102.7 A 54 54 0 1 1 141.4 102.7"
+                    stroke="url(#hudSpeedGrad)"
+                    strokeWidth={4}
+                    strokeLinecap="round"
+                    strokeDasharray={`${Math.max(6, 245 * Math.min(1, currentSpeedKmh / 140))} 300`}
+                    fill="none"
+                  />
+                )}
+
+                {/* Scale Terminal Markers (0 and 140 km/h) */}
+                <Circle
+                  cx="58.6"
+                  cy="102.7"
+                  r={3}
+                  fill={currentSpeedKmh > 0 ? '#38BDF8' : 'rgba(255, 255, 255, 0.35)'}
+                />
+                <Circle cx="141.4" cy="102.7" r={3} fill="rgba(255, 255, 255, 0.2)" />
+              </Svg>
+
+              {/* Symmetrically Centered Digital Speed + KM / H Unit Badge */}
+              <View style={styles.speedReadoutOverlay}>
                 <Text style={styles.speedValue}>{currentSpeedKmh}</Text>
-                <View style={styles.speedUnitCol}>
-                  <Text style={styles.speedUnit}>KM/H</Text>
-                  <Text style={styles.speedLabel}>SPEED</Text>
+                <View style={styles.speedUnitBadge}>
+                  <Text style={styles.speedUnitText}>KM / H</Text>
                 </View>
               </View>
             </View>
+          </View>
 
-            {/* Secondary Metrics: Frosted Glass HUD Box */}
-            <View style={styles.metricsRow}>
-              <View style={styles.metricItem}>
-                <Text style={styles.metricLabel}>DISTANCE</Text>
-                <View style={styles.metricValueRow}>
-                  <Text style={styles.metricValue}>
-                    {isTripOnThisVehicle ? liveMetrics.distanceKm.toFixed(2) : '0.00'}
-                  </Text>
-                  <Text style={styles.metricUnit}>KM</Text>
-                </View>
-              </View>
-
-              <View style={styles.metricDivider} />
-
-              <View style={styles.metricItem}>
-                <Text style={styles.metricLabel}>DURATION</Text>
-                <View style={styles.metricValueRow}>
-                  <Text style={styles.metricValue}>
-                    {isTripOnThisVehicle ? formatTripTime(liveMetrics.elapsedSeconds) : '00:00'}
-                  </Text>
-                  <Text style={styles.metricUnit}>TIME</Text>
-                </View>
+          {/* Secondary Metrics: Frosted Glass HUD Box */}
+          <View style={styles.metricsRow}>
+            <View style={styles.metricItem}>
+              <Text style={styles.metricLabel}>DISTANCE</Text>
+              <View style={styles.metricValueRow}>
+                <Text style={styles.metricValue}>
+                  {isTripOnThisVehicle ? liveMetrics.distanceKm.toFixed(2) : '0.00'}
+                </Text>
+                <Text style={styles.metricUnit}>KM</Text>
               </View>
             </View>
 
-            {/* Primary Action Controls (State-dependent) */}
-            <View style={styles.controlsRow}>
-              {isTripOnThisVehicle ? (
-                <>
-                  {/* Pause / Resume Button */}
-                  {recordingState === 'recording' ? (
-                    <TouchableOpacity
-                      style={[styles.actionBtnSecondary, { borderColor: '#F59E0B' }]}
-                      onPress={pauseGpsTrip}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.actionBtnText, { color: '#F59E0B' }]}>⏸ Pause</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity
-                      style={[styles.actionBtnSecondary, { borderColor: '#22C55E' }]}
-                      onPress={resumeGpsTrip}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.actionBtnText, { color: '#22C55E' }]}>▶ Resume</Text>
-                    </TouchableOpacity>
-                  )}
+            <View style={styles.metricDivider} />
 
-                  {/* Finish & Save Button */}
+            <View style={styles.metricItem}>
+              <Text style={styles.metricLabel}>DURATION</Text>
+              <View style={styles.metricValueRow}>
+                <Text style={styles.metricValue}>
+                  {isTripOnThisVehicle ? formatTripTime(liveMetrics.elapsedSeconds) : '00:00'}
+                </Text>
+                <Text style={styles.metricUnit}>TIME</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Primary Action Controls (State-dependent) */}
+          <View style={styles.controlsRow}>
+            {isTripOnThisVehicle ? (
+              <>
+                {/* Pause / Resume Button */}
+                {recordingState === 'recording' ? (
                   <TouchableOpacity
-                    style={[styles.actionBtnPrimary, { backgroundColor: '#DC2626' }]}
-                    onPress={onOpenTripReviewModal}
-                    activeOpacity={0.85}
+                    style={[styles.actionBtnSecondary, { borderColor: '#F59E0B' }]}
+                    onPress={pauseGpsTrip}
+                    activeOpacity={0.8}
                   >
-                    <Text style={styles.actionBtnTextPrimary}>🏁 Finish Trip</Text>
+                    <Text style={[styles.actionBtnText, { color: '#F59E0B' }]}>⏸ Pause</Text>
                   </TouchableOpacity>
-                </>
-              ) : (
-                /* Idle State: Hero Start Trip Button */
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.actionBtnSecondary, { borderColor: '#22C55E' }]}
+                    onPress={resumeGpsTrip}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.actionBtnText, { color: '#22C55E' }]}>▶ Resume</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Finish & Save Button */}
                 <TouchableOpacity
-                  style={[
-                    styles.actionBtnHero,
-                    {
-                      backgroundColor: colors.accent,
-                      opacity: isTripOnOtherVehicle ? 0.6 : 1,
-                    },
-                  ]}
-                  onPress={handleStartTrip}
+                  style={[styles.actionBtnPrimary, { backgroundColor: '#DC2626' }]}
+                  onPress={onOpenTripReviewModal}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.actionBtnTextHero}>
-                    {isTripOnOtherVehicle ? `Trip Active on ${otherVehicle?.nickname}` : '▶ Start GPS Trip'}
+                  <Text style={styles.actionBtnTextPrimary}>🏁 Finish Trip</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              /* Idle State: Hero Start Trip Button */
+              <TouchableOpacity
+                style={[
+                  styles.actionBtnHero,
+                  {
+                    backgroundColor: colors.accent,
+                    opacity: isTripOnOtherVehicle ? 0.6 : 1,
+                  },
+                ]}
+                onPress={handleStartTrip}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.actionBtnTextHero}>
+                  {isTripOnOtherVehicle ? `Trip Active on ${otherVehicle?.nickname}` : '▶ Start GPS Trip'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Straight Dotted Divider across the card */}
+          <View style={styles.bottomDottedDivider}>
+            <Svg width="100%" height={2}>
+              <Line
+                x1="0"
+                y1="1"
+                x2="100%"
+                y2="1"
+                stroke="rgba(255, 255, 255, 0.18)"
+                strokeWidth={1.5}
+                strokeDasharray="2 6"
+                strokeLinecap="round"
+              />
+            </Svg>
+          </View>
+
+          {/* Bottom Cockpit Strip: Log Trip leftmost, Trip History rightmost with > */}
+          <View style={styles.bottomStrip}>
+            {isTripOnThisVehicle ? (
+              <View style={styles.bottomLinksRow}>
+                <TouchableOpacity onPress={onOpenActiveTripModal} hitSlop={8}>
+                  <Text style={styles.inTripLink}>Full HUD Speedometer &gt;</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleDiscardTrip} hitSlop={8}>
+                  <Text style={[styles.inTripLink, { color: '#EF4444' }]}>Discard</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.bottomLinksRow}>
+                <TouchableOpacity
+                  style={styles.subLinkItem}
+                  onPress={onOpenManualTripModal}
+                  hitSlop={8}
+                >
+                  <Text style={styles.subLinkText}>✍️ Log Trip</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.subLinkItem}
+                  onPress={onOpenTripHistoryModal}
+                  hitSlop={8}
+                >
+                  <Text style={styles.subLinkTextHighlight}>
+                    Trip History ({trips.length}) &gt;
                   </Text>
                 </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Bottom Cockpit Strip: Log Trip leftmost, Trip History rightmost with > */}
-            <View style={styles.bottomStrip}>
-              {isTripOnThisVehicle ? (
-                <View style={styles.bottomLinksRow}>
-                  <TouchableOpacity onPress={onOpenActiveTripModal} hitSlop={8}>
-                    <Text style={styles.inTripLink}>Full HUD Speedometer &gt;</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={handleDiscardTrip} hitSlop={8}>
-                    <Text style={[styles.inTripLink, { color: '#EF4444' }]}>Discard</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={styles.bottomLinksRow}>
-                  <TouchableOpacity
-                    style={styles.subLinkItem}
-                    onPress={onOpenManualTripModal}
-                    hitSlop={8}
-                  >
-                    <Text style={styles.subLinkText}>✍️ Log Trip</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.subLinkItem}
-                    onPress={onOpenTripHistoryModal}
-                    hitSlop={8}
-                  >
-                    <Text style={styles.subLinkTextHighlight}>
-                      Trip History ({trips.length}) &gt;
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          </LinearGradient>
-        </ImageBackground>
-      </View>
+              </View>
+            )}
+          </View>
+        </View>
+      </LinearGradient>
     </View>
   );
 });
@@ -404,59 +520,48 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   cockpitCard: {
-    borderRadius: 15,
+    borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1.2,
-    backgroundColor: '#090E18',
-    elevation: 3,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
+    elevation: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
   },
-  bgImage: {
-    width: '100%',
-  },
-  bgImageStyle: {
-    borderRadius: 14,
-  },
-  darkOverlay: {
+  clusterContent: {
     paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingVertical: 12,
   },
   telematicsBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   statusIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
   },
   statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   statusText: {
     fontSize: 10,
     fontWeight: '800',
     color: '#E2E8F0',
-    letterSpacing: 0.6,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    letterSpacing: 0.8,
   },
   gpsPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 7,
-    paddingVertical: 1.5,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: 10,
     borderWidth: 1,
-    backgroundColor: 'rgba(5, 10, 20, 0.65)',
+    backgroundColor: 'rgba(5, 10, 20, 0.75)',
     gap: 4,
   },
   gpsPillDot: {
@@ -472,49 +577,77 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 2,
+    position: 'relative',
   },
-  speedRow: {
+  fullWidthDottedHorizon: {
+    position: 'absolute',
+    left: -14,
+    right: -14,
+    bottom: 18,
+    height: 2,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    zIndex: 0,
+  },
+  wingSegment: {
+    flex: 1,
+    height: 2,
+    overflow: 'hidden',
+  },
+  dialCenterSpacer: {
+    width: 92,
+  },
+  dialSvgWrapper: {
+    width: 200,
+    height: 124,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  speedReadoutOverlay: {
+    position: 'absolute',
+    top: 20,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   speedValue: {
-    fontSize: 42,
+    fontSize: 34,
     fontWeight: '900',
     color: '#FFFFFF',
-    letterSpacing: -1.8,
-    lineHeight: 46,
-    textShadowColor: 'rgba(0, 0, 0, 0.95)',
-    textShadowOffset: { width: 0, height: 2 },
+    letterSpacing: -1,
+    lineHeight: 38,
+    textShadowColor: 'rgba(56, 189, 248, 0.45)',
+    textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 8,
   },
-  speedUnitCol: {
-    marginLeft: 6,
-    marginTop: 5,
+  speedUnitBadge: {
+    marginTop: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 1.5,
+    borderRadius: 5,
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  speedUnit: {
-    fontSize: 11,
+  speedUnitText: {
+    fontSize: 9.5,
     fontWeight: '800',
-    color: '#F59E0B',
-    letterSpacing: 0.6,
-    textShadowColor: 'rgba(0, 0, 0, 0.85)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-  speedLabel: {
-    fontSize: 8,
-    fontWeight: '700',
-    color: '#CBD5E1',
-    letterSpacing: 0.6,
+    color: '#38BDF8',
+    letterSpacing: 1.2,
   },
   metricsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(10, 16, 30, 0.58)',
-    borderRadius: 9,
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    paddingVertical: 5,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: 6,
     paddingHorizontal: 12,
     marginVertical: 4,
   },
@@ -600,11 +733,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
+  dottedDividerRow: {
+    marginHorizontal: -14,
+    height: 2,
+    marginVertical: 4,
+    overflow: 'hidden',
+  },
+  bottomDottedDivider: {
+    marginHorizontal: -14,
+    height: 2,
+    marginTop: 8,
+    marginBottom: 4,
+    overflow: 'hidden',
+  },
   bottomStrip: {
-    marginTop: 6,
-    paddingTop: 5,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.12)',
+    paddingTop: 2,
   },
   bottomLinksRow: {
     flexDirection: 'row',
