@@ -22,99 +22,113 @@
 export const Colors = {
   light: {
     // ── Backgrounds ──
-    background: '#F8F9FC',
+    background: '#F5F8FC',
     surface: '#FFFFFF',
+    surfaceSecondary: '#EDF3FA',
     surfaceElevated: '#FFFFFF',
     card: '#FFFFFF',
 
-    // ── Primary (Deep Blue) ──
-    primary: '#1A73E8',
-    primaryDark: '#1557B0',
-    primaryLight: '#E8F0FE',
+    // ── Primary (Deep Blue) & Accent (Automotive Orange) ──
+    primary: '#3983C7',
+    primaryDark: '#183B63',
+    primaryLight: '#EDF3FA',
     primaryText: '#FFFFFF',
 
-    // ── Accent (Amber) ──
-    accent: '#F59E0B',
-    accentDark: '#D97706',
-    accentLight: '#FEF3C7',
+    accent: '#EA580C',
+    accentDark: '#C2410C',
+    accentLight: '#FFEDD5',
 
     // ── Text ──
-    text: '#1A1C1E',
-    textSecondary: '#5F6368',
-    textTertiary: '#9AA0A6',
+    text: '#183B63',
+    textSecondary: '#536B88',
+    textTertiary: '#8A9EB5',
     textOnPrimary: '#FFFFFF',
 
     // ── Borders & Dividers ──
-    border: '#E0E3E8',
-    borderLight: '#F0F2F5',
-    divider: '#EEEFF2',
+    border: '#DCE6F1',
+    borderLight: '#E8F0F7',
+    divider: '#DCE6F1',
 
     // ── Semantic ──
-    success: '#0F9D58',
-    successLight: '#E6F4EA',
+    success: '#10B981',
+    successLight: '#E0F5EE',
     warning: '#F59E0B',
     warningLight: '#FEF3C7',
-    danger: '#EA4335',
-    dangerLight: '#FCE8E6',
+    danger: '#EF4444',
+    dangerLight: '#FEE2E2',
+
+    statusNormal: '#10B981',
+    statusNormalBg: '#E0F5EE',
+    statusWarning: '#F59E0B',
+    statusWarningBg: '#FEF3C7',
+    statusCritical: '#EF4444',
+    statusCriticalBg: '#FEE2E2',
 
     // ── Tab Bar ──
     tabBar: '#FFFFFF',
-    tabBarBorder: '#E0E3E8',
-    tabIconDefault: '#9AA0A6',
-    tabIconSelected: '#1A73E8',
+    tabBarBorder: '#DCE6F1',
+    tabIconDefault: '#8A9EB5',
+    tabIconSelected: '#3983C7',
 
     // ── Misc ──
-    shadow: 'rgba(0, 0, 0, 0.08)',
-    overlay: 'rgba(0, 0, 0, 0.5)',
-    shimmer: '#E8EBF0',
+    shadow: 'rgba(24, 59, 99, 0.08)',
+    overlay: 'rgba(24, 59, 99, 0.65)',
+    shimmer: '#E8F0F7',
   },
   dark: {
     // ── Backgrounds ──
-    background: '#121214',
-    surface: '#1E1E22',
-    surfaceElevated: '#2A2A2E',
-    card: '#1E1E22',
+    background: '#0E1A2B',
+    surface: '#14253D',
+    surfaceSecondary: '#1A2F4C',
+    surfaceElevated: '#1E3657',
+    card: '#14253D',
 
-    // ── Primary (Deep Blue) ──
-    primary: '#4DA3FF',
-    primaryDark: '#1A73E8',
-    primaryLight: '#1A2744',
+    // ── Primary & Accent (Automotive Orange) ──
+    primary: '#4FA0E8',
+    primaryDark: '#183B63',
+    primaryLight: '#1A2F4C',
     primaryText: '#FFFFFF',
 
-    // ── Accent (Amber) ──
-    accent: '#FBBF24',
-    accentDark: '#F59E0B',
-    accentLight: '#3D2E0A',
+    accent: '#F97316',
+    accentDark: '#EA580C',
+    accentLight: 'rgba(249, 115, 22, 0.15)',
 
     // ── Text ──
-    text: '#E8EAED',
-    textSecondary: '#9AA0A6',
-    textTertiary: '#6B7280',
+    text: '#F5F8FC',
+    textSecondary: '#96B0CC',
+    textTertiary: '#607C9A',
     textOnPrimary: '#FFFFFF',
 
     // ── Borders & Dividers ──
-    border: '#3C3C40',
-    borderLight: '#2A2A2E',
-    divider: '#2C2C30',
+    border: '#1F3858',
+    borderLight: '#182E49',
+    divider: '#1F3858',
 
     // ── Semantic ──
     success: '#34D399',
-    successLight: '#0D3326',
+    successLight: 'rgba(52, 211, 153, 0.15)',
     warning: '#FBBF24',
-    warningLight: '#3D2E0A',
+    warningLight: 'rgba(251, 191, 36, 0.15)',
     danger: '#F87171',
-    dangerLight: '#3B1515',
+    dangerLight: 'rgba(248, 113, 113, 0.15)',
+
+    statusNormal: '#34D399',
+    statusNormalBg: 'rgba(52, 211, 153, 0.15)',
+    statusWarning: '#FBBF24',
+    statusWarningBg: 'rgba(251, 191, 36, 0.15)',
+    statusCritical: '#F87171',
+    statusCriticalBg: 'rgba(248, 113, 113, 0.15)',
 
     // ── Tab Bar ──
-    tabBar: '#1E1E22',
-    tabBarBorder: '#3C3C40',
-    tabIconDefault: '#6B7280',
-    tabIconSelected: '#4DA3FF',
+    tabBar: '#14253D',
+    tabBarBorder: '#1F3858',
+    tabIconDefault: '#607C9A',
+    tabIconSelected: '#4FA0E8',
 
     // ── Misc ──
-    shadow: 'rgba(0, 0, 0, 0.3)',
-    overlay: 'rgba(0, 0, 0, 0.7)',
-    shimmer: '#2A2A2E',
+    shadow: 'rgba(0, 0, 0, 0.35)',
+    overlay: 'rgba(10, 20, 35, 0.8)',
+    shimmer: '#1A2F4C',
   },
 };
 
