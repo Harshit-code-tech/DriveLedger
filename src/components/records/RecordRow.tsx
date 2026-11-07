@@ -6,12 +6,18 @@
  * - Service: Service type, garage, full work done, parts/component tags, invoice badge, next due.
  * - Expense: Category, amount, full description, receipt badge, notes.
  * - Trip: Date, time range, distance, duration, GPS vs manual badge, odometer range, purpose tag, inspect GPS route.
+ *
+ * Styled in the Refined Technical Automotive Cockpit design:
+ * - High-contrast card with crisp borders and subtle depth
+ * - Dynamic dark/light theme badges (no hardcoded blinding highlights in dark mode)
+ * - Tabular numbers for currencies and odometers
+ * - Automotive icon badges with refined borders
  */
 
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { FuelEntry } from '@/types/fuel';
-import type { ServiceRecord, MaintenanceComponent } from '@/types/service';
+import type { ServiceRecord } from '@/types/service';
 import type { Expense } from '@/types/expense';
 import type { Trip } from '@/types/trip';
 import type { Vehicle } from '@/types/vehicle';
@@ -61,8 +67,16 @@ export const RecordRow = React.memo(function RecordRow({
   onLongPress,
   colors,
   isEV = false,
-  selectedVehicle,
 }: RecordRowProps) {
+  // Adaptive badge color tokens for light vs dark mode
+  const mileageBg = colors.isDark ? 'rgba(16, 185, 129, 0.16)' : '#DCFCE7';
+  const mileageBorder = colors.isDark ? 'rgba(16, 185, 129, 0.38)' : '#86EFAC';
+  const mileageText = colors.isDark ? '#34D399' : '#166534';
+
+  const warningBg = colors.isDark ? 'rgba(245, 158, 11, 0.16)' : '#FEF3C7';
+  const warningBorder = colors.isDark ? 'rgba(245, 158, 11, 0.38)' : '#FCD34D';
+  const warningText = colors.isDark ? '#FBBF24' : '#B45309';
+
   // ── 1. FUEL ENTRY ──────────────────────────────────────────────────
   if (item.type === 'fuel') {
     const entry = item.raw as FuelEntry;
@@ -80,18 +94,25 @@ export const RecordRow = React.memo(function RecordRow({
         onPress={() => onPress(item)}
         onLongPress={() => onLongPress(item)}
         activeOpacity={0.75}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.title}, ${formatCurrency(entry.total_cost)}, on ${formatDisplayDateLong(entry.date)}`}
       >
         {/* Header Row: Title & Total Cost */}
         <View style={styles.cardHeader}>
           <View style={styles.titleWithIcon}>
-            <View style={[styles.iconBadge, { backgroundColor: colors.surfaceSecondary }]}>
+            <View
+              style={[
+                styles.iconBadge,
+                { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+              ]}
+            >
               {isEV ? (
-                <CategoryElectricIcon size={16} color={colors.accent} />
+                <CategoryElectricIcon size={18} color={colors.accent} />
               ) : (
-                <CategoryFuelIcon size={16} color={colors.accent} />
+                <CategoryFuelIcon size={18} color={colors.accent} />
               )}
             </View>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
                 {item.title}
               </Text>
@@ -102,10 +123,20 @@ export const RecordRow = React.memo(function RecordRow({
           </View>
 
           <View style={styles.headerRight}>
-            <Text style={[styles.costHighlight, { color: colors.accent }]}>
+            <Text
+              style={[
+                styles.costHighlight,
+                { color: colors.accent, fontVariant: ['tabular-nums'] },
+              ]}
+            >
               {formatCurrency(entry.total_cost)}
             </Text>
-            <Text style={[styles.odometerSubtext, { color: colors.textSecondary }]}>
+            <Text
+              style={[
+                styles.odometerSubtext,
+                { color: colors.textSecondary, fontVariant: ['tabular-nums'] },
+              ]}
+            >
               {entry.odometer.toLocaleString('en-IN')} km
             </Text>
           </View>
@@ -113,7 +144,12 @@ export const RecordRow = React.memo(function RecordRow({
 
         {/* Quantity & Unit Price */}
         <View style={styles.detailsRow}>
-          <Text style={[styles.quantityText, { color: colors.text }]}>
+          <Text
+            style={[
+              styles.quantityText,
+              { color: colors.text, fontVariant: ['tabular-nums'] },
+            ]}
+          >
             {entry.fuel_amount} {unit}
           </Text>
           <Text style={[styles.unitPriceText, { color: colors.textSecondary }]}>
@@ -134,8 +170,13 @@ export const RecordRow = React.memo(function RecordRow({
         {/* Mileage badge / Partial Fill / Battery Delta */}
         <View style={styles.badgeWrapRow}>
           {entry.calculated_mileage && entry.mileage_unit ? (
-            <View style={[styles.mileageBadge, { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' }]}>
-              <Text style={[styles.mileageBadgeText, { color: '#166534' }]}>
+            <View
+              style={[
+                styles.mileageBadge,
+                { backgroundColor: mileageBg, borderColor: mileageBorder },
+              ]}
+            >
+              <Text style={[styles.mileageBadgeText, { color: mileageText }]}>
                 ⭐ {entry.calculated_mileage.toFixed(1)}{' '}
                 {MILEAGE_UNIT_LABELS[entry.mileage_unit as MileageUnit] || 'km/L'}
               </Text>
@@ -143,15 +184,25 @@ export const RecordRow = React.memo(function RecordRow({
           ) : null}
 
           {!entry.calculated_mileage && entry.is_full_tank === 0 ? (
-            <View style={[styles.warningBadge, { backgroundColor: '#FEF3C7', borderColor: '#FCD34D' }]}>
-              <Text style={[styles.warningBadgeText, { color: '#B45309' }]}>
+            <View
+              style={[
+                styles.warningBadge,
+                { backgroundColor: warningBg, borderColor: warningBorder },
+              ]}
+            >
+              <Text style={[styles.warningBadgeText, { color: warningText }]}>
                 Partial Fill
               </Text>
             </View>
           ) : null}
 
           {entry.battery_start_percent != null && entry.battery_end_percent != null && (
-            <View style={[styles.batteryBadge, { backgroundColor: colors.surfaceSecondary }]}>
+            <View
+              style={[
+                styles.batteryBadge,
+                { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+              ]}
+            >
               <Text style={[styles.batteryBadgeText, { color: colors.text }]}>
                 🔋 {entry.battery_start_percent}% → {entry.battery_end_percent}% (+
                 {Math.round(entry.battery_end_percent - entry.battery_start_percent)}%)
@@ -193,12 +244,19 @@ export const RecordRow = React.memo(function RecordRow({
         onPress={() => onPress(item)}
         onLongPress={() => onLongPress(item)}
         activeOpacity={0.75}
+        accessibilityRole="button"
+        accessibilityLabel={`${record.service_type}, on ${formatDisplayDateLong(record.date)}`}
       >
         {/* Header Row: Service Type & Cost */}
         <View style={styles.cardHeader}>
           <View style={styles.titleWithIcon}>
-            <View style={[styles.iconBadge, { backgroundColor: colors.surfaceSecondary }]}>
-              <CategoryServiceIcon size={16} color={colors.accent} />
+            <View
+              style={[
+                styles.iconBadge,
+                { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+              ]}
+            >
+              <CategoryServiceIcon size={18} color={colors.accent} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
@@ -212,7 +270,12 @@ export const RecordRow = React.memo(function RecordRow({
 
           <View style={styles.headerRight}>
             {record.cost != null && record.cost > 0 ? (
-              <Text style={[styles.costHighlight, { color: colors.accent }]}>
+              <Text
+                style={[
+                  styles.costHighlight,
+                  { color: colors.accent, fontVariant: ['tabular-nums'] },
+                ]}
+              >
                 {formatCurrency(record.cost)}
               </Text>
             ) : (
@@ -221,7 +284,12 @@ export const RecordRow = React.memo(function RecordRow({
               </Text>
             )}
             {record.odometer != null && (
-              <Text style={[styles.odometerSubtext, { color: colors.textSecondary }]}>
+              <Text
+                style={[
+                  styles.odometerSubtext,
+                  { color: colors.textSecondary, fontVariant: ['tabular-nums'] },
+                ]}
+              >
                 {Math.round(record.odometer).toLocaleString('en-IN')} km
               </Text>
             )}
@@ -239,7 +307,12 @@ export const RecordRow = React.memo(function RecordRow({
 
         {/* Work Done / Full Description (never truncated) */}
         {record.work_done ? (
-          <View style={styles.fullDescriptionBox}>
+          <View
+            style={[
+              styles.fullDescriptionBox,
+              { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+            ]}
+          >
             <Text style={[styles.fullDescriptionText, { color: colors.text }]}>
               {record.work_done}
             </Text>
@@ -287,7 +360,12 @@ export const RecordRow = React.memo(function RecordRow({
                 ]}
               >
                 <Text style={{ fontSize: 10 }}>📅</Text>
-                <Text style={[styles.compTagText, { color: colors.textSecondary }]}>
+                <Text
+                  style={[
+                    styles.compTagText,
+                    { color: colors.textSecondary, fontVariant: ['tabular-nums'] },
+                  ]}
+                >
                   Due at {record.next_due_km.toLocaleString('en-IN')} km
                 </Text>
               </View>
@@ -327,14 +405,21 @@ export const RecordRow = React.memo(function RecordRow({
         onPress={() => onPress(item)}
         onLongPress={() => onLongPress(item)}
         activeOpacity={0.75}
+        accessibilityRole="button"
+        accessibilityLabel={`${expense.category}, ${formatCurrency(expense.amount)}, on ${formatDisplayDateLong(expense.date)}`}
       >
         {/* Header Row: Category & Amount */}
         <View style={styles.cardHeader}>
           <View style={styles.titleWithIcon}>
-            <View style={[styles.iconBadge, { backgroundColor: colors.surfaceSecondary }]}>
-              <CategoryExpenseIcon size={16} color={colors.accent} />
+            <View
+              style={[
+                styles.iconBadge,
+                { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+              ]}
+            >
+              <CategoryExpenseIcon size={18} color={colors.accent} />
             </View>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
                 {expense.category}
               </Text>
@@ -345,7 +430,12 @@ export const RecordRow = React.memo(function RecordRow({
           </View>
 
           <View style={styles.headerRight}>
-            <Text style={[styles.costHighlight, { color: colors.accent }]}>
+            <Text
+              style={[
+                styles.costHighlight,
+                { color: colors.accent, fontVariant: ['tabular-nums'] },
+              ]}
+            >
               {formatCurrency(expense.amount)}
             </Text>
           </View>
@@ -353,7 +443,12 @@ export const RecordRow = React.memo(function RecordRow({
 
         {/* Full Description (never truncated!) */}
         {expense.description ? (
-          <View style={styles.fullDescriptionBox}>
+          <View
+            style={[
+              styles.fullDescriptionBox,
+              { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+            ]}
+          >
             <Text style={[styles.fullDescriptionText, { color: colors.text }]}>
               {expense.description}
             </Text>
@@ -415,14 +510,21 @@ export const RecordRow = React.memo(function RecordRow({
       onPress={() => onPress(item)}
       onLongPress={() => onLongPress(item)}
       activeOpacity={0.75}
+      accessibilityRole="button"
+      accessibilityLabel={`Trip on ${formatDisplayDateLong(trip.start_time.split('T')[0])}, ${trip.distance_km.toFixed(2)} km`}
     >
       {/* Header Row: Date/Time & Type Badge */}
       <View style={styles.cardHeader}>
         <View style={styles.titleWithIcon}>
-          <View style={[styles.iconBadge, { backgroundColor: colors.surfaceSecondary }]}>
-            <CategoryTripIcon size={16} color={colors.accent} />
+          <View
+            style={[
+              styles.iconBadge,
+              { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+            ]}
+          >
+            <CategoryTripIcon size={18} color={colors.accent} />
           </View>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
               {formatDisplayDateLong(trip.start_time.split('T')[0])}
             </Text>
@@ -439,7 +541,7 @@ export const RecordRow = React.memo(function RecordRow({
             style={[
               styles.typeBadge,
               {
-                backgroundColor: isGps ? colors.surfaceSecondary : colors.surfaceSecondary,
+                backgroundColor: colors.surfaceSecondary,
                 borderColor: isGps ? colors.accent : colors.borderLight,
               },
             ]}
@@ -459,9 +561,14 @@ export const RecordRow = React.memo(function RecordRow({
       {/* Metrics Row: Distance & Duration */}
       <View style={styles.tripMetricsRow}>
         <View>
-          <Text style={[styles.tripDistanceValue, { color: colors.text }]}>
+          <Text
+            style={[
+              styles.tripDistanceValue,
+              { color: colors.text, fontVariant: ['tabular-nums'] },
+            ]}
+          >
             {trip.distance_km.toFixed(2)}{' '}
-            <Text style={{ fontSize: 13, fontWeight: '500', color: colors.textSecondary }}>km</Text>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary }}>km</Text>
           </Text>
           <Text style={[styles.tripDistanceLabel, { color: colors.textTertiary }]}>
             {isGps ? 'GPS ESTIMATE' : 'ODOMETER DISTANCE'}
@@ -470,7 +577,12 @@ export const RecordRow = React.memo(function RecordRow({
 
         {durationText && (
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={[styles.tripDurationValue, { color: colors.text }]}>
+            <Text
+              style={[
+                styles.tripDurationValue,
+                { color: colors.text, fontVariant: ['tabular-nums'] },
+              ]}
+            >
               {durationText}
             </Text>
             <Text style={[styles.tripDistanceLabel, { color: colors.textTertiary }]}>
@@ -482,14 +594,19 @@ export const RecordRow = React.memo(function RecordRow({
 
       {/* Odometer Range */}
       {trip.start_odometer != null && trip.end_odometer != null && (
-        <View style={[styles.odometerRangeRow, { backgroundColor: colors.surfaceSecondary }]}>
+        <View
+          style={[
+            styles.odometerRangeRow,
+            { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+          ]}
+        >
           <Text style={[styles.odometerRangeText, { color: colors.textSecondary }]}>
             Odometer:{' '}
-            <Text style={{ color: colors.text, fontWeight: '700' }}>
+            <Text style={{ color: colors.text, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
               {trip.start_odometer.toLocaleString('en-IN')}
             </Text>
             {' → '}
-            <Text style={{ color: colors.text, fontWeight: '700' }}>
+            <Text style={{ color: colors.text, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
               {trip.end_odometer.toLocaleString('en-IN')} km
             </Text>
           </Text>
@@ -521,8 +638,13 @@ export const RecordRow = React.memo(function RecordRow({
 
       {/* Quality warning if any */}
       {trip.quality_warning ? (
-        <View style={[styles.warningBadge, { backgroundColor: '#FEF3C7', borderColor: '#FCD34D', marginTop: 6 }]}>
-          <Text style={[styles.warningBadgeText, { color: '#B45309' }]}>
+        <View
+          style={[
+            styles.warningBadge,
+            { backgroundColor: warningBg, borderColor: warningBorder, marginTop: 6 },
+          ]}
+        >
+          <Text style={[styles.warningBadgeText, { color: warningText }]}>
             ⚠️ {trip.quality_warning}
           </Text>
         </View>
@@ -543,7 +665,7 @@ export const RecordRow = React.memo(function RecordRow({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     padding: 14,
     marginHorizontal: 16,
@@ -551,7 +673,7 @@ const styles = StyleSheet.create({
     elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.05,
     shadowRadius: 3,
   },
   cardHeader: {
@@ -567,9 +689,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -592,7 +715,7 @@ const styles = StyleSheet.create({
   },
   odometerSubtext: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
     marginTop: 1,
   },
   detailsRow: {
@@ -646,17 +769,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
+    borderWidth: 1,
   },
   batteryBadgeText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   notesText: {
     fontSize: 12,
     fontStyle: 'italic',
   },
   fullDescriptionBox: {
-    marginTop: 6,
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   fullDescriptionText: {
     fontSize: 13,
@@ -665,16 +792,16 @@ const styles = StyleSheet.create({
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    alignItems: 'center',
     gap: 6,
     marginTop: 8,
+    alignItems: 'center',
   },
   compTagPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
   },
@@ -695,13 +822,18 @@ const styles = StyleSheet.create({
   tripMetricsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     marginTop: 10,
   },
   tripDistanceValue: {
     fontSize: 20,
     fontWeight: '800',
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
+  },
+  tripDurationValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.3,
   },
   tripDistanceLabel: {
     fontSize: 10,
@@ -709,30 +841,27 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginTop: 1,
   },
-  tripDurationValue: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
   odometerRangeRow: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
     marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
   },
   odometerRangeText: {
     fontSize: 12,
-  },
-  inspectRouteText: {
-    fontSize: 12,
-    fontWeight: '700',
   },
   cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 10,
     paddingTop: 8,
-    marginTop: 8,
+    borderTopWidth: 1,
+  },
+  inspectRouteText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   footerHint: {
     fontSize: 11,

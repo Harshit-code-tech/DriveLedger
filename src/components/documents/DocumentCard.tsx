@@ -11,6 +11,12 @@
  * - Long-press deletion initiation
  * - Tapping card triggers editing
  * - Tapping attachment triggers file viewer
+ *
+ * Styled in the Refined Technical Automotive Cockpit design:
+ * - High-contrast card with crisp borders and subtle depth
+ * - Status pills and urgent renew button in Automotive Orange / Critical Red
+ * - Tabular numbers for dates and policy codes
+ * - Dedicated independently touch-isolated attachment drawer
  */
 
 import React, { useState } from 'react';
@@ -110,7 +116,12 @@ export const DocumentCard = React.memo(function DocumentCard({
       >
         {/* Header Row: Category Icon + Primary Name + Chevron */}
         <View style={styles.headerRow}>
-          <View style={[styles.iconWrap, { backgroundColor: colors.surfaceSecondary }]}>
+          <View
+            style={[
+              styles.iconWrap,
+              { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+            ]}
+          >
             <Text style={styles.iconText}>{typeIcon}</Text>
           </View>
 
@@ -122,7 +133,10 @@ export const DocumentCard = React.memo(function DocumentCard({
             {/* Provider and Policy/Doc Number */}
             {(item.insurer_name || item.document_number) && (
               <Text
-                style={[styles.providerSubtext, { color: colors.textSecondary }]}
+                style={[
+                  styles.providerSubtext,
+                  { color: colors.textSecondary, fontVariant: ['tabular-nums'] },
+                ]}
                 numberOfLines={1}
               >
                 {[item.insurer_name, item.document_number].filter(Boolean).join(' · ')}
@@ -154,7 +168,12 @@ export const DocumentCard = React.memo(function DocumentCard({
           {item.issue_date && (
             <View style={styles.metaRow}>
               <Text style={[styles.metaLabel, { color: colors.textSecondary }]}>Issued:</Text>
-              <Text style={[styles.metaValue, { color: colors.text }]}>
+              <Text
+                style={[
+                  styles.metaValue,
+                  { color: colors.text, fontVariant: ['tabular-nums'] },
+                ]}
+              >
                 {formatDisplayDateLong(item.issue_date)}
               </Text>
             </View>
@@ -163,7 +182,12 @@ export const DocumentCard = React.memo(function DocumentCard({
           {item.expiry_date && (
             <View style={styles.metaRow}>
               <Text style={[styles.metaLabel, { color: colors.textSecondary }]}>Expires:</Text>
-              <Text style={[styles.metaValue, { color: colors.text }]}>
+              <Text
+                style={[
+                  styles.metaValue,
+                  { color: colors.text, fontVariant: ['tabular-nums'] },
+                ]}
+              >
                 {formatDisplayDateLong(item.expiry_date)}
               </Text>
             </View>
@@ -199,7 +223,7 @@ export const DocumentCard = React.memo(function DocumentCard({
                 backgroundColor:
                   validity.status === 'expired'
                     ? colors.statusCritical
-                    : colors.statusWarning,
+                    : '#EA580C',
               },
             ]}
             onPress={() => onRenew(item)}
@@ -220,7 +244,7 @@ export const DocumentCard = React.memo(function DocumentCard({
               styles.attachmentButton,
               {
                 backgroundColor: colors.surfaceSecondary,
-                borderColor: colors.border,
+                borderColor: colors.borderLight,
               },
             ]}
             onPress={handleAttachmentPress}
@@ -230,7 +254,12 @@ export const DocumentCard = React.memo(function DocumentCard({
           >
             {/* Left: Thumbnail or PDF Icon */}
             {isPdf ? (
-              <View style={[styles.pdfIconWrap, { backgroundColor: colors.surface }]}>
+              <View
+                style={[
+                  styles.pdfIconWrap,
+                  { backgroundColor: colors.surface, borderColor: colors.borderLight },
+                ]}
+              >
                 <Text style={styles.pdfIcon}>📄</Text>
               </View>
             ) : thumbUri && !imageError ? (
@@ -247,7 +276,12 @@ export const DocumentCard = React.memo(function DocumentCard({
                 }}
               />
             ) : (
-              <View style={[styles.pdfIconWrap, { backgroundColor: colors.surface }]}>
+              <View
+                style={[
+                  styles.pdfIconWrap,
+                  { backgroundColor: colors.surface, borderColor: colors.borderLight },
+                ]}
+              >
                 <Text style={styles.pdfIcon}>🖼️</Text>
               </View>
             )}
@@ -301,7 +335,8 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 38,
     height: 38,
-    borderRadius: 9,
+    borderRadius: 10,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -331,7 +366,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
-    borderWidth: 0.5,
+    borderWidth: 1,
   },
   statusBadgeText: {
     fontSize: 11,
@@ -405,6 +440,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 6,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -433,4 +469,3 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 });
-

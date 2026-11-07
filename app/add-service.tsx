@@ -467,7 +467,20 @@ export default function AddServiceScreen() {
       behavior={Platform.OS === 'android' ? 'height' : 'padding'}
     >
       {/* ── Header ── */}
-      <FormHeader title={isEditMode ? 'Edit Maintenance' : 'Record Maintenance'} />
+      <FormHeader
+        title={isEditMode ? 'Edit Maintenance' : 'Record Maintenance'}
+        rightAction={
+          <TouchableOpacity
+            onPress={handleSave}
+            style={[styles.headerSaveBtn, { backgroundColor: '#EA580C' }]}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Save Maintenance Record"
+          >
+            <Text style={styles.headerSaveBtnText}>Save</Text>
+          </TouchableOpacity>
+        }
+      />
 
       {/* ── Vehicle Context ── */}
       <VehicleContextHeader label="Recording for" />
@@ -921,11 +934,13 @@ export default function AddServiceScreen() {
       {/* ── Save ── */}
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, Spacing.lg) }]}>
         <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: colors.primary }]}
+          style={[styles.saveButton, { backgroundColor: '#EA580C' }]}
           onPress={handleSave}
           activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={isEditMode ? 'Update Maintenance' : 'Save Maintenance Record'}
         >
-          <Text style={[Typography.button, { color: colors.textOnPrimary }]}>
+          <Text style={[Typography.button, { color: '#FFFFFF', fontWeight: '800' }]}>
             {isEditMode ? 'Update Maintenance ✏️' : 'Save Maintenance Record 🔧'}
           </Text>
         </TouchableOpacity>
@@ -1129,5 +1144,15 @@ const styles = StyleSheet.create({
     width: '95%',
     height: '80%',
     borderRadius: 12,
+  },
+  headerSaveBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: Sizing.radiusFull,
+  },
+  headerSaveBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
   },
 });

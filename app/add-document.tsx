@@ -1,50 +1,81 @@
 /**
  * Add / Edit / Renew Document — Modal Form
  *
- * Adds vehicle documents: RC, Insurance, PUC, FASTag, Warranty.
- * Supports document number, insurer name, issue/expiry dates.
- * Photo attachment via expo-image-picker.
+ * Adds vehicle documents: RC, Insurance, PUC, FASTag, Warranty, Fitness, etc.
+ * Supports document number, insurer/provider name, issue/expiry dates with quick validity presets.
+ * Photo and PDF attachment via expo-image-picker and expo-document-picker.
  *
  * RENEWAL MODE: If opened with ?renewFrom=<docId>&renewType=<type>,
  * creates a new document and supersedes the old one.
  *
- * Charter user story: "Carry a digital copy, not physical."
+ * Styled in the Refined Technical Automotive Cockpit design:
+ * - Standardized FormHeader with circular back button and quick save action
+ * - Vehicle context card showing active vehicle & current baseline
+ * - Document type selector grid with icons
+ * - Dynamic document number and provider inputs
+ * - Issue & Expiry date inputs with "Set Today" and dynamic validity presets (+6m, +1y, +3y, +5y)
+ * - Regulatory compliance notices (PUC ₹10k fine warning, FASTag KYC notice)
+ * - High-contrast attachment preview drawer for Photos & PDFs
+ * - Pinned 52dp Automotive Orange save button
+ * - 100% offline
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  View,
-  Text,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
   StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
-  Pressable,
-  Image,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
+  View,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { copyToPermanentStorage } from '@/utils/attachmentStorage';
 import { useVehicleStore } from '@/stores/vehicleStore';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { Typography, Spacing, Sizing } from '@/constants/theme';
-import { DocumentType, DOCUMENT_TYPE_LABELS, DOCUMENT_TYPE_ICONS, getDocumentTypesForVehicle } from '@/constants/documentTypes';
-import { displayToISO, isoToDisplay, formatDateInput, validateDateDisplay } from '@/utils/dateInput';
+import {
+  DocumentType,
+  DOCUMENT_TYPE_LABELS,
+  DOCUMENT_TYPE_ICONS,
+  getDocumentTypesForVehicle,
+} from '@/constants/documentTypes';
+import { VehicleType } from '@/constants/fuelTypes';
+import {
+  displayToISO,
+  isoToDisplay,
+  formatDateInput,
+  validateDateDisplay,
+} from '@/utils/dateInput';
+import { todayISO } from '@/utils/date';
 import { FormHeader } from '@/components/FormHeader';
 import { NoVehicleState } from '@/components/NoVehicleState';
 import * as documentRepo from '@/database/repositories/documentRepo';
+import {
+  copyToPermanentStorage,
+  openAttachment,
+  isPdfAttachment,
+} from '@/utils/attachmentStorage';
 
 export default function AddDocumentScreen() {
   const colors = useThemeColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ id?: string; renewFrom?: string; renewType?: string; vehicleId?: string }>();
+  const params = useLocalSearchParams<{
+    id?: string;
+    renewFrom?: string;
+    renewType?: string;
+    vehicleId?: string;
+  }>();
+
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
   const selectVehicle = useVehicleStore((s) => s.selectVehicle);
   const addDocument = useDocumentStore((s) => s.addDocument);
@@ -71,6 +102,7 @@ export default function AddDocumentScreen() {
   const [expiryDate, setExpiryDate] = useState('');
   const [notes, setNotes] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [viewerUri, setViewerUri] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   // Load existing document for edit mode
@@ -104,10 +136,56 @@ export default function AddDocumentScreen() {
     return <NoVehicleState />;
   }
 
+  const isTwoWheeler = selectedVehicle.vehicle_type === VehicleType.TWO_WHEELER;
+
+  const handleIssueDateChange = (text: string) => {
+    const formatted = formatDateInput(text, issueDate);
+    setIssueDate(formatted);
+    setError('');
+  };
+
+  const handleExpiryDateChange = (text: string) => {
+    const formatted = formatDateInput(text, expiryDate);
+    setExpiryDate(formatted);
+    setError('');
+  };
+
+  const handleSetIssueToday = () => {
+    const today = todayISO();
+    setIssueDate(isoToDisplay(today));
+    setError('');
+  };
+
+  const applyPresetMonths = (months: number) => {
+    let base = new Date();
+    if (issueDate.trim()) {
+      const issueVal = validateDateDisplay(issueDate, 'Issue date');
+      if (issueVal.isValid) {
+        const iso = displayToISO(issueDate);
+        if (iso) base = new Date(iso);
+      }
+    }
+    const target = new Date(base);
+    target.setMonth(target.getMonth() + months);
+    const isoStr = target.toISOString().split('T')[0];
+    setExpiryDate(isoToDisplay(isoStr));
+    setError('');
+  };
+
+  const handleDocTypeChange = (dt: DocumentType) => {
+    setDocType(dt);
+    setError('');
+    if (dt === DocumentType.PUC && !expiryDate) {
+      const currentYear = new Date().getFullYear();
+      const isNewCar = selectedVehicle?.year && selectedVehicle.year >= currentYear - 1;
+      applyPresetMonths(isNewCar ? 12 : 6);
+    }
+  };
+
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('🖼️ Gallery Locked!', 'We need photo library access to grab your document. Pop into settings and allow it — we\'ll wait! 😄');
+      Alert.alert('Permission Needed', 'Photo library access is needed to attach your document.');
       return;
     }
 
@@ -126,7 +204,7 @@ export default function AddDocumentScreen() {
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('📷 Say Cheese!', 'Camera access is needed to photograph your document. Allow it in settings and let\'s go! 📸');
+      Alert.alert('Permission Needed', 'Camera access is needed to photograph your document.');
       return;
     }
 
@@ -141,20 +219,11 @@ export default function AddDocumentScreen() {
     }
   };
 
-  const handlePickPhoto = () => {
-    Alert.alert('Attach Document 📂', 'How would you like to add it?', [
-      { text: 'Camera', onPress: takePhoto },
-      { text: 'Gallery (Image)', onPress: pickImage },
-      { text: 'Upload PDF', onPress: pickPDF },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  };
-
   const pickPDF = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: 'application/pdf',
-        copyToCacheDirectory: false, // Ensures Android returns content:// URI which ContentResolver streams reliably
+        copyToCacheDirectory: false,
       });
       if (!result.canceled && result.assets && result.assets[0]) {
         const permanentUri = await copyToPermanentStorage(result.assets[0].uri, true);
@@ -165,43 +234,30 @@ export default function AddDocumentScreen() {
     }
   };
 
-  const applyPucPreset = (months: number) => {
-    let base = new Date();
-    if (issueDate.trim()) {
-      const issueVal = validateDateDisplay(issueDate, 'Issue date');
-      if (issueVal.isValid) {
-        const iso = displayToISO(issueDate);
-        if (iso) base = new Date(iso);
+  const handlePickPhoto = () => {
+    Alert.alert('Attach Document 📂', 'Select source:', [
+      { text: '📷 Camera', onPress: takePhoto },
+      { text: '🖼️ Gallery (Image)', onPress: pickImage },
+      { text: '📄 Upload PDF', onPress: pickPDF },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const handleViewAttachment = async () => {
+    if (!photoUri) return;
+    if (isPdfAttachment(photoUri)) {
+      const res = await openAttachment(photoUri, `${DOCUMENT_TYPE_LABELS[docType as DocumentType] || 'Document'}`);
+      if (!res.success && res.message) {
+        Alert.alert('View Document', res.message);
       }
+    } else {
+      setViewerUri(photoUri);
     }
-    const target = new Date(base);
-    target.setMonth(target.getMonth() + months);
-    const isoStr = target.toISOString().split('T')[0];
-    setExpiryDate(isoToDisplay(isoStr));
-  };
-
-  const handleDocTypeChange = (dt: DocumentType) => {
-    setDocType(dt);
-    if (dt === DocumentType.PUC && !expiryDate) {
-      const currentYear = new Date().getFullYear();
-      const isNewCar = selectedVehicle?.year && selectedVehicle.year >= currentYear - 1;
-      applyPucPreset(isNewCar ? 12 : 6);
-    }
-  };
-
-  const handleIssueDateChange = (text: string) => {
-    const formatted = formatDateInput(text, issueDate);
-    setIssueDate(formatted);
-  };
-
-  const handleExpiryDateChange = (text: string) => {
-    const formatted = formatDateInput(text, expiryDate);
-    setExpiryDate(formatted);
   };
 
   const handleSave = () => {
     if (!docType) {
-      setError('Select a document type.');
+      setError('Please select a document type.');
       return;
     }
 
@@ -233,42 +289,37 @@ export default function AddDocumentScreen() {
     setError('');
 
     if (isRenewMode && params.renewFrom) {
-      // Renewal: create new doc and supersede old one
       renewDocument(params.renewFrom, {
         vehicle_id: selectedVehicle.id,
         type: docType,
-        document_number: documentNumber || undefined,
-        insurer_name: insurerName || undefined,
+        document_number: documentNumber.trim() || undefined,
+        insurer_name: insurerName.trim() || undefined,
         issue_date: parsedIssue,
         expiry_date: parsedExpiry,
-        notes: notes || undefined,
+        notes: notes.trim() || undefined,
         file_uri: photoUri || undefined,
       });
-      Alert.alert('🎉 Renewed!', 'Fresh document added! The old one\'s been gracefully retired — out with the old, in with the new! 🔄', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      router.back();
     } else if (isEditMode && params.id) {
       editDocument(params.id, {
         type: docType,
-        document_number: documentNumber || null,
-        insurer_name: insurerName || null,
+        document_number: documentNumber.trim() || null,
+        insurer_name: insurerName.trim() || null,
         issue_date: parsedIssue || null,
         expiry_date: parsedExpiry || null,
-        notes: notes || null,
+        notes: notes.trim() || null,
         file_uri: photoUri || null,
       });
-      Alert.alert('✅ Looking Good!', 'Document updated and looking sharp 📌', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      router.back();
     } else {
       addDocument({
         vehicle_id: selectedVehicle.id,
         type: docType,
-        document_number: documentNumber || undefined,
-        insurer_name: insurerName || undefined,
+        document_number: documentNumber.trim() || undefined,
+        insurer_name: insurerName.trim() || undefined,
         issue_date: parsedIssue,
         expiry_date: parsedExpiry,
-        notes: notes || undefined,
+        notes: notes.trim() || undefined,
         file_uri: photoUri || undefined,
       });
       router.back();
@@ -286,93 +337,173 @@ export default function AddDocumentScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'android' ? 'height' : 'padding'}
     >
-      {/* ── Header ── */}
-      <FormHeader title={headerTitle} />
+      {/* ── FormHeader ── */}
+      <FormHeader
+        title={headerTitle}
+        subtitle={selectedVehicle.nickname}
+        rightAction={
+          <TouchableOpacity
+            onPress={handleSave}
+            style={[styles.headerSaveBtn, { backgroundColor: '#EA580C' }]}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Save Document"
+          >
+            <Text style={styles.headerSaveBtnText}>Save</Text>
+          </TouchableOpacity>
+        }
+      />
 
-      {/* ── Locked Vehicle Context Banner ── */}
-      <View style={[styles.vehicleContextBanner, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <Text style={[styles.vehicleContextLabel, { color: colors.textSecondary }]}>
-          For Vehicle:
-        </Text>
-        <Text style={[styles.vehicleContextName, { color: colors.text }]} numberOfLines={1}>
-          {selectedVehicle.nickname}
-        </Text>
-        {selectedVehicle.registration_number ? (
-          <Text style={[styles.vehicleContextReg, { color: colors.textTertiary }]}>
-            • {selectedVehicle.registration_number}
-          </Text>
-        ) : null}
-      </View>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 100 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Vehicle Context Card ── */}
+        <View
+          style={[
+            styles.vehicleContextCard,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
+          <View
+            style={[
+              styles.vehicleIconWrap,
+              { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+            ]}
+          >
+            <Text style={{ fontSize: 18 }}>{isTwoWheeler ? '🏍️' : '🚗'}</Text>
+          </View>
 
-      <ScrollView contentContainerStyle={styles.form} showsVerticalScrollIndicator={false}>
-        {/* ── Renewal Banner ── */}
+          <View style={{ flex: 1 }}>
+            <View style={styles.vehicleNameRow}>
+              <Text style={[styles.vehicleNickname, { color: colors.text }]}>
+                {selectedVehicle.nickname}
+              </Text>
+              {selectedVehicle.registration_number ? (
+                <View
+                  style={[
+                    styles.regBadge,
+                    { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+                  ]}
+                >
+                  <Text style={[styles.regBadgeText, { color: colors.textSecondary }]}>
+                    {selectedVehicle.registration_number}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            <Text style={[styles.vehicleSubtext, { color: colors.textSecondary }]}>
+              Current Odometer: {selectedVehicle.current_odometer !== null && selectedVehicle.current_odometer !== undefined ? `${selectedVehicle.current_odometer.toLocaleString('en-IN')} km` : 'Not set'}
+            </Text>
+          </View>
+        </View>
+
+        {/* ── Renewal Informational Banner ── */}
         {isRenewMode && (
-          <View style={[styles.renewBanner, { backgroundColor: colors.primaryLight }]}>
-            <Text style={[Typography.bodySmall, { color: colors.primary }]}>
-              🔄 Renewing document. The old record will be marked as superseded.
+          <View
+            style={[
+              styles.renewBanner,
+              { backgroundColor: colors.surfaceSecondary, borderColor: colors.primary },
+            ]}
+          >
+            <Text style={[styles.renewBannerTitle, { color: colors.primary }]}>
+              🔄 Document Renewal Mode
+            </Text>
+            <Text style={[styles.renewBannerText, { color: colors.textSecondary }]}>
+              Saving will link this fresh record as active and archive the previous document into historical superseded records.
             </Text>
           </View>
         )}
 
-        {/* ── Document Type ── */}
-        <Text style={[styles.label, { color: colors.textSecondary }]}>Document Type *</Text>
+        {/* ── Document Type Selector Grid ── */}
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+          DOCUMENT TYPE *
+        </Text>
         <View style={styles.chipGrid}>
-          {availableDocTypes.map((dt) => (
-            <Pressable
-              key={dt}
-              onPress={() => handleDocTypeChange(dt)}
-              style={[
-                styles.chip,
-                {
-                  backgroundColor: docType === dt ? colors.primary : colors.surface,
-                  borderColor: docType === dt ? colors.primary : colors.border,
-                },
-              ]}
-            >
-              <Text style={styles.chipEmoji}>{DOCUMENT_TYPE_ICONS[dt] || '📄'}</Text>
-              <Text
+          {availableDocTypes.map((dt) => {
+            const isSelected = docType === dt;
+            return (
+              <TouchableOpacity
+                key={dt}
+                onPress={() => handleDocTypeChange(dt)}
                 style={[
-                  styles.chipText,
-                  { color: docType === dt ? colors.textOnPrimary : colors.text },
+                  styles.docTypeChip,
+                  {
+                    backgroundColor: isSelected ? colors.surfaceSecondary : colors.surface,
+                    borderColor: isSelected ? colors.primary : colors.borderLight,
+                  },
                 ]}
+                activeOpacity={0.7}
               >
-                {DOCUMENT_TYPE_LABELS[dt]}
-              </Text>
-            </Pressable>
-          ))}
+                <Text style={styles.chipEmoji}>{DOCUMENT_TYPE_ICONS[dt] || '📄'}</Text>
+                <Text
+                  style={[
+                    styles.docTypeChipText,
+                    {
+                      color: isSelected ? colors.primary : colors.text,
+                      fontWeight: isSelected ? '800' : '600',
+                    },
+                  ]}
+                >
+                  {DOCUMENT_TYPE_LABELS[dt]}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
-        {/* ── Document Number (Dynamic Label) ── */}
-        <Text style={[styles.label, { color: colors.textSecondary }]}>
+        {/* ── Document Identifier / Number ── */}
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginTop: Spacing.sm }]}>
           {docType === DocumentType.FASTAG
-            ? 'FASTag ID / Barcode / Wallet ID'
+            ? 'FASTAG WALLET / BARCODE ID'
             : docType === DocumentType.PUC
-              ? 'PUC Certificate Number'
-              : 'Document Number'}
+            ? 'PUC CERTIFICATE NUMBER'
+            : docType === DocumentType.INSURANCE
+            ? 'POLICY NUMBER'
+            : 'DOCUMENT IDENTIFIER / NUMBER'}
         </Text>
         <TextInput
-          style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
+          style={[
+            styles.input,
+            { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border },
+          ]}
           placeholder={
             docType === DocumentType.FASTAG
-              ? 'e.g., 34161FA8902...'
+              ? 'e.g. 34161FA890209...'
               : docType === DocumentType.PUC
-                ? 'e.g., MH12-PUC-2026-...'
-                : 'e.g., POL-123456789'
+              ? 'e.g. MH12-PUC-2026-0982'
+              : 'e.g. POL-123456789'
           }
           placeholderTextColor={colors.textTertiary}
           value={documentNumber}
           onChangeText={setDocumentNumber}
+          autoCapitalize="characters"
         />
 
-        {/* ── Insurer / Issuing Bank Name ── */}
+        {/* ── Insurer / Provider (Insurance or FASTag) ── */}
         {(docType === DocumentType.INSURANCE || docType === DocumentType.FASTAG) && (
           <>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>
-              {docType === DocumentType.FASTAG ? 'Issuing Bank / Tag Provider' : 'Insurer Name'}
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginTop: Spacing.md }]}>
+              {docType === DocumentType.FASTAG
+                ? 'ISSUING BANK / WALLET PROVIDER'
+                : 'INSURANCE COMPANY / PROVIDER'}
             </Text>
             <TextInput
-              style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-              placeholder={docType === DocumentType.FASTAG ? 'e.g., ICICI Bank, Paytm, IDFC FIRST, SBI' : 'e.g., ICICI Lombard'}
+              style={[
+                styles.input,
+                { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border },
+              ]}
+              placeholder={
+                docType === DocumentType.FASTAG
+                  ? 'e.g. ICICI Bank, Paytm, IDFC FIRST, SBI'
+                  : 'e.g. ICICI Lombard, HDFC ERGO, Bajaj Allianz'
+              }
               placeholderTextColor={colors.textTertiary}
               value={insurerName}
               onChangeText={setInsurerName}
@@ -380,159 +511,246 @@ export default function AddDocumentScreen() {
           </>
         )}
 
-        {/* ── Issue Date ── */}
-        <Text style={[styles.label, { color: colors.textSecondary }]}>Issue Date</Text>
-        <TextInput
-          style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-          placeholder="DD/MM/YYYY (e.g., 15/03/2026)"
-          placeholderTextColor={colors.textTertiary}
-          value={issueDate}
-          onChangeText={handleIssueDateChange}
-          keyboardType="number-pad"
-          maxLength={10}
-        />
-
-        {/* ── Expiry Date & Presets ── */}
-        <Text style={[styles.label, { color: colors.textSecondary }]}>Expiry Date</Text>
-        <TextInput
-          style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-          placeholder="DD/MM/YYYY (e.g., 15/03/2027)"
-          placeholderTextColor={colors.textTertiary}
-          value={expiryDate}
-          onChangeText={handleExpiryDateChange}
-          keyboardType="number-pad"
-          maxLength={10}
-        />
-
-        {/* ── PUC Specific Quick Presets & Fine Warning ── */}
-        {docType === DocumentType.PUC && (
-          <View style={{ marginTop: Spacing.sm }}>
-            <View style={{ flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.xs }}>
-              <TouchableOpacity
-                onPress={() => applyPucPreset(6)}
-                style={{
-                  flex: 1,
-                  paddingVertical: 8,
-                  paddingHorizontal: 8,
-                  borderRadius: 6,
-                  backgroundColor: colors.surface,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  alignItems: 'center',
-                }}
-              >
-                <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
-                  +6 Months (Standard)
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => applyPucPreset(12)}
-                style={{
-                  flex: 1,
-                  paddingVertical: 8,
-                  paddingHorizontal: 8,
-                  borderRadius: 6,
-                  backgroundColor: colors.surface,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  alignItems: 'center',
-                }}
-              >
-                <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
-                  +1 Year (New BS6)
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View
-              style={{
-                backgroundColor: '#FEF2F2',
-                borderColor: '#FECACA',
-                borderWidth: 1,
-                borderRadius: 8,
-                padding: Spacing.md,
-                marginTop: Spacing.xs,
-              }}
+        {/* ── Dates Row: Issue & Expiry ── */}
+        <View style={styles.dateBlock}>
+          {/* Issue Date */}
+          <View style={styles.dateHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginBottom: 0 }]}>
+              ISSUE DATE (DD/MM/YYYY)
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.dateShortcutChip,
+                { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+              ]}
+              onPress={handleSetIssueToday}
+              activeOpacity={0.7}
             >
-              <Text style={{ fontSize: 12, color: '#991B1B', lineHeight: 17 }}>
-                🚨 <Text style={{ fontWeight: '700' }}>Immediate ₹10,000 Fine Risk:</Text> Under Section 190(2) of the Motor Vehicles Act, driving with an expired PUC carries an immediate ₹10,000 court fine. Renewing on time takes just 5 minutes at any petrol pump.
+              <Text style={[styles.dateShortcutText, { color: colors.primary }]}>
+                📅 Set Today
               </Text>
-            </View>
+            </TouchableOpacity>
           </View>
-        )}
 
-        {/* ── FASTag KYC Notice ── */}
-        {docType === DocumentType.FASTAG && (
-          <View
-            style={{
-              backgroundColor: colors.primaryLight,
-              borderColor: colors.primary,
-              borderWidth: 1,
-              borderRadius: 8,
-              padding: Spacing.md,
-              marginTop: Spacing.sm,
-            }}
-          >
-            <Text style={{ fontSize: 12, color: colors.primary, lineHeight: 17 }}>
-              💳 <Text style={{ fontWeight: '700' }}>FASTag Validity & KYC:</Text> Ensure your tag is linked to an active KYC wallet. Highway toll plazas charge double toll in cash for blacklisted or inactive tags.
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.surface,
+                color: colors.text,
+                borderColor: colors.border,
+                fontVariant: ['tabular-nums'],
+              },
+            ]}
+            placeholder="DD/MM/YYYY"
+            placeholderTextColor={colors.textTertiary}
+            value={issueDate}
+            onChangeText={handleIssueDateChange}
+            keyboardType="number-pad"
+            maxLength={10}
+          />
+
+          {/* Expiry Date */}
+          <View style={[styles.dateHeaderRow, { marginTop: Spacing.md }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginBottom: 0 }]}>
+              EXPIRY DATE (DD/MM/YYYY)
             </Text>
           </View>
-        )}
 
-        {/* ── Photo / PDF Attachment ── */}
-        <Text style={[styles.label, { color: colors.textSecondary }]}>Document Photo or PDF</Text>
-        {photoUri ? (
-          <View style={styles.photoContainer}>
-            {photoUri.toLowerCase().endsWith('.pdf') ? (
-              // PDF preview placeholder
-              <View style={[styles.pdfPreview, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <Text style={{ fontSize: 48 }}>📄</Text>
-                <Text style={[Typography.body, { color: colors.text, fontWeight: '600', marginTop: Spacing.sm }]}>PDF Document</Text>
-                <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs, textAlign: 'center' }]}
-                  numberOfLines={1}>
-                  {photoUri.split('/').pop()}
-                </Text>
-              </View>
-            ) : (
-              <Image source={{ uri: photoUri }} style={styles.photoPreview} resizeMode="cover" />
-            )}
-            <View style={styles.photoActions}>
+          {/* Validity Preset Chips */}
+          <View style={styles.presetChipsRow}>
+            {(docType === DocumentType.PUC
+              ? [6, 12]
+              : docType === DocumentType.INSURANCE
+              ? [12, 36, 60]
+              : [6, 12, 36, 60]
+            ).map((m) => (
               <TouchableOpacity
-                style={[styles.photoActionButton, { backgroundColor: colors.primary }]}
-                onPress={handlePickPhoto}
+                key={m}
+                style={[
+                  styles.presetChip,
+                  { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+                ]}
+                onPress={() => applyPresetMonths(m)}
+                activeOpacity={0.7}
               >
-                <Text style={[Typography.caption, { color: colors.textOnPrimary }]}>Change</Text>
+                <Text style={[styles.presetChipText, { color: colors.primary }]}>
+                  +{m >= 12 ? `${m / 12}y` : `${m}m`} ({m >= 12 ? `${m / 12} Year${m > 12 ? 's' : ''}` : `${m} Months`})
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.surface,
+                color: colors.text,
+                borderColor: colors.border,
+                fontVariant: ['tabular-nums'],
+              },
+            ]}
+            placeholder="DD/MM/YYYY"
+            placeholderTextColor={colors.textTertiary}
+            value={expiryDate}
+            onChangeText={handleExpiryDateChange}
+            keyboardType="number-pad"
+            maxLength={10}
+          />
+        </View>
+
+        {/* ── Regulatory / Compliance Notice Cards ── */}
+        {docType === DocumentType.PUC ? (
+          <View
+            style={[
+              styles.noticeCard,
+              { backgroundColor: colors.statusCriticalBg, borderColor: colors.statusCritical },
+            ]}
+          >
+            <Text style={[styles.noticeTitle, { color: colors.statusCritical }]}>
+              🚨 Mandatory PUC Compliance (₹10,000 Fine)
+            </Text>
+            <Text style={[styles.noticeText, { color: colors.text }]}>
+              Under Section 190(2) of the Motor Vehicles Act, driving with an expired PUC carries a ₹10,000 fine and possible 3-month licence disqualification. Keep this renewed!
+            </Text>
+          </View>
+        ) : docType === DocumentType.FASTAG ? (
+          <View
+            style={[
+              styles.noticeCard,
+              { backgroundColor: colors.surfaceSecondary, borderColor: colors.primary },
+            ]}
+          >
+            <Text style={[styles.noticeTitle, { color: colors.primary }]}>
+              💳 FASTag KYC & Wallet Status
+            </Text>
+            <Text style={[styles.noticeText, { color: colors.textSecondary }]}>
+              Ensure your tag wallet maintains positive balance and complete KYC. Toll booths charge double user fee in cash for blacklisted or inactive tags.
+            </Text>
+          </View>
+        ) : null}
+
+        {/* ── Document Photo or PDF Attachment ── */}
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginTop: Spacing.md }]}>
+          DOCUMENT PHOTO OR PDF ATTACHMENT 📂
+        </Text>
+
+        {photoUri ? (
+          <View
+            style={[
+              styles.attachmentContainer,
+              { backgroundColor: colors.surface, borderColor: colors.borderLight },
+            ]}
+          >
+            {isPdfAttachment(photoUri) ? (
+              <TouchableOpacity
+                style={styles.attachmentPreviewRow}
+                onPress={handleViewAttachment}
+                activeOpacity={0.8}
+              >
+                <View
+                  style={[
+                    styles.pdfIconWrap,
+                    { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+                  ]}
+                >
+                  <Text style={{ fontSize: 26 }}>📄</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+                  <Text style={[styles.attachmentTitle, { color: colors.text }]}>
+                    PDF Document File
+                  </Text>
+                  <Text style={[styles.attachmentSubtitle, { color: colors.textTertiary }]} numberOfLines={1}>
+                    {photoUri.split('/').pop()} (tap to view)
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.attachmentPreviewRow}
+                onPress={handleViewAttachment}
+                activeOpacity={0.8}
+              >
+                <Image
+                  source={{ uri: photoUri }}
+                  style={styles.imageThumbnail}
+                  resizeMode="cover"
+                />
+                <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+                  <Text style={[styles.attachmentTitle, { color: colors.text }]}>
+                    Document Scan Photo
+                  </Text>
+                  <Text style={[styles.attachmentSubtitle, { color: colors.textTertiary }]} numberOfLines={1}>
+                    {photoUri.split('/').pop()} (tap to preview)
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
+            <View style={[styles.attachmentActions, { borderTopColor: colors.borderLight }]}>
+              <TouchableOpacity
+                style={[styles.attachActionBtn, { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight }]}
+                onPress={handleViewAttachment}
+                activeOpacity={0.8}
+              >
+                <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700' }}>
+                  {isPdfAttachment(photoUri) ? 'View PDF 📄' : 'View Image 👁️'}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.photoActionButton, { backgroundColor: colors.danger }]}
-                onPress={() => setPhotoUri(null)}
+                style={[styles.attachActionBtn, { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight }]}
+                onPress={handlePickPhoto}
+                activeOpacity={0.8}
               >
-                <Text style={[Typography.caption, { color: '#FFFFFF' }]}>Remove</Text>
+                <Text style={{ color: colors.textSecondary, fontSize: 12, fontWeight: '700' }}>
+                  Change
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.attachActionBtn, { backgroundColor: colors.dangerLight, borderColor: colors.danger + '30' }]}
+                onPress={() => setPhotoUri(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '700' }}>
+                  Remove
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
         ) : (
           <TouchableOpacity
-            style={[styles.photoButton, { borderColor: colors.primary, backgroundColor: colors.surface }]}
+            style={[
+              styles.attachPlaceholder,
+              { borderColor: colors.borderLight, backgroundColor: colors.surface },
+            ]}
             onPress={handlePickPhoto}
             activeOpacity={0.7}
           >
-            <Text style={{ fontSize: 28 }}>📷</Text>
-            <Text style={[Typography.bodySmall, { color: colors.primary, marginTop: Spacing.xs }]}>
-              Take Photo, Gallery, or Upload PDF
+            <Text style={{ fontSize: 26 }}>📷</Text>
+            <Text style={[Typography.bodySmall, { color: colors.primary, fontWeight: '700', marginTop: Spacing.xs }]}>
+              Take Photo, Pick Image, or Upload PDF
             </Text>
-            <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: Spacing.xs }]}>
-              Carry a digital copy — don't carry physical!
+            <Text style={[Typography.caption, { color: colors.textTertiary, marginTop: 2 }]}>
+              Carry a digital copy safely on your device — never worry about physical papers!
             </Text>
           </TouchableOpacity>
         )}
 
         {/* ── Notes ── */}
-        <Text style={[styles.label, { color: colors.textSecondary }]}>Notes</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginTop: Spacing.md }]}>
+          NOTES (OPTIONAL)
+        </Text>
         <TextInput
-          style={[styles.input, styles.inputMultiline, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-          placeholder="Any notes..."
+          style={[
+            styles.textArea,
+            {
+              backgroundColor: colors.surface,
+              color: colors.text,
+              borderColor: colors.border,
+            },
+          ]}
+          placeholder="Any notes (e.g., zero depreciation add-on, cashless garage network, RSA details)..."
           placeholderTextColor={colors.textTertiary}
           value={notes}
           onChangeText={setNotes}
@@ -541,22 +759,39 @@ export default function AddDocumentScreen() {
         />
 
         {error ? (
-          <Text style={[Typography.bodySmall, { color: colors.danger, marginTop: Spacing.md }]}>
-            ❌ {error}
-          </Text>
+          <View style={[styles.errorBox, { backgroundColor: colors.dangerLight, borderColor: colors.danger }]}>
+            <Text style={[styles.errorText, { color: colors.danger }]}>
+              ⚠️ {error}
+            </Text>
+          </View>
         ) : null}
-
-        <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* ── Save ── */}
-      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, Spacing.lg) }]}>
+      {/* ── Pinned Bottom Bar ── */}
+      <View
+        style={[
+          styles.bottomBar,
+          {
+            backgroundColor: colors.surface,
+            borderTopColor: colors.borderLight,
+            paddingBottom: Math.max(insets.bottom, Spacing.sm),
+          },
+        ]}
+      >
         <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: isRenewMode ? colors.success : colors.primary }]}
+          style={[styles.saveButton, { backgroundColor: '#EA580C' }]}
           onPress={handleSave}
           activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={
+            isRenewMode
+              ? 'Save Renewed Document'
+              : isEditMode
+              ? 'Update Document'
+              : 'Save Document'
+          }
         >
-          <Text style={[Typography.button, { color: '#FFFFFF' }]}>
+          <Text style={[Typography.button, { color: '#FFFFFF', fontWeight: '800', fontSize: 16 }]}>
             {isRenewMode
               ? 'Save Renewed Document 🔄'
               : isEditMode
@@ -565,92 +800,310 @@ export default function AddDocumentScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* ── Fullscreen Image Preview Modal ── */}
+      <Modal
+        visible={!!viewerUri}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewerUri(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalClose}
+            onPress={() => setViewerUri(null)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.modalCloseText}>✕ Close</Text>
+          </TouchableOpacity>
+          {viewerUri && (
+            <Image
+              source={{ uri: viewerUri }}
+              style={styles.modalImage}
+              resizeMode="contain"
+            />
+          )}
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: Spacing.lg, paddingTop: Spacing.section, paddingBottom: Spacing.md,
-    borderBottomWidth: 1,
+  container: {
+    flex: 1,
   },
-  headerButton: { width: 60 },
-  form: { padding: Spacing.xxl },
-  label: {
-    fontSize: 13, fontWeight: '600', textTransform: 'uppercase',
-    letterSpacing: 0.5, marginBottom: Spacing.sm, marginTop: Spacing.lg,
+  scrollView: {
+    flex: 1,
   },
-  chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
-  chip: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.xs,
-    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-    borderRadius: Sizing.radiusFull, borderWidth: 1.5,
-    minHeight: Sizing.touchTarget,
+  scrollContent: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
   },
-  chipEmoji: { fontSize: 16 },
-  chipText: { fontSize: 13, fontWeight: '600' },
-  input: {
-    height: Sizing.primaryButton, borderRadius: Sizing.radiusMd,
-    borderWidth: 1.5, paddingHorizontal: Spacing.lg, fontSize: 16,
+  headerSaveBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: Sizing.radiusFull,
   },
-  inputMultiline: { height: 80, paddingTop: Spacing.md, textAlignVertical: 'top' },
-  renewBanner: {
-    borderRadius: Sizing.radiusMd,
-    padding: Spacing.lg,
+  headerSaveBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  vehicleContextCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: Sizing.radiusLg,
+    borderWidth: 1,
     marginBottom: Spacing.md,
+    gap: Spacing.sm,
   },
-  // ── Photo ──
-  photoButton: {
-    borderRadius: Sizing.radiusMd, borderWidth: 2, borderStyle: 'dashed',
-    padding: Spacing.xxl, alignItems: 'center', justifyContent: 'center',
-  },
-  photoContainer: {
-    borderRadius: Sizing.radiusMd, overflow: 'hidden',
-  },
-  photoPreview: {
-    width: '100%', height: 200, borderRadius: Sizing.radiusMd,
-  },
-  pdfPreview: {
-    width: '100%',
-    minHeight: 120,
-    borderRadius: Sizing.radiusMd,
+  vehicleIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing.xxl,
-    paddingHorizontal: Spacing.lg,
   },
-  photoActions: {
-    flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm,
-  },
-  photoActionButton: {
-    flex: 1, height: 36, borderRadius: Sizing.radiusMd,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  bottomBar: { padding: Spacing.lg },
-  saveButton: {
-    height: Sizing.primaryButton, borderRadius: Sizing.radiusMd,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  vehicleContextBanner: {
+  vehicleNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: 1,
+    gap: 8,
+  },
+  vehicleNickname: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  regBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  regBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  vehicleSubtext: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  renewBanner: {
+    padding: Spacing.md,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+  },
+  renewBannerTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  renewBannerText: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginBottom: Spacing.xs,
+  },
+  chipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.xs,
+    marginBottom: Spacing.md,
   },
-  vehicleContextLabel: {
-    fontSize: 13,
-    fontWeight: '500',
+  docTypeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 8,
+    borderRadius: Sizing.radiusFull,
+    borderWidth: 1,
   },
-  vehicleContextName: {
-    fontSize: 13,
+  chipEmoji: {
+    fontSize: 15,
+  },
+  docTypeChipText: {
+    fontSize: 12,
+  },
+  input: {
+    height: 48,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    fontSize: 15,
+  },
+  dateBlock: {
+    marginTop: Spacing.sm,
+  },
+  dateHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.xs,
+  },
+  dateShortcutChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Sizing.radiusFull,
+    borderWidth: 1,
+  },
+  dateShortcutText: {
+    fontSize: 11,
     fontWeight: '700',
   },
-  vehicleContextReg: {
+  presetChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: Spacing.xs,
+  },
+  presetChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Sizing.radiusSm,
+    borderWidth: 1,
+  },
+  presetChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  noticeCard: {
+    padding: Spacing.md,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    marginTop: Spacing.md,
+  },
+  noticeTitle: {
     fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 3,
+  },
+  noticeText: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  attachmentContainer: {
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  attachmentPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  imageThumbnail: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+  },
+  pdfIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachmentTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  attachmentSubtitle: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  attachmentActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.xs,
+    borderTopWidth: 1,
+  },
+  attachActionBtn: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: Sizing.radiusSm,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachPlaceholder: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderRadius: Sizing.radiusMd,
+    padding: Spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
+  textArea: {
+    minHeight: 76,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    fontSize: 15,
+    textAlignVertical: 'top',
+  },
+  errorBox: {
+    padding: Spacing.md,
+    borderRadius: Sizing.radiusMd,
+    borderWidth: 1,
+    marginTop: Spacing.sm,
+  },
+  errorText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopWidth: 1,
+    paddingTop: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+  },
+  saveButton: {
+    height: 52,
+    borderRadius: Sizing.radiusLg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Sizing.cardShadow,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalClose: {
+    position: 'absolute',
+    top: 56,
+    right: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    zIndex: 10,
+  },
+  modalCloseText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalImage: {
+    width: '95%',
+    height: '80%',
+    borderRadius: 12,
   },
 });
