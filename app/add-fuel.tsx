@@ -19,7 +19,9 @@
  *   - Delta km → real-time distance progression from previous entry
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import * as ImagePicker from "expo-image-picker";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
@@ -32,17 +34,15 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Stores & Database
-import { useVehicleStore } from '@/stores/vehicleStore';
-import { useFuelStore } from '@/stores/fuelStore';
-import { getCurrencySymbol } from '@/stores/preferencesStore';
-import * as fuelRepo from '@/database/repositories/fuelRepo';
-import { hasWarningsOnly, validateFuelEntry } from '@/engine/validationEngine';
+import * as fuelRepo from "@/database/repositories/fuelRepo";
+import { hasWarningsOnly, validateFuelEntry } from "@/engine/validationEngine";
+import { useFuelStore } from "@/stores/fuelStore";
+import { getCurrencySymbol } from "@/stores/preferencesStore";
+import { useVehicleStore } from "@/stores/vehicleStore";
 
 // Constants & Theme
 import {
@@ -53,17 +53,22 @@ import {
   getFuelSystemLabel,
   getFuelUnitForSystem,
   isHybridFuel,
-} from '@/constants/fuelTypes';
-import { Sizing, Spacing, Typography } from '@/constants/theme';
-import { useThemeColors } from '@/hooks/useThemeColors';
+} from "@/constants/fuelTypes";
+import { Sizing, Spacing } from "@/constants/theme";
+import { useThemeColors } from "@/hooks/useThemeColors";
 
 // Components & Utils
-import { CngTankIcon } from '@/components/CngTankIcon';
-import { FormHeader } from '@/components/FormHeader';
-import { NoVehicleState } from '@/components/NoVehicleState';
-import { todayISO } from '@/utils/date';
-import { displayToISO, formatDateInput, isoToDisplay, validateDateDisplay } from '@/utils/dateInput';
-import { formatMileage } from '@/utils/format';
+import { CngTankIcon } from "@/components/CngTankIcon";
+import { FormHeader } from "@/components/FormHeader";
+import { NoVehicleState } from "@/components/NoVehicleState";
+import { todayISO } from "@/utils/date";
+import {
+  displayToISO,
+  formatDateInput,
+  isoToDisplay,
+  validateDateDisplay,
+} from "@/utils/dateInput";
+import { formatMileage } from "@/utils/format";
 
 const QUICK_AMOUNTS = [200, 500, 1000, 1500, 2000, 2500] as const;
 
@@ -71,7 +76,11 @@ export default function AddFuelScreen() {
   const colors = useThemeColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ id?: string; vehicleId?: string; odometer?: string }>();
+  const params = useLocalSearchParams<{
+    id?: string;
+    vehicleId?: string;
+    odometer?: string;
+  }>();
 
   // ── Vehicle Stores ──
   const selectedVehicle = useVehicleStore((s) => s.selectedVehicle);
@@ -91,26 +100,36 @@ export default function AddFuelScreen() {
   // ── Form State ──
   const [date, setDate] = useState(todayISO());
   const [dateDisplay, setDateDisplay] = useState(isoToDisplay(todayISO()));
-  const [odometer, setOdometer] = useState(!params.id && params.odometer ? String(params.odometer) : '');
-  const [fuelAmount, setFuelAmount] = useState('');
-  const [pricePerUnit, setPricePerUnit] = useState('');
-  const [totalCostInput, setTotalCostInput] = useState('');
-  const [lastEdited, setLastEdited] = useState<'fuelAmount' | 'totalCost'>('fuelAmount');
-  const [fuelStation, setFuelStation] = useState('');
+  const [odometer, setOdometer] = useState(
+    !params.id && params.odometer ? String(params.odometer) : "",
+  );
+  const [fuelAmount, setFuelAmount] = useState("");
+  const [pricePerUnit, setPricePerUnit] = useState("");
+  const [totalCostInput, setTotalCostInput] = useState("");
+  const [lastEdited, setLastEdited] = useState<"fuelAmount" | "totalCost">(
+    "fuelAmount",
+  );
+  const [fuelStation, setFuelStation] = useState("");
   const [isFullTank, setIsFullTank] = useState(true);
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState("");
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
-  const [fuelSystem, setFuelSystem] = useState<'primary' | 'secondary'>('primary');
-  const [batteryStartPercent, setBatteryStartPercent] = useState('');
-  const [batteryEndPercent, setBatteryEndPercent] = useState('');
+  const [fuelSystem, setFuelSystem] = useState<"primary" | "secondary">(
+    "primary",
+  );
+  const [batteryStartPercent, setBatteryStartPercent] = useState("");
+  const [batteryEndPercent, setBatteryEndPercent] = useState("");
 
   // ── Frequent Stations ──
   const knownStations = useMemo(() => fuelRepo.getFrequentFuelStations(), []);
   const stationSuggestions = useMemo(() => {
     const query = fuelStation.trim().toLowerCase();
     return knownStations
-      .filter((s) => s.toLowerCase() !== query && (!query || s.toLowerCase().includes(query)))
+      .filter(
+        (s) =>
+          s.toLowerCase() !== query &&
+          (!query || s.toLowerCase().includes(query)),
+      )
       .slice(0, 5);
   }, [knownStations, fuelStation]);
 
@@ -118,9 +137,15 @@ export default function AddFuelScreen() {
   const previousOdometer = useMemo(() => {
     if (!selectedVehicle) return null;
     const isoDate = displayToISO(dateDisplay) || date;
-    const lastEntry = fuelRepo.getFuelEntryBeforeDate(selectedVehicle.id, isoDate);
+    const lastEntry = fuelRepo.getFuelEntryBeforeDate(
+      selectedVehicle.id,
+      isoDate,
+    );
     if (lastEntry) return lastEntry.odometer;
-    if (selectedVehicle.current_odometer && selectedVehicle.current_odometer > 0) {
+    if (
+      selectedVehicle.current_odometer &&
+      selectedVehicle.current_odometer > 0
+    ) {
       return selectedVehicle.current_odometer;
     }
     return null;
@@ -143,12 +168,15 @@ export default function AddFuelScreen() {
         setFuelAmount(existing.fuel_amount.toString());
         setPricePerUnit(existing.price_per_unit.toString());
         setTotalCostInput(existing.total_cost.toFixed(2));
-        setLastEdited('fuelAmount');
-        setFuelStation(existing.fuel_station || '');
+        setLastEdited("fuelAmount");
+        setFuelStation(existing.fuel_station || "");
         setIsFullTank(existing.is_full_tank === 1);
-        setNotes(existing.notes || '');
+        setNotes(existing.notes || "");
         setPhotoUri(existing.receipt_photo_uri || null);
-        if (existing.fuel_system === 'secondary' || existing.fuel_system === 'primary') {
+        if (
+          existing.fuel_system === "secondary" ||
+          existing.fuel_system === "primary"
+        ) {
           setFuelSystem(existing.fuel_system);
         }
         if (existing.battery_start_percent != null) {
@@ -184,14 +212,24 @@ export default function AddFuelScreen() {
   }, [isEditMode, params.odometer, odometer]);
 
   // ── Derived Fuel & EV Specs ──
-  const isHybrid = selectedVehicle ? isHybridFuel(selectedVehicle.fuel_type as FuelType) : false;
-  const isEV = selectedVehicle ? selectedVehicle.fuel_type === FuelType.ELECTRIC : false;
+  const isHybrid = selectedVehicle
+    ? isHybridFuel(selectedVehicle.fuel_type as FuelType)
+    : false;
+  const isEV = selectedVehicle
+    ? selectedVehicle.fuel_type === FuelType.ELECTRIC
+    : false;
   const fuelUnit = selectedVehicle
-    ? (isHybrid
-        ? getFuelUnitForSystem(selectedVehicle.fuel_type as FuelType, fuelSystem)
-        : (FUEL_TYPE_TO_DEFAULT_UNIT[selectedVehicle.fuel_type as FuelType] ?? FuelUnit.LITRES))
+    ? isHybrid
+      ? getFuelUnitForSystem(selectedVehicle.fuel_type as FuelType, fuelSystem)
+      : (FUEL_TYPE_TO_DEFAULT_UNIT[selectedVehicle.fuel_type as FuelType] ??
+        FuelUnit.LITRES)
     : FuelUnit.LITRES;
-  const fuelUnitLabel = fuelUnit === FuelUnit.LITRES ? 'L' : fuelUnit === FuelUnit.KG ? 'kg' : 'kWh';
+  const fuelUnitLabel =
+    fuelUnit === FuelUnit.LITRES
+      ? "L"
+      : fuelUnit === FuelUnit.KG
+        ? "kg"
+        : "kWh";
   const currencySymbol = getCurrencySymbol();
 
   // ── EV Battery % to kWh Calculation ──
@@ -200,7 +238,13 @@ export default function AddFuelScreen() {
     const startP = parseFloat(batteryStartPercent);
     const endP = parseFloat(batteryEndPercent);
     const capacity = selectedVehicle.tank_capacity;
-    if (!isNaN(startP) && !isNaN(endP) && endP > startP && capacity && capacity > 0) {
+    if (
+      !isNaN(startP) &&
+      !isNaN(endP) &&
+      endP > startP &&
+      capacity &&
+      capacity > 0
+    ) {
       return ((endP - startP) / 100) * capacity;
     }
     return null;
@@ -213,7 +257,7 @@ export default function AddFuelScreen() {
     const total = parseFloat(totalCostInput);
 
     if (!isNaN(qty) && qty > 0 && !isNaN(price) && price > 0) {
-      const calcTotal = (qty * price).toLocaleString('en-IN', {
+      const calcTotal = (qty * price).toLocaleString("en-IN", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       });
@@ -229,27 +273,27 @@ export default function AddFuelScreen() {
   // ── 2-Way Input Handlers ──
   const handleFuelAmountChange = (text: string) => {
     setFuelAmount(text);
-    setLastEdited('fuelAmount');
+    setLastEdited("fuelAmount");
 
     const qty = parseFloat(text);
     const price = parseFloat(pricePerUnit);
     if (!isNaN(qty) && qty > 0 && !isNaN(price) && price > 0) {
       setTotalCostInput((qty * price).toFixed(2));
     } else if (!text) {
-      setTotalCostInput('');
+      setTotalCostInput("");
     }
   };
 
   const handleTotalCostChange = (text: string) => {
     setTotalCostInput(text);
-    setLastEdited('totalCost');
+    setLastEdited("totalCost");
 
     const total = parseFloat(text);
     const price = parseFloat(pricePerUnit);
     if (!isNaN(total) && total > 0 && !isNaN(price) && price > 0) {
       setFuelAmount((total / price).toFixed(2));
     } else if (!text) {
-      setFuelAmount('');
+      setFuelAmount("");
     }
   };
 
@@ -258,7 +302,7 @@ export default function AddFuelScreen() {
 
     const price = parseFloat(text);
     if (!isNaN(price) && price > 0) {
-      if (lastEdited === 'totalCost') {
+      if (lastEdited === "totalCost") {
         const total = parseFloat(totalCostInput);
         if (!isNaN(total) && total > 0) {
           setFuelAmount((total / price).toFixed(2));
@@ -275,7 +319,7 @@ export default function AddFuelScreen() {
   const handleQuickAmountSelect = (amount: number) => {
     const text = amount.toString();
     setTotalCostInput(text);
-    setLastEdited('totalCost');
+    setLastEdited("totalCost");
 
     const price = parseFloat(pricePerUnit);
     if (!isNaN(price) && price > 0) {
@@ -287,7 +331,7 @@ export default function AddFuelScreen() {
     if (evEstimatedKwh != null) {
       const qtyStr = evEstimatedKwh.toFixed(1);
       setFuelAmount(qtyStr);
-      setLastEdited('fuelAmount');
+      setLastEdited("fuelAmount");
       const price = parseFloat(pricePerUnit);
       if (!isNaN(price) && price > 0) {
         setTotalCostInput((evEstimatedKwh * price).toFixed(2));
@@ -313,15 +357,15 @@ export default function AddFuelScreen() {
   // ── Receipt Photo Pickers ──
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
+    if (status !== "granted") {
       Alert.alert(
-        'Permission Needed',
-        'We need access to your photo library to attach the fuel receipt.'
+        "Permission Needed",
+        "We need access to your photo library to attach the fuel receipt.",
       );
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ["images"],
       quality: 0.8,
       allowsEditing: true,
     });
@@ -332,8 +376,11 @@ export default function AddFuelScreen() {
 
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Needed', 'Camera access is needed to photograph the receipt.');
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission Needed",
+        "Camera access is needed to photograph the receipt.",
+      );
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -346,10 +393,10 @@ export default function AddFuelScreen() {
   };
 
   const handlePickPhoto = () => {
-    Alert.alert('Attach Receipt 🧾', 'Choose receipt photo source:', [
-      { text: 'Take Photo', onPress: takePhoto },
-      { text: 'Choose from Gallery', onPress: pickImage },
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert("Attach Receipt 🧾", "Choose receipt photo source:", [
+      { text: "Take Photo", onPress: takePhoto },
+      { text: "Choose from Gallery", onPress: pickImage },
+      { text: "Cancel", style: "cancel" },
     ]);
   };
 
@@ -387,7 +434,7 @@ export default function AddFuelScreen() {
 
     // Basic required field checks
     if (!odometer || isNaN(odoVal)) {
-      setErrors(['Enter a valid odometer reading.']);
+      setErrors(["Enter a valid odometer reading."]);
       return;
     }
     if (isNaN(amountVal) || amountVal <= 0) {
@@ -409,19 +456,22 @@ export default function AddFuelScreen() {
 
     const dateVal = validateDateDisplay(dateDisplay);
     if (!dateVal.isValid) {
-      setErrors([dateVal.error || 'Enter a valid date in DD/MM/YYYY format.']);
+      setErrors([dateVal.error || "Enter a valid date in DD/MM/YYYY format."]);
       return;
     }
     const isoDate = displayToISO(dateDisplay);
     if (!isoDate) {
-      setErrors(['Enter a valid date in DD/MM/YYYY format.']);
+      setErrors(["Enter a valid date in DD/MM/YYYY format."]);
       return;
     }
 
     if (isEditMode && params.id) {
       doUpdate(params.id, odoVal, amountVal, priceVal, isoDate);
     } else {
-      const lastEntry = fuelRepo.getFuelEntryBeforeDate(selectedVehicle.id, isoDate);
+      const lastEntry = fuelRepo.getFuelEntryBeforeDate(
+        selectedVehicle.id,
+        isoDate,
+      );
       const prevOdo = lastEntry?.odometer ?? null;
 
       const validation = validateFuelEntry(
@@ -431,29 +481,46 @@ export default function AddFuelScreen() {
           fuel_unit: fuelUnit,
           price_per_unit: priceVal,
           date: isoDate,
-          fuel_system: isHybrid ? fuelSystem : 'primary',
+          fuel_system: isHybrid ? fuelSystem : "primary",
           battery_start_percent:
-            isEV && batteryStartPercent ? parseFloat(batteryStartPercent) : undefined,
+            isEV && batteryStartPercent
+              ? parseFloat(batteryStartPercent)
+              : undefined,
           battery_end_percent:
-            isEV && batteryEndPercent ? parseFloat(batteryEndPercent) : undefined,
+            isEV && batteryEndPercent
+              ? parseFloat(batteryEndPercent)
+              : undefined,
         },
         prevOdo,
         selectedVehicle.tank_capacity,
         selectedVehicle.fuel_type as FuelType,
-        selectedVehicle.secondary_tank_capacity
+        selectedVehicle.secondary_tank_capacity,
       );
 
       if (!validation.isValid) {
-        setErrors(validation.issues.filter((i) => i.severity === 'error').map((i) => i.message));
+        setErrors(
+          validation.issues
+            .filter((i) => i.severity === "error")
+            .map((i) => i.message),
+        );
         return;
       }
 
       if (hasWarningsOnly(validation)) {
-        const warningMessages = validation.issues.map((i) => i.message).join('\n');
-        Alert.alert('Review Warning 👀', warningMessages + '\n\nDo you want to save this entry anyway?', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Save Anyway', onPress: () => doSave(odoVal, amountVal, priceVal, isoDate) },
-        ]);
+        const warningMessages = validation.issues
+          .map((i) => i.message)
+          .join("\n");
+        Alert.alert(
+          "Review Warning 👀",
+          warningMessages + "\n\nDo you want to save this entry anyway?",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Save Anyway",
+              onPress: () => doSave(odoVal, amountVal, priceVal, isoDate),
+            },
+          ],
+        );
         return;
       }
 
@@ -466,7 +533,7 @@ export default function AddFuelScreen() {
     odoVal: number,
     amountVal: number,
     priceVal: number,
-    entryDate: string
+    entryDate: string,
   ) => {
     updateFuelEntry(
       entryId,
@@ -480,17 +547,21 @@ export default function AddFuelScreen() {
         fuel_station: fuelStation || null,
         receipt_photo_uri: photoUri || null,
         notes: notes || null,
-        fuel_system: isHybrid ? fuelSystem : 'primary',
-        battery_start_percent: isEV && batteryStartPercent ? parseFloat(batteryStartPercent) : null,
-        battery_end_percent: isEV && batteryEndPercent ? parseFloat(batteryEndPercent) : null,
+        fuel_system: isHybrid ? fuelSystem : "primary",
+        battery_start_percent:
+          isEV && batteryStartPercent ? parseFloat(batteryStartPercent) : null,
+        battery_end_percent:
+          isEV && batteryEndPercent ? parseFloat(batteryEndPercent) : null,
       },
-      selectedVehicle
+      selectedVehicle,
     );
 
     Alert.alert(
-      'Entry Updated',
-      isEV ? 'Charge session updated successfully.' : 'Fuel entry updated successfully.',
-      [{ text: 'OK', onPress: () => router.back() }]
+      "Entry Updated",
+      isEV
+        ? "Charge session updated successfully."
+        : "Fuel entry updated successfully.",
+      [{ text: "OK", onPress: () => router.back() }],
     );
   };
 
@@ -498,7 +569,7 @@ export default function AddFuelScreen() {
     odoVal: number,
     amountVal: number,
     priceVal: number,
-    entryDate: string
+    entryDate: string,
   ) => {
     const { entry, warning } = addFuelEntry(
       {
@@ -512,13 +583,15 @@ export default function AddFuelScreen() {
         fuel_station: fuelStation || undefined,
         receipt_photo_uri: photoUri || undefined,
         notes: notes || undefined,
-        fuel_system: isHybrid ? fuelSystem : 'primary',
+        fuel_system: isHybrid ? fuelSystem : "primary",
         battery_start_percent:
-          isEV && batteryStartPercent ? parseFloat(batteryStartPercent) : undefined,
+          isEV && batteryStartPercent
+            ? parseFloat(batteryStartPercent)
+            : undefined,
         battery_end_percent:
           isEV && batteryEndPercent ? parseFloat(batteryEndPercent) : undefined,
       },
-      selectedVehicle
+      selectedVehicle,
     );
 
     loadVehicles();
@@ -526,13 +599,13 @@ export default function AddFuelScreen() {
     if (entry.calculated_mileage && entry.mileage_unit) {
       const mileageText = formatMileage(
         entry.calculated_mileage,
-        MILEAGE_UNIT_LABELS[entry.mileage_unit]
+        MILEAGE_UNIT_LABELS[entry.mileage_unit],
       );
-      const warningText = warning ? `\n\n⚠️ ${warning.message}` : '';
+      const warningText = warning ? `\n\n⚠️ ${warning.message}` : "";
       Alert.alert(
-        isEV ? '⚡ Charge Session Logged' : '⛽ Refill Logged',
-        `${isEV ? 'Efficiency' : 'Calculated Mileage'}: ${mileageText}${warningText}`,
-        [{ text: 'Done', onPress: () => router.back() }]
+        isEV ? "⚡ Charge Session Logged" : "⛽ Refill Logged",
+        `${isEV ? "Efficiency" : "Calculated Mileage"}: ${mileageText}${warningText}`,
+        [{ text: "Done", onPress: () => router.back() }],
       );
     } else {
       router.back();
@@ -542,31 +615,20 @@ export default function AddFuelScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'android' ? 'height' : 'padding'}
+      behavior={Platform.OS === "android" ? "height" : "padding"}
     >
       {/* ── Form Header ── */}
       <FormHeader
         title={
           isEditMode
             ? isEV
-              ? 'Edit Charge Session'
-              : 'Edit Fuel Refill'
+              ? "Edit Charge Session"
+              : "Edit Fuel Refill"
             : isEV
-            ? 'Log EV Charge'
-            : 'Log Fuel Refill'
+              ? "Log EV Charge"
+              : "Log Fuel Refill"
         }
         subtitle={`${selectedVehicle.nickname} · ${selectedVehicle.registration_number}`}
-        rightAction={
-          <TouchableOpacity
-            style={[styles.headerSaveButton, { backgroundColor: colors.accent }]}
-            onPress={handleSave}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel={isEditMode ? 'Save changes' : 'Save fuel entry'}
-          >
-            <Text style={styles.headerSaveButtonText}>Save</Text>
-          </TouchableOpacity>
-        }
       />
 
       <ScrollView
@@ -586,23 +648,44 @@ export default function AddFuelScreen() {
           ]}
         >
           <View style={styles.vehicleRow}>
-            <View style={[styles.vehicleIconWrap, { backgroundColor: colors.surfaceSecondary }]}>
-              <Text style={{ fontSize: 18 }}>{isEV ? '⚡' : isHybrid ? '🌿' : '⛽'}</Text>
+            <View
+              style={[
+                styles.vehicleIconWrap,
+                { backgroundColor: colors.surfaceSecondary },
+              ]}
+            >
+              <Text style={{ fontSize: 18 }}>
+                {isEV ? "⚡" : isHybrid ? "🌿" : "⛽"}
+              </Text>
             </View>
             <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={[styles.vehicleNickname, { color: colors.text }]} numberOfLines={1}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+              >
+                <Text
+                  style={[styles.vehicleNickname, { color: colors.text }]}
+                  numberOfLines={1}
+                >
                   {selectedVehicle.nickname}
                 </Text>
-                <View style={[styles.badgePill, { backgroundColor: colors.surfaceSecondary }]}>
+                <View
+                  style={[
+                    styles.badgePill,
+                    { backgroundColor: colors.surfaceSecondary },
+                  ]}
+                >
                   <Text style={[styles.badgeText, { color: colors.accent }]}>
                     {selectedVehicle.fuel_type?.toUpperCase()}
                   </Text>
                 </View>
               </View>
-              <Text style={[styles.vehicleReg, { color: colors.textSecondary }]}>
+              <Text
+                style={[styles.vehicleReg, { color: colors.textSecondary }]}
+              >
                 {selectedVehicle.registration_number}
-                {previousOdometer ? ` · Last: ${previousOdometer.toLocaleString('en-IN')} km` : ''}
+                {previousOdometer
+                  ? ` · Last: ${previousOdometer.toLocaleString("en-IN")} km`
+                  : ""}
               </Text>
             </View>
           </View>
@@ -610,18 +693,39 @@ export default function AddFuelScreen() {
 
         {/* ── Section 2: Bi-Fuel Dual-Tank Selector (When Applicable) ── */}
         {isHybrid && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
             <View style={styles.cardHeaderRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={[styles.cardTitle, { color: colors.text }]}>Refueling Tank</Text>
-                <View style={[styles.badgePill, { backgroundColor: colors.primaryLight }]}>
-                  <Text style={[styles.badgeText, { color: colors.primary }]}>BI-FUEL</Text>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+              >
+                <Text style={[styles.cardTitle, { color: colors.text }]}>
+                  Refueling Tank
+                </Text>
+                <View
+                  style={[
+                    styles.badgePill,
+                    { backgroundColor: colors.primaryLight },
+                  ]}
+                >
+                  <Text style={[styles.badgeText, { color: colors.primary }]}>
+                    BI-FUEL
+                  </Text>
                 </View>
               </View>
-              <Text style={[styles.cardHint, { color: colors.textTertiary }]}>Select active tank</Text>
+              <Text style={[styles.cardHint, { color: colors.textTertiary }]}>
+                Select active tank
+              </Text>
             </View>
-            <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>
-              Which tank was refilled? Volumes and consumption are tracked independently.
+            <Text
+              style={[styles.cardSubtitle, { color: colors.textSecondary }]}
+            >
+              Which tank was refilled? Volumes and consumption are tracked
+              independently.
             </Text>
 
             <View style={styles.dualTankRow}>
@@ -631,21 +735,33 @@ export default function AddFuelScreen() {
                   styles.tankCard,
                   {
                     backgroundColor:
-                      fuelSystem === 'primary' ? colors.primaryLight : colors.surfaceSecondary,
-                    borderColor: fuelSystem === 'primary' ? colors.primary : colors.border,
-                    borderWidth: fuelSystem === 'primary' ? 2 : 1,
+                      fuelSystem === "primary"
+                        ? colors.primaryLight
+                        : colors.surfaceSecondary,
+                    borderColor:
+                      fuelSystem === "primary" ? colors.primary : colors.border,
+                    borderWidth: fuelSystem === "primary" ? 2 : 1,
                   },
                 ]}
-                onPress={() => setFuelSystem('primary')}
+                onPress={() => setFuelSystem("primary")}
                 activeOpacity={0.7}
               >
                 <View style={styles.tankCardHeader}>
                   <CngTankIcon
                     size={22}
-                    color={fuelSystem === 'primary' ? colors.primary : colors.textSecondary}
+                    color={
+                      fuelSystem === "primary"
+                        ? colors.primary
+                        : colors.textSecondary
+                    }
                   />
-                  {fuelSystem === 'primary' && (
-                    <View style={[styles.activeIndicator, { backgroundColor: colors.primary }]}>
+                  {fuelSystem === "primary" && (
+                    <View
+                      style={[
+                        styles.activeIndicator,
+                        { backgroundColor: colors.primary },
+                      ]}
+                    >
                       <Text style={styles.activeIndicatorText}>ACTIVE</Text>
                     </View>
                   )}
@@ -653,16 +769,26 @@ export default function AddFuelScreen() {
                 <Text
                   style={[
                     styles.tankCardTitle,
-                    { color: fuelSystem === 'primary' ? colors.primary : colors.text },
+                    {
+                      color:
+                        fuelSystem === "primary" ? colors.primary : colors.text,
+                    },
                   ]}
                 >
-                  {getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'primary')}
+                  {getFuelSystemLabel(
+                    selectedVehicle.fuel_type as FuelType,
+                    "primary",
+                  )}
                 </Text>
-                <Text style={[styles.tankCardMeta, { color: colors.textSecondary }]}>
+                <Text
+                  style={[styles.tankCardMeta, { color: colors.textSecondary }]}
+                >
                   Unit: kg ({currencySymbol}/kg)
                 </Text>
                 {selectedVehicle.tank_capacity ? (
-                  <Text style={[styles.tankCardCap, { color: colors.textTertiary }]}>
+                  <Text
+                    style={[styles.tankCardCap, { color: colors.textTertiary }]}
+                  >
                     Cap: {selectedVehicle.tank_capacity} kg
                   </Text>
                 ) : null}
@@ -674,18 +800,28 @@ export default function AddFuelScreen() {
                   styles.tankCard,
                   {
                     backgroundColor:
-                      fuelSystem === 'secondary' ? colors.primaryLight : colors.surfaceSecondary,
-                    borderColor: fuelSystem === 'secondary' ? colors.primary : colors.border,
-                    borderWidth: fuelSystem === 'secondary' ? 2 : 1,
+                      fuelSystem === "secondary"
+                        ? colors.primaryLight
+                        : colors.surfaceSecondary,
+                    borderColor:
+                      fuelSystem === "secondary"
+                        ? colors.primary
+                        : colors.border,
+                    borderWidth: fuelSystem === "secondary" ? 2 : 1,
                   },
                 ]}
-                onPress={() => setFuelSystem('secondary')}
+                onPress={() => setFuelSystem("secondary")}
                 activeOpacity={0.7}
               >
                 <View style={styles.tankCardHeader}>
                   <Text style={{ fontSize: 20 }}>⛽</Text>
-                  {fuelSystem === 'secondary' && (
-                    <View style={[styles.activeIndicator, { backgroundColor: colors.primary }]}>
+                  {fuelSystem === "secondary" && (
+                    <View
+                      style={[
+                        styles.activeIndicator,
+                        { backgroundColor: colors.primary },
+                      ]}
+                    >
                       <Text style={styles.activeIndicatorText}>ACTIVE</Text>
                     </View>
                   )}
@@ -693,16 +829,28 @@ export default function AddFuelScreen() {
                 <Text
                   style={[
                     styles.tankCardTitle,
-                    { color: fuelSystem === 'secondary' ? colors.primary : colors.text },
+                    {
+                      color:
+                        fuelSystem === "secondary"
+                          ? colors.primary
+                          : colors.text,
+                    },
                   ]}
                 >
-                  {getFuelSystemLabel(selectedVehicle.fuel_type as FuelType, 'secondary')}
+                  {getFuelSystemLabel(
+                    selectedVehicle.fuel_type as FuelType,
+                    "secondary",
+                  )}
                 </Text>
-                <Text style={[styles.tankCardMeta, { color: colors.textSecondary }]}>
+                <Text
+                  style={[styles.tankCardMeta, { color: colors.textSecondary }]}
+                >
                   Unit: Litres ({currencySymbol}/L)
                 </Text>
                 {selectedVehicle.secondary_tank_capacity ? (
-                  <Text style={[styles.tankCardCap, { color: colors.textTertiary }]}>
+                  <Text
+                    style={[styles.tankCardCap, { color: colors.textTertiary }]}
+                  >
                     Cap: {selectedVehicle.secondary_tank_capacity} L
                   </Text>
                 ) : null}
@@ -713,22 +861,35 @@ export default function AddFuelScreen() {
 
         {/* ── Section 3: EV Battery % to kWh Calculator (When EV) ── */}
         {isEV && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
             <View style={styles.cardHeaderRow}>
               <Text style={[styles.cardTitle, { color: colors.text }]}>
                 ⚡ Battery % to kWh Calculator
               </Text>
-              <Text style={[styles.cardHint, { color: colors.textTertiary }]}>Optional helper</Text>
+              <Text style={[styles.cardHint, { color: colors.textTertiary }]}>
+                Optional helper
+              </Text>
             </View>
-            <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>
+            <Text
+              style={[styles.cardSubtitle, { color: colors.textSecondary }]}
+            >
               {selectedVehicle.tank_capacity
                 ? `Battery pack: ${selectedVehicle.tank_capacity} kWh. Enter start & end % to calculate units.`
-                : 'Enter start & end battery percentage to auto-calculate kWh.'}
+                : "Enter start & end battery percentage to auto-calculate kWh."}
             </Text>
 
             <View style={styles.evRow}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Start %</Text>
+                <Text
+                  style={[styles.fieldLabel, { color: colors.textSecondary }]}
+                >
+                  Start %
+                </Text>
                 <TextInput
                   style={[
                     styles.textInput,
@@ -747,7 +908,11 @@ export default function AddFuelScreen() {
                 />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>End %</Text>
+                <Text
+                  style={[styles.fieldLabel, { color: colors.textSecondary }]}
+                >
+                  End %
+                </Text>
                 <TextInput
                   style={[
                     styles.textInput,
@@ -769,14 +934,18 @@ export default function AddFuelScreen() {
 
             {evEstimatedKwh != null && (
               <TouchableOpacity
-                style={[styles.applyKwhButton, { backgroundColor: colors.primaryLight }]}
+                style={[
+                  styles.applyKwhButton,
+                  { backgroundColor: colors.primaryLight },
+                ]}
                 onPress={handleApplyEvKwh}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.applyKwhText, { color: colors.primary }]}>
                   👉 Apply {evEstimatedKwh.toFixed(1)} kWh (
                   {Math.round(
-                    parseFloat(batteryEndPercent) - parseFloat(batteryStartPercent)
+                    parseFloat(batteryEndPercent) -
+                      parseFloat(batteryStartPercent),
                   )}
                   % charge)
                 </Text>
@@ -786,16 +955,35 @@ export default function AddFuelScreen() {
         )}
 
         {/* ── Section 4: Odometer Reading & Date Card ── */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
           <View style={styles.cardHeaderRow}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Odometer & Date</Text>
-            <Text style={[styles.requiredBadge, { color: colors.statusCritical }]}>Required *</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              Odometer & Date
+            </Text>
+            <Text
+              style={[styles.requiredBadge, { color: colors.statusCritical }]}
+            >
+              Required *
+            </Text>
           </View>
 
           {/* Odometer Input */}
           <View style={{ marginTop: Spacing.sm }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Text
+                style={[styles.fieldLabel, { color: colors.textSecondary }]}
+              >
                 Current Odometer (km) *
               </Text>
               {odoDelta !== null && (
@@ -804,19 +992,26 @@ export default function AddFuelScreen() {
                     styles.deltaBadge,
                     {
                       backgroundColor:
-                        odoDelta >= 0 ? colors.statusNormalBg : colors.statusCriticalBg,
+                        odoDelta >= 0
+                          ? colors.statusNormalBg
+                          : colors.statusCriticalBg,
                     },
                   ]}
                 >
                   <Text
                     style={[
                       styles.deltaBadgeText,
-                      { color: odoDelta >= 0 ? colors.statusNormal : colors.statusCritical },
+                      {
+                        color:
+                          odoDelta >= 0
+                            ? colors.statusNormal
+                            : colors.statusCritical,
+                      },
                     ]}
                   >
                     {odoDelta >= 0
-                      ? `+${odoDelta.toLocaleString('en-IN')} km travelled`
-                      : `${odoDelta.toLocaleString('en-IN')} km (Lower than last)`}
+                      ? `+${odoDelta.toLocaleString("en-IN")} km travelled`
+                      : `${odoDelta.toLocaleString("en-IN")} km (Lower than last)`}
                   </Text>
                 </View>
               )}
@@ -832,27 +1027,50 @@ export default function AddFuelScreen() {
                     borderColor: colors.border,
                   },
                 ]}
-                placeholder={previousOdometer ? `e.g. ${previousOdometer + 250}` : 'e.g. 14500'}
+                placeholder={
+                  previousOdometer
+                    ? `e.g. ${previousOdometer + 250}`
+                    : "e.g. 14500"
+                }
                 placeholderTextColor={colors.textTertiary}
                 value={odometer}
                 onChangeText={setOdometer}
                 keyboardType="numeric"
                 autoFocus={!isEditMode && !params.odometer}
               />
-              <View style={[styles.unitBadge, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.unitBadgeText, { color: colors.textSecondary }]}>KM</Text>
+              <View
+                style={[styles.unitBadge, { backgroundColor: colors.surface }]}
+              >
+                <Text
+                  style={[
+                    styles.unitBadgeText,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  KM
+                </Text>
               </View>
             </View>
           </View>
 
           {/* Date Input */}
           <View style={{ marginTop: Spacing.md }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Text
+                style={[styles.fieldLabel, { color: colors.textSecondary }]}
+              >
                 Date (DD/MM/YYYY) *
               </Text>
               <TouchableOpacity onPress={handleSetToday} activeOpacity={0.7}>
-                <Text style={[styles.todayLink, { color: colors.accent }]}>Set Today</Text>
+                <Text style={[styles.todayLink, { color: colors.accent }]}>
+                  Set Today
+                </Text>
               </TouchableOpacity>
             </View>
             <TextInput
@@ -875,19 +1093,31 @@ export default function AddFuelScreen() {
         </View>
 
         {/* ── Section 5: Fuel & Cost 2-Way Calculator (Hero Card) ── */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
           <View style={styles.cardHeaderRow}>
             <Text style={[styles.cardTitle, { color: colors.text }]}>
-              {isEV ? '⚡ Electricity & Cost' : '⛽ Quantity & Cost'}
+              {isEV ? "⚡ Electricity & Cost" : "⛽ Quantity & Cost"}
             </Text>
-            <View style={[styles.badgePill, { backgroundColor: colors.primaryLight }]}>
-              <Text style={[styles.badgeText, { color: colors.primary }]}>2-WAY AUTO CALC ⇄</Text>
+            <View
+              style={[
+                styles.badgePill,
+                { backgroundColor: colors.primaryLight },
+              ]}
+            >
+              <Text style={[styles.badgeText, { color: colors.primary }]}>
+                2-WAY AUTO CALC ⇄
+              </Text>
             </View>
           </View>
           <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>
             {isEV
-              ? 'Enter either Amount Paid or Energy (kWh) — the other updates instantly.'
-              : 'Enter either Amount Paid or Volume — the other updates instantly.'}
+              ? "Enter either Amount Paid or Energy (kWh) — the other updates instantly."
+              : "Enter either Amount Paid or Volume — the other updates instantly."}
           </Text>
 
           {/* Rate per Unit */}
@@ -907,14 +1137,21 @@ export default function AddFuelScreen() {
                     borderColor: colors.border,
                   },
                 ]}
-                placeholder={`e.g. ${isEV ? '8.5' : fuelUnit === FuelUnit.KG ? '85' : '102'}`}
+                placeholder={`e.g. ${isEV ? "8.5" : fuelUnit === FuelUnit.KG ? "85" : "102"}`}
                 placeholderTextColor={colors.textTertiary}
                 value={pricePerUnit}
                 onChangeText={handlePricePerUnitChange}
                 keyboardType="decimal-pad"
               />
-              <View style={[styles.unitBadge, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.unitBadgeText, { color: colors.textSecondary }]}>
+              <View
+                style={[styles.unitBadge, { backgroundColor: colors.surface }]}
+              >
+                <Text
+                  style={[
+                    styles.unitBadgeText,
+                    { color: colors.textSecondary },
+                  ]}
+                >
                   {currencySymbol}/{fuelUnitLabel}
                 </Text>
               </View>
@@ -923,11 +1160,25 @@ export default function AddFuelScreen() {
 
           {/* Quick Amount Chips */}
           <View style={{ marginTop: Spacing.md }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary, marginBottom: 0 }]}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 6,
+              }}
+            >
+              <Text
+                style={[
+                  styles.fieldLabel,
+                  { color: colors.textSecondary, marginBottom: 0 },
+                ]}
+              >
                 Total Amount Paid ({currencySymbol})
               </Text>
-              <Text style={[styles.cardHint, { color: colors.textTertiary }]}>Quick presets</Text>
+              <Text style={[styles.cardHint, { color: colors.textTertiary }]}>
+                Quick presets
+              </Text>
             </View>
 
             <ScrollView
@@ -944,7 +1195,9 @@ export default function AddFuelScreen() {
                     style={[
                       styles.quickAmountChip,
                       {
-                        backgroundColor: isSelected ? colors.accent : colors.surfaceSecondary,
+                        backgroundColor: isSelected
+                          ? colors.accent
+                          : colors.surfaceSecondary,
                         borderColor: isSelected ? colors.accent : colors.border,
                       },
                     ]}
@@ -955,12 +1208,13 @@ export default function AddFuelScreen() {
                       style={[
                         styles.quickAmountText,
                         {
-                          color: isSelected ? '#FFFFFF' : colors.text,
-                          fontWeight: isSelected ? '700' : '600',
+                          color: isSelected ? "#FFFFFF" : colors.text,
+                          fontWeight: isSelected ? "700" : "600",
                         },
                       ]}
                     >
-                      {currencySymbol}{amt.toLocaleString('en-IN')}
+                      {currencySymbol}
+                      {amt.toLocaleString("en-IN")}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -983,8 +1237,15 @@ export default function AddFuelScreen() {
                 onChangeText={handleTotalCostChange}
                 keyboardType="decimal-pad"
               />
-              <View style={[styles.unitBadge, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.unitBadgeText, { color: colors.textSecondary }]}>
+              <View
+                style={[styles.unitBadge, { backgroundColor: colors.surface }]}
+              >
+                <Text
+                  style={[
+                    styles.unitBadgeText,
+                    { color: colors.textSecondary },
+                  ]}
+                >
                   {currencySymbol}
                 </Text>
               </View>
@@ -1008,14 +1269,21 @@ export default function AddFuelScreen() {
                     borderColor: colors.border,
                   },
                 ]}
-                placeholder={`e.g. ${isEV ? '25' : fuelUnit === FuelUnit.KG ? '8.5' : '30'}`}
+                placeholder={`e.g. ${isEV ? "25" : fuelUnit === FuelUnit.KG ? "8.5" : "30"}`}
                 placeholderTextColor={colors.textTertiary}
                 value={fuelAmount}
                 onChangeText={handleFuelAmountChange}
                 keyboardType="decimal-pad"
               />
-              <View style={[styles.unitBadge, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.unitBadgeText, { color: colors.textSecondary }]}>
+              <View
+                style={[styles.unitBadge, { backgroundColor: colors.surface }]}
+              >
+                <Text
+                  style={[
+                    styles.unitBadgeText,
+                    { color: colors.textSecondary },
+                  ]}
+                >
                   {fuelUnitLabel}
                 </Text>
               </View>
@@ -1053,10 +1321,17 @@ export default function AddFuelScreen() {
           >
             <View style={styles.toggleRow}>
               <View style={{ flex: 1, marginRight: Spacing.md }}>
-                <Text style={[styles.toggleTitle, { color: colors.text }]}>Full Tank Fill?</Text>
-                <Text style={[styles.toggleSubtitle, { color: colors.textSecondary }]}>
-                  Filled to auto-cut/brim? Enables exact tank-to-tank mileage calculation. Partial
-                  fills will provide an estimated baseline.
+                <Text style={[styles.toggleTitle, { color: colors.text }]}>
+                  Full Tank Fill?
+                </Text>
+                <Text
+                  style={[
+                    styles.toggleSubtitle,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  Filled to auto-cut/brim? Enables exact tank-to-tank mileage
+                  calculation. Partial fills will provide an estimated baseline.
                 </Text>
               </View>
               <Switch
@@ -1070,8 +1345,15 @@ export default function AddFuelScreen() {
         )}
 
         {/* ── Section 7: Station & Receipt Card ── */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>Location & Receipt</Text>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
+          <Text style={[styles.cardTitle, { color: colors.text }]}>
+            Location & Receipt
+          </Text>
           <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>
             Optional reference details for this transaction.
           </Text>
@@ -1079,7 +1361,7 @@ export default function AddFuelScreen() {
           {/* Station Name */}
           <View style={{ marginTop: Spacing.sm }}>
             <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
-              {isEV ? 'Charging Station / Location' : 'Fuel Station'}
+              {isEV ? "Charging Station / Location" : "Fuel Station"}
             </Text>
             <TextInput
               style={[
@@ -1090,7 +1372,11 @@ export default function AddFuelScreen() {
                   borderColor: colors.border,
                 },
               ]}
-              placeholder={isEV ? 'e.g. Home AC, Jio-bp, Tata Power EZ' : 'e.g. Indian Oil, Bandra'}
+              placeholder={
+                isEV
+                  ? "e.g. Home AC, Jio-bp, Tata Power EZ"
+                  : "e.g. Indian Oil, Bandra"
+              }
               placeholderTextColor={colors.textTertiary}
               value={fuelStation}
               onChangeText={setFuelStation}
@@ -1116,8 +1402,13 @@ export default function AddFuelScreen() {
                       },
                     ]}
                   >
-                    <Text style={[styles.suggestionChipText, { color: colors.text }]}>
-                      {isEV ? '⚡' : '⛽'} {station}
+                    <Text
+                      style={[
+                        styles.suggestionChipText,
+                        { color: colors.text },
+                      ]}
+                    >
+                      {isEV ? "⚡" : "⛽"} {station}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -1131,18 +1422,30 @@ export default function AddFuelScreen() {
               Receipt Photo
             </Text>
             {photoUri ? (
-              <View style={[styles.photoContainer, { borderColor: colors.border }]}>
-                <Image source={{ uri: photoUri }} style={styles.photoPreview} resizeMode="cover" />
+              <View
+                style={[styles.photoContainer, { borderColor: colors.border }]}
+              >
+                <Image
+                  source={{ uri: photoUri }}
+                  style={styles.photoPreview}
+                  resizeMode="cover"
+                />
                 <View style={styles.photoActionsRow}>
                   <TouchableOpacity
-                    style={[styles.photoActionBtn, { backgroundColor: colors.primary }]}
+                    style={[
+                      styles.photoActionBtn,
+                      { backgroundColor: colors.primary },
+                    ]}
                     onPress={handlePickPhoto}
                     activeOpacity={0.8}
                   >
                     <Text style={styles.photoActionBtnText}>Change Photo</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.photoActionBtn, { backgroundColor: colors.danger }]}
+                    style={[
+                      styles.photoActionBtn,
+                      { backgroundColor: colors.danger },
+                    ]}
                     onPress={() => setPhotoUri(null)}
                     activeOpacity={0.8}
                   >
@@ -1163,7 +1466,9 @@ export default function AddFuelScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={{ fontSize: 20 }}>🧾</Text>
-                <Text style={[styles.photoUploadText, { color: colors.accent }]}>
+                <Text
+                  style={[styles.photoUploadText, { color: colors.accent }]}
+                >
                   Attach Bill / Receipt Photo
                 </Text>
               </TouchableOpacity>
@@ -1172,7 +1477,9 @@ export default function AddFuelScreen() {
 
           {/* Notes */}
           <View style={{ marginTop: Spacing.md }}>
-            <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Notes</Text>
+            <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
+              Notes
+            </Text>
             <TextInput
               style={[
                 styles.notesInput,
@@ -1204,7 +1511,10 @@ export default function AddFuelScreen() {
             ]}
           >
             {errors.map((err, idx) => (
-              <Text key={idx} style={[styles.errorText, { color: colors.statusCritical }]}>
+              <Text
+                key={idx}
+                style={[styles.errorText, { color: colors.statusCritical }]}
+              >
                 • {err}
               </Text>
             ))}
@@ -1227,20 +1537,22 @@ export default function AddFuelScreen() {
         ]}
       >
         <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: colors.accent }]}
+          style={[styles.saveButton, { backgroundColor: "#3983C7" }]}
           onPress={handleSave}
           activeOpacity={0.85}
           accessibilityRole="button"
-          accessibilityLabel={isEditMode ? 'Update Fuel Entry' : 'Save Fuel Entry'}
+          accessibilityLabel={
+            isEditMode ? "Update Fuel Entry" : "Save Fuel Entry"
+          }
         >
           <Text style={styles.saveButtonText}>
             {isEditMode
               ? isEV
-                ? 'Update Charge ⚡'
-                : 'Update Fuel Entry ✏️'
+                ? "Update Charge ⚡"
+                : "Update Fuel Entry ✏️"
               : isEV
-              ? 'Save Charge ⚡'
-              : 'Save Fuel Entry ⛽'}
+                ? "Save Charge ⚡"
+                : "Save Fuel Entry ⛽"}
           </Text>
         </TouchableOpacity>
       </View>
@@ -1255,24 +1567,7 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  headerSaveButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: Sizing.radiusFull,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#EA580C',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  headerSaveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
+
   scrollContent: {
     padding: Spacing.md,
     gap: Spacing.md,
@@ -1283,14 +1578,14 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
   },
   cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 4,
   },
   cardTitle: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: -0.2,
   },
   cardSubtitle: {
@@ -1301,11 +1596,11 @@ const styles = StyleSheet.create({
   },
   cardHint: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   requiredBadge: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   badgePill: {
     paddingHorizontal: 6,
@@ -1314,34 +1609,34 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: 0.5,
   },
   vehicleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: Spacing.md,
   },
   vehicleIconWrap: {
     width: 40,
     height: 40,
     borderRadius: Sizing.radiusMd,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   vehicleNickname: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   vehicleReg: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: "500",
     marginTop: 2,
   },
   fieldLabel: {
     fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
+    fontWeight: "600",
+    textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 4,
   },
@@ -1358,7 +1653,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: Spacing.md,
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   notesInput: {
     height: 76,
@@ -1367,24 +1662,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingTop: Spacing.sm,
     fontSize: 14,
-    textAlignVertical: 'top',
+    textAlignVertical: "top",
   },
   inputWithUnitWrap: {
-    position: 'relative',
-    justifyContent: 'center',
+    position: "relative",
+    justifyContent: "center",
   },
   unitBadge: {
-    position: 'absolute',
+    position: "absolute",
     right: 12,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: Sizing.radiusSm,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: "transparent",
   },
   unitBadgeText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   deltaBadge: {
     paddingHorizontal: 8,
@@ -1393,14 +1688,14 @@ const styles = StyleSheet.create({
   },
   deltaBadgeText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   todayLink: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   quickAmountsRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: Spacing.xs,
     paddingVertical: 4,
   },
@@ -1409,8 +1704,8 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: Sizing.radiusSm,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   quickAmountText: {
     fontSize: 12,
@@ -1421,20 +1716,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     borderRadius: Sizing.radiusSm,
     borderWidth: 1,
-    alignItems: 'center',
+    alignItems: "center",
   },
   calcSummaryText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   toggleTitle: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   toggleSubtitle: {
     fontSize: 12,
@@ -1442,7 +1737,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   dualTankRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: Spacing.sm,
     marginTop: Spacing.xs,
   },
@@ -1452,9 +1747,9 @@ const styles = StyleSheet.create({
     borderRadius: Sizing.radiusMd,
   },
   tankCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   activeIndicator: {
     paddingHorizontal: 5,
@@ -1462,13 +1757,13 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   activeIndicatorText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 9,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   tankCardTitle: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: "700",
     marginTop: 4,
   },
   tankCardMeta: {
@@ -1478,10 +1773,10 @@ const styles = StyleSheet.create({
   tankCardCap: {
     fontSize: 10,
     marginTop: 2,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   evRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: Spacing.md,
     marginTop: Spacing.xs,
   },
@@ -1490,11 +1785,11 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
     borderRadius: Sizing.radiusSm,
-    alignItems: 'center',
+    alignItems: "center",
   },
   applyKwhText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   suggestionRow: {
     gap: Spacing.xs,
@@ -1508,35 +1803,35 @@ const styles = StyleSheet.create({
   },
   suggestionChipText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   photoUploadBtn: {
     borderRadius: Sizing.radiusMd,
     borderWidth: 1.5,
-    borderStyle: 'dashed',
+    borderStyle: "dashed",
     paddingVertical: Spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
     gap: Spacing.sm,
   },
   photoUploadText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   photoContainer: {
     borderRadius: Sizing.radiusMd,
     borderWidth: 1,
-    overflow: 'hidden',
+    overflow: "hidden",
     padding: Spacing.xs,
   },
   photoPreview: {
-    width: '100%',
+    width: "100%",
     height: 140,
     borderRadius: Sizing.radiusSm,
   },
   photoActionsRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: Spacing.sm,
     marginTop: Spacing.xs,
   },
@@ -1544,13 +1839,13 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 34,
     borderRadius: Sizing.radiusSm,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   photoActionBtnText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   errorCard: {
     borderRadius: Sizing.radiusMd,
@@ -1560,7 +1855,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   bottomBar: {
     paddingHorizontal: Spacing.md,
@@ -1570,18 +1865,19 @@ const styles = StyleSheet.create({
   saveButton: {
     height: 52,
     borderRadius: Sizing.radiusMd,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#EA580C',
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#3983C7",
+    shadowColor: "#3983C7",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.35,
     shadowRadius: 6,
     elevation: 4,
   },
   saveButtonText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.4,
   },
 });

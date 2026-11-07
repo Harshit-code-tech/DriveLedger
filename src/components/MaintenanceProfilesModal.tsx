@@ -15,7 +15,20 @@
  * - 100% offline
  */
 
-import React, { useState } from 'react';
+import { FormHeader } from "@/components/FormHeader";
+import { VehicleType } from "@/constants/fuelTypes";
+import { Sizing, Spacing, Typography } from "@/constants/theme";
+import { useThemeColors } from "@/hooks/useThemeColors";
+import { useMaintenanceProfileStore } from "@/stores/maintenanceProfileStore";
+import type { MaintenanceProfile } from "@/types/service";
+import type { Vehicle } from "@/types/vehicle";
+import {
+  displayToISO,
+  formatDateInput,
+  isoToDisplay,
+  validateDateDisplay,
+} from "@/utils/dateInput";
+import { useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -27,21 +40,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Sizing, Spacing, Typography } from '@/constants/theme';
-import { useThemeColors } from '@/hooks/useThemeColors';
-import { useMaintenanceProfileStore } from '@/stores/maintenanceProfileStore';
-import type { Vehicle } from '@/types/vehicle';
-import type { MaintenanceProfile } from '@/types/service';
-import { VehicleType } from '@/constants/fuelTypes';
-import { FormHeader } from '@/components/FormHeader';
-import {
-  displayToISO,
-  formatDateInput,
-  isoToDisplay,
-  validateDateDisplay,
-} from '@/utils/dateInput';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface MaintenanceProfilesModalProps {
   visible: boolean;
@@ -50,14 +50,14 @@ interface MaintenanceProfilesModalProps {
 }
 
 const COMMON_COMPONENTS = [
-  'Engine Oil & Filter',
-  'Brake Pads & Fluid',
-  'Air & Cabin Filter',
-  'Tyre Rotation & Alignment',
-  'Coolant Flush',
-  'Spark Plugs',
-  'Battery Replacement',
-  'Transmission Fluid',
+  "Engine Oil & Filter",
+  "Brake Pads & Fluid",
+  "Air & Cabin Filter",
+  "Tyre Rotation & Alignment",
+  "Coolant Flush",
+  "Spark Plugs",
+  "Battery Replacement",
+  "Transmission Fluid",
 ];
 
 export function MaintenanceProfilesModal({
@@ -78,24 +78,24 @@ export function MaintenanceProfilesModal({
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Form State
-  const [componentName, setComponentName] = useState('');
-  const [intervalKm, setIntervalKm] = useState('');
-  const [intervalMonths, setIntervalMonths] = useState('');
-  const [targetOdo, setTargetOdo] = useState('');
-  const [targetDateDisplay, setTargetDateDisplay] = useState('');
-  const [notes, setNotes] = useState('');
+  const [componentName, setComponentName] = useState("");
+  const [intervalKm, setIntervalKm] = useState("");
+  const [intervalMonths, setIntervalMonths] = useState("");
+  const [targetOdo, setTargetOdo] = useState("");
+  const [targetDateDisplay, setTargetDateDisplay] = useState("");
+  const [notes, setNotes] = useState("");
 
   if (!visible) return null;
 
   const isTwoWheeler = vehicle.vehicle_type === VehicleType.TWO_WHEELER;
 
   const resetForm = () => {
-    setComponentName('');
-    setIntervalKm('');
-    setIntervalMonths('');
-    setTargetOdo('');
-    setTargetDateDisplay('');
-    setNotes('');
+    setComponentName("");
+    setIntervalKm("");
+    setIntervalMonths("");
+    setTargetOdo("");
+    setTargetDateDisplay("");
+    setNotes("");
     setEditingId(null);
     setIsFormOpen(false);
   };
@@ -108,46 +108,61 @@ export function MaintenanceProfilesModal({
   const handleOpenEdit = (p: MaintenanceProfile) => {
     setEditingId(p.id);
     setComponentName(p.component_name);
-    setIntervalKm(p.interval_km ? String(p.interval_km) : '');
-    setIntervalMonths(p.interval_months ? String(p.interval_months) : '');
-    setTargetOdo(p.target_odometer ? String(p.target_odometer) : '');
-    setTargetDateDisplay(p.target_date ? isoToDisplay(p.target_date) : '');
-    setNotes(p.notes || '');
+    setIntervalKm(p.interval_km ? String(p.interval_km) : "");
+    setIntervalMonths(p.interval_months ? String(p.interval_months) : "");
+    setTargetOdo(p.target_odometer ? String(p.target_odometer) : "");
+    setTargetDateDisplay(p.target_date ? isoToDisplay(p.target_date) : "");
+    setNotes(p.notes || "");
     setIsFormOpen(true);
   };
 
   const handleDelete = (id: string, name: string) => {
     Alert.alert(
-      'Delete Target?',
+      "Delete Target?",
       `Are you sure you want to delete the maintenance target for "${name}"?`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: "Cancel", style: "cancel" },
         {
-          text: 'Delete',
-          style: 'destructive',
+          text: "Delete",
+          style: "destructive",
           onPress: () => {
             deleteProfile(id, vehicle.id, vehicle.current_odometer);
           },
         },
-      ]
+      ],
     );
   };
 
   const handleSaveForm = () => {
     if (!componentName.trim()) {
-      Alert.alert('Required Field', 'Please enter a component or service name.');
+      Alert.alert(
+        "Required Field",
+        "Please enter a component or service name.",
+      );
       return;
     }
 
-    const parsedIntervalKm = intervalKm.trim() ? parseFloat(intervalKm.trim()) : undefined;
-    const parsedIntervalMonths = intervalMonths.trim() ? parseInt(intervalMonths.trim(), 10) : undefined;
-    const parsedTargetOdo = targetOdo.trim() ? parseFloat(targetOdo.trim()) : undefined;
+    const parsedIntervalKm = intervalKm.trim()
+      ? parseFloat(intervalKm.trim())
+      : undefined;
+    const parsedIntervalMonths = intervalMonths.trim()
+      ? parseInt(intervalMonths.trim(), 10)
+      : undefined;
+    const parsedTargetOdo = targetOdo.trim()
+      ? parseFloat(targetOdo.trim())
+      : undefined;
 
     let parsedTargetDateISO: string | undefined = undefined;
     if (targetDateDisplay.trim()) {
-      const validation = validateDateDisplay(targetDateDisplay.trim(), 'Target Date');
+      const validation = validateDateDisplay(
+        targetDateDisplay.trim(),
+        "Target Date",
+      );
       if (!validation.isValid) {
-        Alert.alert('Invalid Date', validation.error || 'Please enter a valid target date (DD/MM/YYYY).');
+        Alert.alert(
+          "Invalid Date",
+          validation.error || "Please enter a valid target date (DD/MM/YYYY).",
+        );
         return;
       }
       const iso = displayToISO(targetDateDisplay.trim());
@@ -161,8 +176,8 @@ export function MaintenanceProfilesModal({
       !parsedTargetDateISO
     ) {
       Alert.alert(
-        'Missing Target Interval',
-        'Please provide at least one interval (distance in km, months, target odometer, or target date).'
+        "Missing Target Interval",
+        "Please provide at least one interval (distance in km, months, target odometer, or target date).",
       );
       return;
     }
@@ -178,7 +193,7 @@ export function MaintenanceProfilesModal({
           target_date: parsedTargetDateISO,
           notes: notes.trim() || undefined,
         },
-        vehicle.current_odometer
+        vehicle.current_odometer,
       );
     } else {
       addProfile(
@@ -191,7 +206,7 @@ export function MaintenanceProfilesModal({
           target_date: parsedTargetDateISO,
           notes: notes.trim() || undefined,
         },
-        vehicle.current_odometer
+        vehicle.current_odometer,
       );
     }
 
@@ -207,34 +222,19 @@ export function MaintenanceProfilesModal({
     >
       <KeyboardAvoidingView
         style={[styles.container, { backgroundColor: colors.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* ── FormHeader ── */}
         <FormHeader
-          title={isFormOpen ? (editingId ? 'Edit Target' : 'New Target') : 'Maintenance Targets'}
+          title={
+            isFormOpen
+              ? editingId
+                ? "Edit Target"
+                : "New Target"
+              : "Maintenance Targets"
+          }
           subtitle={`Vehicle intervals & targets · ${vehicle.nickname}`}
           onCancel={isFormOpen ? resetForm : onClose}
-          rightAction={
-            isFormOpen ? (
-              <TouchableOpacity
-                onPress={handleSaveForm}
-                style={[styles.headerSaveBtn, { backgroundColor: '#EA580C' }]}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                accessibilityLabel="Save Maintenance Target"
-              >
-                <Text style={styles.headerSaveBtnText}>Save</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                onPress={onClose}
-                style={[styles.headerCloseBtn, { backgroundColor: colors.surfaceSecondary }]}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.headerCloseBtnText, { color: colors.textSecondary }]}>Done</Text>
-              </TouchableOpacity>
-            )
-          }
         />
 
         <ScrollView
@@ -258,10 +258,13 @@ export function MaintenanceProfilesModal({
             <View
               style={[
                 styles.vehicleIconWrap,
-                { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+                {
+                  backgroundColor: colors.surfaceSecondary,
+                  borderColor: colors.borderLight,
+                },
               ]}
             >
-              <Text style={{ fontSize: 18 }}>{isTwoWheeler ? '🏍️' : '🚗'}</Text>
+              <Text style={{ fontSize: 18 }}>{isTwoWheeler ? "🏍️" : "🚗"}</Text>
             </View>
 
             <View style={{ flex: 1 }}>
@@ -273,37 +276,69 @@ export function MaintenanceProfilesModal({
                   <View
                     style={[
                       styles.regBadge,
-                      { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+                      {
+                        backgroundColor: colors.surfaceSecondary,
+                        borderColor: colors.borderLight,
+                      },
                     ]}
                   >
-                    <Text style={[styles.regBadgeText, { color: colors.textSecondary }]}>
+                    <Text
+                      style={[
+                        styles.regBadgeText,
+                        { color: colors.textSecondary },
+                      ]}
+                    >
                       {vehicle.registration_number}
                     </Text>
                   </View>
                 ) : null}
               </View>
 
-              <Text style={[styles.vehicleSubtext, { color: colors.textSecondary }]}>
-                Current Odometer: {vehicle.current_odometer !== null && vehicle.current_odometer !== undefined ? `${vehicle.current_odometer.toLocaleString('en-IN')} km` : 'Not set'}
+              <Text
+                style={[styles.vehicleSubtext, { color: colors.textSecondary }]}
+              >
+                Current Odometer:{" "}
+                {vehicle.current_odometer !== null &&
+                vehicle.current_odometer !== undefined
+                  ? `${vehicle.current_odometer.toLocaleString("en-IN")} km`
+                  : "Not set"}
               </Text>
             </View>
           </View>
 
           {isFormOpen ? (
             /* ── Add / Edit Form Card ── */
-            <View style={[styles.formCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[Typography.h3, { color: colors.text, marginBottom: Spacing.md }]}>
-                {editingId ? 'Edit Maintenance Target' : 'New Maintenance Target'}
+            <View
+              style={[
+                styles.formCard,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <Text
+                style={[
+                  Typography.h3,
+                  { color: colors.text, marginBottom: Spacing.md },
+                ]}
+              >
+                {editingId
+                  ? "Edit Maintenance Target"
+                  : "New Maintenance Target"}
               </Text>
 
               {/* Component Name */}
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
+              <Text
+                style={[styles.fieldLabel, { color: colors.textSecondary }]}
+              >
                 COMPONENT OR SERVICE *
               </Text>
               <TextInput
                 style={[
                   styles.input,
-                  { backgroundColor: colors.background, borderColor: colors.border, color: colors.text },
+                  {
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  },
                 ]}
                 placeholder="e.g. Engine Oil & Filter"
                 placeholderTextColor={colors.textTertiary}
@@ -319,8 +354,14 @@ export function MaintenanceProfilesModal({
                     style={[
                       styles.suggestionChip,
                       {
-                        backgroundColor: componentName === c ? colors.surfaceSecondary : colors.surface,
-                        borderColor: componentName === c ? colors.primary : colors.borderLight,
+                        backgroundColor:
+                          componentName === c
+                            ? colors.surfaceSecondary
+                            : colors.surface,
+                        borderColor:
+                          componentName === c
+                            ? colors.primary
+                            : colors.borderLight,
                       },
                     ]}
                     onPress={() => setComponentName(c)}
@@ -329,10 +370,15 @@ export function MaintenanceProfilesModal({
                     <Text
                       style={[
                         styles.suggestionChipText,
-                        { color: componentName === c ? colors.primary : colors.textSecondary },
+                        {
+                          color:
+                            componentName === c
+                              ? colors.primary
+                              : colors.textSecondary,
+                        },
                       ]}
                     >
-                      {componentName === c ? '✓ ' : '+ '}
+                      {componentName === c ? "✓ " : "+ "}
                       {c}
                     </Text>
                   </TouchableOpacity>
@@ -340,13 +386,22 @@ export function MaintenanceProfilesModal({
               </View>
 
               {/* Interval Km */}
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary, marginTop: Spacing.md }]}>
+              <Text
+                style={[
+                  styles.fieldLabel,
+                  { color: colors.textSecondary, marginTop: Spacing.md },
+                ]}
+              >
                 INTERVAL DISTANCE (KM)
               </Text>
               <TextInput
                 style={[
                   styles.input,
-                  { backgroundColor: colors.background, borderColor: colors.border, color: colors.text },
+                  {
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  },
                 ]}
                 keyboardType="numeric"
                 placeholder="e.g. 10000"
@@ -357,34 +412,59 @@ export function MaintenanceProfilesModal({
 
               {/* Quick Interval Km Chips */}
               <View style={styles.quickChipsRow}>
-                {['5000', '10000', '15000', '20000'].map((km) => (
+                {["5000", "10000", "15000", "20000"].map((km) => (
                   <TouchableOpacity
                     key={km}
                     style={[
                       styles.quickChip,
                       {
-                        backgroundColor: intervalKm === km ? colors.surfaceSecondary : colors.surface,
-                        borderColor: intervalKm === km ? colors.primary : colors.borderLight,
+                        backgroundColor:
+                          intervalKm === km
+                            ? colors.surfaceSecondary
+                            : colors.surface,
+                        borderColor:
+                          intervalKm === km
+                            ? colors.primary
+                            : colors.borderLight,
                       },
                     ]}
                     onPress={() => setIntervalKm(km)}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.quickChipText, { color: intervalKm === km ? colors.primary : colors.textSecondary }]}>
-                      {parseInt(km, 10).toLocaleString('en-IN')} km
+                    <Text
+                      style={[
+                        styles.quickChipText,
+                        {
+                          color:
+                            intervalKm === km
+                              ? colors.primary
+                              : colors.textSecondary,
+                        },
+                      ]}
+                    >
+                      {parseInt(km, 10).toLocaleString("en-IN")} km
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
               {/* Interval Months */}
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary, marginTop: Spacing.md }]}>
+              <Text
+                style={[
+                  styles.fieldLabel,
+                  { color: colors.textSecondary, marginTop: Spacing.md },
+                ]}
+              >
                 INTERVAL TIME (MONTHS)
               </Text>
               <TextInput
                 style={[
                   styles.input,
-                  { backgroundColor: colors.background, borderColor: colors.border, color: colors.text },
+                  {
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  },
                 ]}
                 keyboardType="numeric"
                 placeholder="e.g. 6 or 12"
@@ -395,20 +475,36 @@ export function MaintenanceProfilesModal({
 
               {/* Quick Months Chips */}
               <View style={styles.quickChipsRow}>
-                {['6', '12', '24', '36'].map((m) => (
+                {["6", "12", "24", "36"].map((m) => (
                   <TouchableOpacity
                     key={m}
                     style={[
                       styles.quickChip,
                       {
-                        backgroundColor: intervalMonths === m ? colors.surfaceSecondary : colors.surface,
-                        borderColor: intervalMonths === m ? colors.primary : colors.borderLight,
+                        backgroundColor:
+                          intervalMonths === m
+                            ? colors.surfaceSecondary
+                            : colors.surface,
+                        borderColor:
+                          intervalMonths === m
+                            ? colors.primary
+                            : colors.borderLight,
                       },
                     ]}
                     onPress={() => setIntervalMonths(m)}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.quickChipText, { color: intervalMonths === m ? colors.primary : colors.textSecondary }]}>
+                    <Text
+                      style={[
+                        styles.quickChipText,
+                        {
+                          color:
+                            intervalMonths === m
+                              ? colors.primary
+                              : colors.textSecondary,
+                        },
+                      ]}
+                    >
                       {m} Months
                     </Text>
                   </TouchableOpacity>
@@ -416,13 +512,22 @@ export function MaintenanceProfilesModal({
               </View>
 
               {/* Target Odometer */}
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary, marginTop: Spacing.md }]}>
+              <Text
+                style={[
+                  styles.fieldLabel,
+                  { color: colors.textSecondary, marginTop: Spacing.md },
+                ]}
+              >
                 EXPLICIT NEXT TARGET ODOMETER (KM)
               </Text>
               <TextInput
                 style={[
                   styles.input,
-                  { backgroundColor: colors.background, borderColor: colors.border, color: colors.text },
+                  {
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  },
                 ]}
                 keyboardType="numeric"
                 placeholder="e.g. 50000"
@@ -439,13 +544,22 @@ export function MaintenanceProfilesModal({
                         key={delta}
                         style={[
                           styles.quickChip,
-                          { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+                          {
+                            backgroundColor: colors.surfaceSecondary,
+                            borderColor: colors.borderLight,
+                          },
                         ]}
                         onPress={() => setTargetOdo(String(proposed))}
                         activeOpacity={0.7}
                       >
-                        <Text style={[styles.quickChipText, { color: colors.primary }]}>
-                          +{delta.toLocaleString('en-IN')} km ({proposed.toLocaleString('en-IN')})
+                        <Text
+                          style={[
+                            styles.quickChipText,
+                            { color: colors.primary },
+                          ]}
+                        >
+                          +{delta.toLocaleString("en-IN")} km (
+                          {proposed.toLocaleString("en-IN")})
                         </Text>
                       </TouchableOpacity>
                     );
@@ -454,30 +568,50 @@ export function MaintenanceProfilesModal({
               ) : null}
 
               {/* Target Date */}
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary, marginTop: Spacing.md }]}>
+              <Text
+                style={[
+                  styles.fieldLabel,
+                  { color: colors.textSecondary, marginTop: Spacing.md },
+                ]}
+              >
                 EXPLICIT NEXT TARGET DATE (DD/MM/YYYY)
               </Text>
               <TextInput
                 style={[
                   styles.input,
-                  { backgroundColor: colors.background, borderColor: colors.border, color: colors.text },
+                  {
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  },
                 ]}
                 keyboardType="numeric"
                 placeholder="DD/MM/YYYY"
                 placeholderTextColor={colors.textTertiary}
                 value={targetDateDisplay}
-                onChangeText={(text) => setTargetDateDisplay(formatDateInput(text, targetDateDisplay))}
+                onChangeText={(text) =>
+                  setTargetDateDisplay(formatDateInput(text, targetDateDisplay))
+                }
                 maxLength={10}
               />
 
               {/* Notes */}
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary, marginTop: Spacing.md }]}>
+              <Text
+                style={[
+                  styles.fieldLabel,
+                  { color: colors.textSecondary, marginTop: Spacing.md },
+                ]}
+              >
                 NOTES (OPTIONAL)
               </Text>
               <TextInput
                 style={[
                   styles.input,
-                  { backgroundColor: colors.background, borderColor: colors.border, color: colors.text },
+                  {
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  },
                 ]}
                 placeholder="e.g. 5W-30 synthetic oil only"
                 placeholderTextColor={colors.textTertiary}
@@ -488,24 +622,37 @@ export function MaintenanceProfilesModal({
               {/* Form Buttons */}
               <View style={styles.formBtnRow}>
                 <TouchableOpacity
-                  style={[styles.cancelBtn, { borderColor: colors.border, backgroundColor: colors.surfaceSecondary }]}
+                  style={[
+                    styles.cancelBtn,
+                    {
+                      borderColor: colors.border,
+                      backgroundColor: colors.surfaceSecondary,
+                    },
+                  ]}
                   onPress={resetForm}
                   activeOpacity={0.7}
                 >
-                  <Text style={[Typography.button, { color: colors.textSecondary }]}>
+                  <Text
+                    style={[Typography.button, { color: colors.textSecondary }]}
+                  >
                     Cancel
                   </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.saveBtn, { backgroundColor: '#EA580C' }]}
+                  style={[styles.saveBtn, { backgroundColor: "#3983C7" }]}
                   onPress={handleSaveForm}
                   activeOpacity={0.85}
                   accessibilityRole="button"
                   accessibilityLabel="Save Maintenance Target"
                 >
-                  <Text style={[Typography.button, { color: '#FFFFFF', fontWeight: '800' }]}>
-                    {editingId ? 'Update Target' : 'Save Target'}
+                  <Text
+                    style={[
+                      Typography.button,
+                      { color: "#FFFFFF", fontWeight: "800" },
+                    ]}
+                  >
+                    {editingId ? "Update Target" : "Save Target"}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -514,13 +661,24 @@ export function MaintenanceProfilesModal({
             /* ── Profiles List & Add Button ── */
             <View>
               <TouchableOpacity
-                style={[styles.addBtn, { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight }]}
+                style={[
+                  styles.addBtn,
+                  {
+                    backgroundColor: colors.surfaceSecondary,
+                    borderColor: colors.borderLight,
+                  },
+                ]}
                 onPress={handleOpenAdd}
                 activeOpacity={0.75}
                 accessibilityRole="button"
                 accessibilityLabel="Add New Maintenance Target"
               >
-                <Text style={[Typography.button, { color: colors.primary, fontWeight: '800', fontSize: 15 }]}>
+                <Text
+                  style={[
+                    Typography.button,
+                    { color: colors.primary, fontWeight: "800", fontSize: 15 },
+                  ]}
+                >
                   ➕ Add Maintenance Target
                 </Text>
               </TouchableOpacity>
@@ -529,46 +687,62 @@ export function MaintenanceProfilesModal({
                 <View
                   style={[
                     styles.emptyBox,
-                    { backgroundColor: colors.surface, borderColor: colors.borderLight },
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.borderLight,
+                    },
                   ]}
                 >
                   <Text style={styles.emptyIcon}>📋</Text>
-                  <Text style={[Typography.body, { color: colors.text, fontWeight: '700' }]}>
+                  <Text
+                    style={[
+                      Typography.body,
+                      { color: colors.text, fontWeight: "700" },
+                    ]}
+                  >
                     No custom targets defined
                   </Text>
                   <Text
                     style={[
                       Typography.bodySmall,
-                      { color: colors.textSecondary, textAlign: 'center', marginTop: 4, lineHeight: 18 },
+                      {
+                        color: colors.textSecondary,
+                        textAlign: "center",
+                        marginTop: 4,
+                        lineHeight: 18,
+                      },
                     ]}
                   >
-                    Define service intervals for engine oil, brake pads, tyres, or filters to get proactive offline alerts.
+                    Define service intervals for engine oil, brake pads, tyres,
+                    or filters to get proactive offline alerts.
                   </Text>
                 </View>
               ) : (
                 <View style={styles.list}>
                   {profiles.map((p) => {
-                    const status = dueStatuses.find((d) => d.profile.id === p.id);
-                    const isOverdue = status?.status === 'overdue';
-                    const isDueSoon = status?.status === 'due_soon';
+                    const status = dueStatuses.find(
+                      (d) => d.profile.id === p.id,
+                    );
+                    const isOverdue = status?.status === "overdue";
+                    const isDueSoon = status?.status === "due_soon";
 
                     const badgeBg = isOverdue
                       ? colors.statusCriticalBg
                       : isDueSoon
-                      ? colors.statusWarningBg
-                      : colors.statusNormalBg;
+                        ? colors.statusWarningBg
+                        : colors.statusNormalBg;
 
                     const badgeBorder = isOverdue
                       ? colors.statusCritical
                       : isDueSoon
-                      ? colors.statusWarning
-                      : colors.statusNormal;
+                        ? colors.statusWarning
+                        : colors.statusNormal;
 
                     const badgeText = isOverdue
                       ? colors.statusCritical
                       : isDueSoon
-                      ? colors.statusWarning
-                      : colors.statusNormal;
+                        ? colors.statusWarning
+                        : colors.statusNormal;
 
                     return (
                       <View
@@ -577,13 +751,23 @@ export function MaintenanceProfilesModal({
                           styles.profileItem,
                           {
                             backgroundColor: colors.surface,
-                            borderColor: isOverdue ? colors.danger : isDueSoon ? colors.warning : colors.borderLight,
+                            borderColor: isOverdue
+                              ? colors.danger
+                              : isDueSoon
+                                ? colors.warning
+                                : colors.borderLight,
                             ...Sizing.cardShadow,
                           },
                         ]}
                       >
                         <View style={styles.profileHeader}>
-                          <Text style={[styles.profileTitle, { color: colors.text }]} numberOfLines={1}>
+                          <Text
+                            style={[
+                              styles.profileTitle,
+                              { color: colors.text },
+                            ]}
+                            numberOfLines={1}
+                          >
                             {p.component_name}
                           </Text>
 
@@ -597,8 +781,17 @@ export function MaintenanceProfilesModal({
                                 },
                               ]}
                             >
-                              <Text style={[styles.statusBadgeText, { color: badgeText }]}>
-                                {isOverdue ? '⚠️ Overdue' : isDueSoon ? '⏳ Due Soon' : '✓ Good'}
+                              <Text
+                                style={[
+                                  styles.statusBadgeText,
+                                  { color: badgeText },
+                                ]}
+                              >
+                                {isOverdue
+                                  ? "⚠️ Overdue"
+                                  : isDueSoon
+                                    ? "⏳ Due Soon"
+                                    : "✓ Good"}
                               </Text>
                             </View>
                           )}
@@ -610,11 +803,19 @@ export function MaintenanceProfilesModal({
                             <View
                               style={[
                                 styles.intervalPill,
-                                { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+                                {
+                                  backgroundColor: colors.surfaceSecondary,
+                                  borderColor: colors.borderLight,
+                                },
                               ]}
                             >
-                              <Text style={[styles.intervalPillText, { color: colors.textSecondary }]}>
-                                Every {p.interval_km.toLocaleString('en-IN')} km
+                              <Text
+                                style={[
+                                  styles.intervalPillText,
+                                  { color: colors.textSecondary },
+                                ]}
+                              >
+                                Every {p.interval_km.toLocaleString("en-IN")} km
                               </Text>
                             </View>
                           )}
@@ -622,10 +823,18 @@ export function MaintenanceProfilesModal({
                             <View
                               style={[
                                 styles.intervalPill,
-                                { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+                                {
+                                  backgroundColor: colors.surfaceSecondary,
+                                  borderColor: colors.borderLight,
+                                },
                               ]}
                             >
-                              <Text style={[styles.intervalPillText, { color: colors.textSecondary }]}>
+                              <Text
+                                style={[
+                                  styles.intervalPillText,
+                                  { color: colors.textSecondary },
+                                ]}
+                              >
                                 Every {p.interval_months} months
                               </Text>
                             </View>
@@ -634,11 +843,20 @@ export function MaintenanceProfilesModal({
                             <View
                               style={[
                                 styles.intervalPill,
-                                { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight },
+                                {
+                                  backgroundColor: colors.surfaceSecondary,
+                                  borderColor: colors.borderLight,
+                                },
                               ]}
                             >
-                              <Text style={[styles.intervalPillText, { color: colors.primary, fontWeight: '700' }]}>
-                                Target: {p.target_odometer.toLocaleString('en-IN')} km
+                              <Text
+                                style={[
+                                  styles.intervalPillText,
+                                  { color: colors.primary, fontWeight: "700" },
+                                ]}
+                              >
+                                Target:{" "}
+                                {p.target_odometer.toLocaleString("en-IN")} km
                               </Text>
                             </View>
                           )}
@@ -653,10 +871,10 @@ export function MaintenanceProfilesModal({
                                 color: isOverdue
                                   ? colors.danger
                                   : isDueSoon
-                                  ? colors.warning
-                                  : colors.textSecondary,
+                                    ? colors.warning
+                                    : colors.textSecondary,
                                 marginTop: 6,
-                                fontWeight: '600',
+                                fontWeight: "600",
                               },
                             ]}
                           >
@@ -665,19 +883,34 @@ export function MaintenanceProfilesModal({
                         )}
 
                         {p.notes ? (
-                          <Text style={[styles.profileNotes, { color: colors.textTertiary }]}>
+                          <Text
+                            style={[
+                              styles.profileNotes,
+                              { color: colors.textTertiary },
+                            ]}
+                          >
                             "{p.notes}"
                           </Text>
                         ) : null}
 
                         {/* Actions */}
-                        <View style={[styles.actionsRow, { borderTopColor: colors.borderLight }]}>
+                        <View
+                          style={[
+                            styles.actionsRow,
+                            { borderTopColor: colors.borderLight },
+                          ]}
+                        >
                           <TouchableOpacity
                             onPress={() => handleOpenEdit(p)}
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             activeOpacity={0.7}
                           >
-                            <Text style={[Typography.caption, { color: colors.primary, fontWeight: '700' }]}>
+                            <Text
+                              style={[
+                                Typography.caption,
+                                { color: colors.primary, fontWeight: "700" },
+                              ]}
+                            >
                               ✏️ Edit Target
                             </Text>
                           </TouchableOpacity>
@@ -687,7 +920,12 @@ export function MaintenanceProfilesModal({
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             activeOpacity={0.7}
                           >
-                            <Text style={[Typography.caption, { color: colors.danger, fontWeight: '700' }]}>
+                            <Text
+                              style={[
+                                Typography.caption,
+                                { color: colors.danger, fontWeight: "700" },
+                              ]}
+                            >
                               🗑️ Delete
                             </Text>
                           </TouchableOpacity>
@@ -716,28 +954,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
   },
-  headerSaveBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: Sizing.radiusFull,
-  },
-  headerSaveBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
-  },
   headerCloseBtn: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: Sizing.radiusFull,
   },
   headerCloseBtnText: {
-    fontWeight: '700',
+    fontWeight: "700",
     fontSize: 13,
   },
   vehicleContextCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: Spacing.md,
     borderRadius: Sizing.radiusLg,
     borderWidth: 1,
@@ -749,17 +977,17 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   vehicleNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   vehicleNickname: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   regBadge: {
     paddingHorizontal: 6,
@@ -769,7 +997,7 @@ const styles = StyleSheet.create({
   },
   regBadgeText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.5,
   },
   vehicleSubtext: {
@@ -780,15 +1008,15 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: Sizing.radiusLg,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: Spacing.md,
   },
   emptyBox: {
     padding: Spacing.xxl,
     borderRadius: Sizing.radiusLg,
     borderWidth: 1,
-    alignItems: 'center',
+    alignItems: "center",
   },
   emptyIcon: {
     fontSize: 32,
@@ -803,14 +1031,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
   },
   profileTitle: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: "800",
     flex: 1,
   },
   statusBadge: {
@@ -821,14 +1049,14 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.2,
   },
   intervalInfo: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 6,
     marginTop: 8,
-    flexWrap: 'wrap',
+    flexWrap: "wrap",
   },
   intervalPill: {
     paddingHorizontal: 8,
@@ -838,15 +1066,15 @@ const styles = StyleSheet.create({
   },
   intervalPillText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   profileNotes: {
     fontSize: 12,
-    fontStyle: 'italic',
+    fontStyle: "italic",
     marginTop: 4,
   },
   actionsRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: Spacing.xl,
     marginTop: Spacing.md,
     paddingTop: Spacing.xs,
@@ -859,7 +1087,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: 0.8,
     marginBottom: Spacing.xs,
   },
@@ -871,8 +1099,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   suggestionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: Spacing.xs,
     marginTop: Spacing.xs,
     marginBottom: Spacing.xs,
@@ -885,11 +1113,11 @@ const styles = StyleSheet.create({
   },
   suggestionChipText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   quickChipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 6,
     marginTop: 6,
   },
@@ -901,10 +1129,10 @@ const styles = StyleSheet.create({
   },
   quickChipText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   formBtnRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: Spacing.md,
     marginTop: Spacing.xl,
   },
@@ -912,15 +1140,15 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: Sizing.radiusMd,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     flex: 1,
   },
   saveBtn: {
     height: 50,
     borderRadius: Sizing.radiusMd,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     flex: 1.6,
     ...Sizing.cardShadow,
   },
