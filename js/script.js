@@ -7,7 +7,7 @@
   "use strict";
 
   const GITHUB_REPO = "Harshit-code-tech/DriveLedger";
-  const DEFAULT_VERSION = "v0.1.0";
+  const DEFAULT_VERSION = "v0.2.0";
 
   // ─── Vehicle Demo Data for Receipt Card ───
   const VEHICLE_PROFILES = [
@@ -180,10 +180,15 @@
           btn.innerHTML = `📲 Download ${tagName} APK`;
         });
         // Also patch the small inline terminal "Download APK →" link
-        const termDownloadLink = document.querySelector(".install-card a[href*='releases']");
+        const termDownloadLink = document.querySelector(
+          ".install-card a[href*='releases']",
+        );
         if (termDownloadLink) {
           termDownloadLink.href = apkAsset.browser_download_url;
-          termDownloadLink.setAttribute("download", apkAsset.name || "DriveLedger.apk");
+          termDownloadLink.setAttribute(
+            "download",
+            apkAsset.name || "DriveLedger.apk",
+          );
         }
       }
 

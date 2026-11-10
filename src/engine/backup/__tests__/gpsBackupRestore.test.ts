@@ -313,7 +313,7 @@ describe("Phase 6: Encrypted GPS Backup & Restore Tests", () => {
       app_id: "com.driveledger.app",
       version: 3,
       created_at: "2025-01-01T00:00:00.000Z",
-      app_version: "0.1.0",
+      app_version: "0.2.0",
       data: {
         vehicles: [testVehicle],
         fuel_entries: [],
@@ -462,7 +462,7 @@ describe("Phase 6: Encrypted GPS Backup & Restore Tests", () => {
       app_id: "com.driveledger.app",
       version: 3,
       created_at: "2026-03-01T00:00:00.000Z",
-      app_version: "0.1.0",
+      app_version: "0.2.0",
       data: {
         vehicles: [testVehicle],
         fuel_entries: [],

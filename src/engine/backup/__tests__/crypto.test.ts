@@ -30,7 +30,7 @@ describe("Backup Cryptography Engine (P0.1)", () => {
   const WRONG_PASSWORD = "IncorrectPassword123!";
   const SAMPLE_METADATA = {
     app_id: APP_ID,
-    app_version: "0.1.0",
+    app_version: "0.2.0",
     created_at: "2026-10-19T12:00:00.000Z",
   };
   const SAMPLE_PLAINTEXT = JSON.stringify({
