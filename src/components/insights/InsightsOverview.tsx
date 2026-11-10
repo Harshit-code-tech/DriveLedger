@@ -14,7 +14,7 @@
  * - Fleet Comparison (when 2+ vehicles exist)
  */
 
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Spacing, Typography, Sizing } from '@/constants/theme';
@@ -49,7 +49,7 @@ interface InsightsOverviewProps {
   colors: InsightsPalette;
 }
 
-export const InsightsOverview: React.FC<InsightsOverviewProps> = ({
+export const InsightsOverview: React.FC<InsightsOverviewProps> = memo(({
   vehicle,
   vehiclesCount,
   timeRange,
@@ -489,7 +489,7 @@ export const InsightsOverview: React.FC<InsightsOverviewProps> = ({
       )}
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -137,11 +137,17 @@ export const FleetScreen: React.FC<FleetScreenProps> = ({
 
   // Spending calculations
   const totalFleetCost = useMemo(() => vehicleStats.reduce((s, v) => s + v.cost, 0), [vehicleStats]);
-  const avgCostPerVehicle = Math.round(totalFleetCost / Math.max(vehicleStats.length, 1));
+  const avgCostPerVehicle = useMemo(
+    () => Math.round(totalFleetCost / Math.max(vehicleStats.length, 1)),
+    [totalFleetCost, vehicleStats.length],
+  );
   const maxCost = useMemo(() => Math.max(...vehicleStats.map((v) => v.cost), 1), [vehicleStats]);
 
   const sortedBySpend = useMemo(() => [...vehicleStats].sort((a, b) => b.cost - a.cost), [vehicleStats]);
-  const highestSpender = sortedBySpend[0]?.cost > 0 ? sortedBySpend[0] : null;
+  const highestSpender = useMemo(
+    () => (sortedBySpend[0]?.cost > 0 ? sortedBySpend[0] : null),
+    [sortedBySpend],
+  );
 
   // Efficiency calculations: Group by compatible fuel units (Section 7C)
   const groupedEfficiency = useMemo(() => {

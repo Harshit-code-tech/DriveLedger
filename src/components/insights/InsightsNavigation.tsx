@@ -9,7 +9,7 @@
  * - 4 segmented category tags (pills) with active indicator dot and smooth horizontal scroll
  */
 
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Spacing, Sizing } from '@/constants/theme';
 import type { InsightsPalette } from './insightsTheme';
@@ -22,18 +22,21 @@ interface InsightsNavigationProps {
   hasFleet: boolean;
 }
 
-export const InsightsNavigation: React.FC<InsightsNavigationProps> = ({
+export const InsightsNavigation: React.FC<InsightsNavigationProps> = memo(({
   activeSection,
   onSelectSection,
   colors,
   hasFleet,
 }) => {
-  const tabs: { id: InsightsSection; label: string; icon: string }[] = [
-    { id: 'spending', label: 'Spending', icon: '💳' },
-    { id: 'efficiency', label: 'Efficiency', icon: '⚡' },
-    { id: 'statistics', label: 'Statistics', icon: '📊' },
-    ...(hasFleet ? [{ id: 'fleet' as InsightsSection, label: 'Garage', icon: '🚗' }] : []),
-  ];
+  const tabs = useMemo(
+    () => [
+      { id: 'spending' as InsightsSection, label: 'Spending', icon: '💳' },
+      { id: 'efficiency' as InsightsSection, label: 'Efficiency', icon: '⚡' },
+      { id: 'statistics' as InsightsSection, label: 'Statistics', icon: '📊' },
+      ...(hasFleet ? [{ id: 'fleet' as InsightsSection, label: 'Garage', icon: '🚗' }] : []),
+    ],
+    [hasFleet],
+  );
 
   const getCategoryMeta = (section: InsightsSection) => {
     switch (section) {
@@ -191,7 +194,7 @@ export const InsightsNavigation: React.FC<InsightsNavigationProps> = ({
       </ScrollView>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -1,6 +1,6 @@
 # DriveLedger — Data Flow Reference
 
-> Last updated: 2026-11-02
+> Last updated: 2026-11-09
 
 ---
 
@@ -48,7 +48,7 @@ useFuelStore.addFuelEntry(input, vehicle)
 ## Delete Fuel Entry Flow
 
 ```
-User taps Delete on HistoryScreen
+User taps Delete on Records screen
         │
         ▼
 useFuelStore.deleteFuelEntry(entryId, vehicle)
@@ -98,7 +98,7 @@ Screen comes into focus (useFocusEffect)
 ## Backup Export Flow
 
 ```
-User taps "Download Encrypted Backup" in Manage
+User taps "Download Encrypted Backup" in Manage → Data & Backup
         │
         ▼
 backupEngine.exportToFile()
@@ -151,6 +151,8 @@ backupEngine.restoreFromValidated(backup)
         └─► COMMIT  (or ROLLBACK on any error — existing data is NOT touched)
 ```
 
+---
+
 ## Background GPS Persistence Flow
 
 ```
@@ -170,27 +172,33 @@ starts from a new persisted anchor.
 
 ---
 
-## Insights Tab / Screen Data Flow
+## Insights Tab Data Flow
 
 ```
-Stats / Insights Screen mounts
+Insights screen mounts / comes into focus
         │
         ├─► useFuelStore state (entries, stats) — from store (no extra DB call)
         ├─► useServiceStore state (records)
         ├─► useExpenseStore state (expenses)
         │
         └─► useMemo computations (all in-memory, no DB reads):
-                ├─ filterRecordsByTimeRange(entries, timeRange)
+                ├─ filterRecordsByTimeRange(entries, timeRange)   [utils/insightsHelpers.ts]
                 ├─ aggregateCostBreakdown(filteredEntries, filteredServices, filteredExpenses)
                 │     └─ uses EXPENSE_CHART_BUCKET map from expenseCategories.ts
-                ├─ timeScopedMileageStats (hoisted above early return — Rules of Hooks)
-                └─ monthlyCostData (delegates to getMonthlyTotalSpend / getMonthlySpendHistory)
+                ├─ computeMileageStats(filteredEntries, fuelType)  [engine/mileageEngine.ts]
+                ├─ buildShareSummary / computeCostPerKm           [utils/shareSummary.ts]
+                └─ computeSixMonthStatistics(entries, services, expenses, vehicle)
+                      [components/insights/insightsHelpers.ts]
 
-        Fleet Comparison (2+ vehicles only):
-        ├─► useCrossVehicleStats(vehicles)
-        │     └─► direct DB reads (fuelRepo, serviceRepo, expenseRepo) per vehicle
-        │         (synchronous; bounded by number of vehicles)
-        └─► renders CrossVehicleComparisonCard
+Insights screen section rendering:
+        ├─► InsightsOverview    — entry-point card with cross-tab navigation
+        ├─► SpendingScreen      — donut chart, monthly bar, ₹100 breakdown
+        ├─► EfficiencyScreen    — mileage trend curve, bi-fuel, partial-fill handling
+        ├─► StatisticsScreen    — 6-month Quick Numbers with strict scope disclaimer
+        └─► FleetScreen         — fleet efficiency comparison (2+ vehicles only)
+                └─► useCrossVehicleStats(vehicles)
+                      └─► direct DB reads (fuelRepo, serviceRepo, expenseRepo) per vehicle
+                          (synchronous; bounded by number of vehicles)
 ```
 
 ---
@@ -206,12 +214,17 @@ useColorScheme()  [react-native]
         ▼
 useThemeColors()  [src/hooks/useThemeColors.ts]
         │
-        ▼
-colors.background, colors.text, colors.primary, …
+        ├─► Generic colours → colors.background, colors.text, colors.primary, …
         │
-        ▼
-Passed as prop or referenced inline in StyleSheet.create()
+        └─► Section palettes (domain-specific):
+                ├─► useHomeColors()      [src/components/home/homeTheme.ts]
+                ├─► useInsightsColors()  [src/components/insights/insightsTheme.ts]
+                ├─► useManageColors()    [src/components/manage/manageTheme.ts]
+                ├─► useRecordColors()    [src/components/records/recordTheme.ts]
+                └─► useDocumentColors() [src/components/documents/documentTheme.ts]
 ```
+
+Each section theme is a typed colour palette struct derived from the base `useThemeColors()` result, ensuring consistent dark/light mode without prop-drilling raw hex strings.
 
 ---
 
@@ -306,7 +319,7 @@ User opens index.html on mobile browser
 ### In-App (Android)
 
 ```
-User taps "Check for Updates" in Manage
+User taps "Check for Updates" in Manage → App Information
         │
         ▼
 checkForAppUpdate()  [updateChecker.ts]
@@ -335,20 +348,20 @@ checkForAppUpdate()  [updateChecker.ts]
 ## Smart Insights Flow
 
 ```
-SmartInsightsCard receives pre-loaded data from parent screen
-        │  (fuelEntries, serviceRecords, expenses, vehicle — already in store)
-        │
-        ▼
-insightsEngine.deriveInsights(data)
+SmartInsightsCard → REMOVED (replaced by InsightsOverview + screen-level analytics)
+
+New flow in Insights tab:
+insightsEngine.deriveInsights(data)   [still used internally in some screens]
         │
         ├─► Mileage trend analysis (rolling average vs. historical baseline)
         ├─► Cost anomaly detection (spike vs. monthly average)
         ├─► Service interval adherence (days + km since last service vs. profile)
         └─► Returns typed Insight[]
                 (pure — no DB reads, no side effects, no async)
-        │
-        └─► SmartInsightsCard renders priority-ordered cards
-                (in-memory only — no extra queries on mount or re-render)
+
+The Insights tab now renders dedicated analytical screens (Spending, Efficiency,
+Statistics, Fleet) that provide deeper interactive analysis than the former
+SmartInsightsCard widget.
 ```
 
 ---
@@ -377,4 +390,35 @@ notificationService.reconcileReminders(vehicles, serviceRecords, documents)
         └─► expo-notifications.scheduleNotificationAsync({ trigger, content })
                 for each new trigger only
                 (idempotent — re-mounting a screen does not duplicate reminders)
+```
+
+---
+
+## Manage Tab — Section Navigation Flow
+
+```
+User opens Manage tab
+        │
+        ▼
+manage.tsx loads ManageOverview
+        │
+        ├─► ManageOverview renders 5 section cards + quick actions
+        │
+        └─► User taps a section card:
+                onSelectSection(section) → activeSection state update
+                        │
+                        ├─► activeSection === 'vehicles'     → ManageVehiclesScreen
+                        ├─► activeSection === 'preferences'  → ManagePreferencesScreen
+                        ├─► activeSection === 'trip_tracking' → ManageGpsScreen (ManageTripTrackingScreen)
+                        │     (aliases: 'gps_tracking', 'gps_notifications' → same screen)
+                        ├─► activeSection === 'notifications' → ManageNotificationsScreen
+                        ├─► activeSection === 'data_backup'  → ManageDataBackupScreen
+                        └─► activeSection === 'app_info'     → ManageAppInfoScreen
+
+Android hardware back button: BackHandler listener returns to overview (activeSection = null)
+Deep link support: ?section=<name> param pre-opens a specific section on mount
+
+Section key aliases handled for backward compatibility:
+  gps_notifications → maps to trip_tracking (ManageGpsScreen)
+  gps_tracking      → maps to trip_tracking (ManageGpsScreen)
 ```

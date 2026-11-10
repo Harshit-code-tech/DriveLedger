@@ -8,7 +8,7 @@
  * - Quick "📄 Export" and "📤 Share" action buttons
  */
 
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Spacing, Sizing } from '@/constants/theme';
 import type { InsightsPalette } from './insightsTheme';
@@ -22,7 +22,7 @@ interface InsightsHeaderBarProps {
   colors: InsightsPalette;
 }
 
-export const InsightsHeaderBar: React.FC<InsightsHeaderBarProps> = ({
+export const InsightsHeaderBar: React.FC<InsightsHeaderBarProps> = memo(({
   activeSection,
   onOpenJumpTo,
   onExport,
@@ -113,7 +113,7 @@ export const InsightsHeaderBar: React.FC<InsightsHeaderBarProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

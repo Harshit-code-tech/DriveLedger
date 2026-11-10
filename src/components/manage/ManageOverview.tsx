@@ -10,7 +10,7 @@
 import type { Vehicle } from "@/types/vehicle";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { memo } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -38,7 +38,7 @@ interface ManageOverviewProps {
   onToggleTheme?: () => void;
 }
 
-export const ManageOverview: React.FC<ManageOverviewProps> = ({
+export const ManageOverview: React.FC<ManageOverviewProps> = memo(({
   vehiclesCount,
   currencySymbol,
   distanceUnit,
@@ -818,7 +818,7 @@ export const ManageOverview: React.FC<ManageOverviewProps> = ({
       </View>
     </ScrollView>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

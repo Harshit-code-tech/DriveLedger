@@ -9,7 +9,7 @@
  * - Section 4.4: Active condition indicators with "Clear all".
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -92,12 +92,13 @@ export const RecordFilterBar = React.memo(function RecordFilterBar({
     sortOrder !== 'newest';
 
   // Category definitions with their respective SVG icons (Requirement 1)
+  // Memoized so the array reference is stable when counts or isEV haven't changed
   const categories: {
     key: RecordCategory;
     label: string;
     icon: (size: number, color: string) => React.ReactNode;
     count: number;
-  }[] = [
+  }[] = useMemo(() => [
     {
       key: 'all',
       label: 'All Records',
@@ -133,7 +134,7 @@ export const RecordFilterBar = React.memo(function RecordFilterBar({
       icon: (size, color) => <CategoryExpenseIcon size={size} color={color} />,
       count: counts.expenses,
     },
-  ];
+  ], [isEV, counts.all, counts.fuel, counts.service, counts.trips, counts.expenses]);
 
   const currentCategoryObj =
     categories.find((c) => c.key === selectedCategory) || categories[0];

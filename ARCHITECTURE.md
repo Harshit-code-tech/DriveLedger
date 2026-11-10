@@ -1,6 +1,6 @@
 # DriveLedger — Architecture Guide
 
-> Last updated: 2026-11-02
+> Last updated: 2026-11-09
 
 ---
 
@@ -31,12 +31,12 @@ DriveLedger is an offline-first vehicle tracking mobile app built with **Expo SD
 DriveLedger/
 ├── app/                             # Expo Router screens (file-based routing)
 │   ├── (tabs)/                      # Bottom-tab screens
-│   │   ├── index.tsx                # Home / Vehicle Dashboard (primary screen)
-│   │   ├── insights.tsx             # Insights tab (Analytics & Reports)
+│   │   ├── index.tsx                # Home / Automotive Cockpit (primary screen)
 │   │   ├── records.tsx              # Chronological vehicle records (fuel/service/expense/trip)
-│   │   ├── history.tsx              # Backward-compatibility redirect to records
+│   │   ├── history.tsx              # Backward-compatibility redirect → /(tabs)/records
 │   │   ├── documents.tsx            # Document vault & expiry tracking
-│   │   └── manage.tsx               # Manage hub: vehicles, preferences, GPS, backup, about
+│   │   ├── insights.tsx             # Insights hub (Spending/Efficiency/Statistics/Fleet)
+│   │   └── manage.tsx               # Manage hub (Vehicles/Preferences/GPS/Data/App Info)
 │   ├── add-fuel.tsx, add-service.tsx, add-expense.tsx, add-document.tsx
 │   ├── add-vehicle.tsx, edit-vehicle.tsx
 │   ├── checklist.tsx                # Pre-trip checklist launcher
@@ -45,20 +45,75 @@ DriveLedger/
 │
 ├── src/
 │   ├── components/                  # Reusable UI components
-│   │   ├── charts/                  # BarChart, MileageTrendChart, CostBreakdownDonutChart
-│   │   ├── history/                 # History entry cards (fuel, service, expense, document)
+│   │   ├── charts/                  # MileageTrendChart, CostBreakdownDonutChart
+│   │   ├── documents/               # Document domain components & helpers
+│   │   │   ├── DocumentCard.tsx, DocumentEmptyState.tsx, DocumentHeaderBar.tsx
+│   │   │   ├── DocumentNavigation.tsx, DocumentStatusOverview.tsx, DocumentsHeader.tsx
+│   │   │   ├── documentHelpers.ts   # Document-domain pure helpers
+│   │   │   └── documentTheme.ts     # Document section colour palette
+│   │   ├── home/                    # Home screen sub-components (all section-level)
+│   │   │   ├── HomeGpsCockpit.tsx   # GPS Cockpit hero section — isolated GPS subscriptions
+│   │   │   ├── HomeHeader.tsx       # App header with vehicle name and action buttons
+│   │   │   ├── HomeNeedsAttention.tsx  # Service & document alert section
+│   │   │   ├── HomeQuickAccess.tsx  # Quick action shortcuts (checklist, fuel, expense, etc.)
+│   │   │   ├── HomeVehicleEssentials.tsx  # Fuel bars and tyre pressure section
+│   │   │   ├── HomeVehicleOverview.tsx    # 2×2 metrics grid (odo, mileage, fill, spend)
+│   │   │   ├── HomeVehicleSelector.tsx    # Cross-tab vehicle selector (reused across tabs)
+│   │   │   ├── VehicleTypeIcon.tsx  # SVG vehicle type icon helper
+│   │   │   └── homeTheme.ts         # Home section colour palette
+│   │   ├── insights/                # Insights screen sub-components (all section-level)
+│   │   │   ├── InsightsHeaderBar.tsx  # Insights navigation + export bar (memoized)
+│   │   │   ├── InsightsJumpToModal.tsx  # Quick section jump modal
+│   │   │   ├── InsightsNavigation.tsx   # Section navigation tabs (memoized, tabs array in useMemo)
+│   │   │   ├── InsightsOverview.tsx     # Overview entry-point card (memoized)
+│   │   │   ├── insightsHelpers.ts       # Insights-specific pure helpers (computeSixMonthStatistics, tier helpers)
+│   │   │   ├── insightsTheme.ts         # Insights section colour palette
+│   │   │   └── screens/                 # Four analytical screen components
+│   │   │       ├── EfficiencyScreen.tsx  # Efficiency & Mileage analysis
+│   │   │       ├── FleetScreen.tsx       # Fleet Comparison (2+ vehicles)
+│   │   │       ├── SpendingScreen.tsx    # Spending analysis (donut chart, monthly)
+│   │   │       └── StatisticsScreen.tsx  # 6-month quick statistics
+│   │   ├── manage/                  # Manage screen sub-components (all section-level)
+│   │   │   ├── ManageHeaderBar.tsx  # Manage header with section navigation (memoized)
+│   │   │   ├── ManageOverview.tsx   # Manage overview with 5 section cards (memoized)
+│   │   │   ├── VehicleSvgIcon.tsx   # Vehicle type SVG icon for manage
+│   │   │   ├── manageTheme.ts       # Manage section colour palette
+│   │   │   └── screens/             # Five management section screens
+│   │   │       ├── ManageAppInfoScreen.tsx       # App version, update, onboarding
+│   │   │       ├── ManageDataBackupScreen.tsx    # Backup/restore/CSV export
+│   │   │       ├── ManageNotificationsScreen.tsx # Reminder/alert toggles & lead days
+│   │   │       ├── ManagePreferencesScreen.tsx   # Currency, distance, fuel, appearance
+│   │   │       ├── ManageTripTrackingScreen.tsx  # GPS tracking profile + permissions
+│   │   │       └── ManageVehiclesScreen.tsx      # Vehicle CRUD, archive, restore
+│   │   ├── navigation/              # Tab bar SVG icon components
+│   │   ├── records/                 # Records screen sub-components
+│   │   │   ├── RecordEmptyState.tsx, RecordFab.tsx
+│   │   │   ├── RecordFilterBar.tsx, RecordRow.tsx
+│   │   │   ├── RecordSvgIcons.tsx, RecordsHeader.tsx
+│   │   │   ├── recordHelpers.ts     # Record domain pure helpers (sorting, grouping)
+│   │   │   ├── recordTheme.ts       # Records section colour palette
+│   │   │   └── recordTypes.ts       # Records screen type definitions
 │   │   ├── ActiveTripModal.tsx      # Live GPS trip HUD & controls
-│   │   ├── FleetComparisonCard.tsx  # Multi-vehicle fleet stats comparison
+│   │   ├── AnimatedSplash.tsx       # Splash screen animation
+│   │   ├── BackupPasswordModal.tsx  # Backup encryption password entry
+│   │   ├── CategoryIcon.tsx         # Expense category icon helper
+│   │   ├── CngTankIcon.tsx          # CNG tank SVG icon
+│   │   ├── FormHeader.tsx           # Shared form header component
 │   │   ├── MaintenanceProfilesModal.tsx  # Maintenance interval profile picker
 │   │   ├── ManualTripModal.tsx      # Manual trip entry form
 │   │   ├── MonthlySpendCard.tsx     # Monthly cost breakdown card
+│   │   ├── NoVehicleState.tsx       # Empty state when no vehicle is registered
+│   │   ├── OperationProgressModal.tsx  # Progress indicator for backup/restore
+│   │   ├── OptionPicker.tsx         # Generic option selection bottom sheet
 │   │   ├── PreTripChecklistModal.tsx  # Pre-trip vehicle checklist dialog
-│   │   ├── ReportExportModal.tsx    # PDF/CSV export UI (session-cached)
-│   │   ├── SmartInsightsCard.tsx    # Insight cards from insightsEngine
+│   │   ├── ReportExportModal.tsx    # PDF/CSV export UI (session-cached snapshot)
+│   │   ├── RestorePasswordModal.tsx # Restore decryption password entry
 │   │   ├── SpeedEfficiencySection.tsx  # Speed-band efficiency visualizer
 │   │   ├── TripDetailModal.tsx      # Completed GPS trip detail view
+│   │   ├── TripHistoryModal.tsx     # Trip history list modal
 │   │   ├── TripReviewModal.tsx      # Post-trip review & finalization
-│   │   ├── OptionPicker.tsx, SettingsRow.tsx, ...
+│   │   ├── TripSummaryCard.tsx      # Trip summary card component
+│   │   ├── TyreIcon.tsx             # Tyre/wheel SVG icon
 │   │
 │   ├── constants/                   # App-wide enumerations and mappings
 │   │   ├── documentTypes.ts, expenseCategories.ts, fuelTypes.ts
@@ -75,7 +130,8 @@ DriveLedger/
 │   │
 │   ├── engine/                      # Pure business logic (no UI, no DB, no side effects)
 │   │   ├── backup/
-│   │   │   ├── types.ts, schema.ts, crypto.ts, exportBackup.ts, restore.ts
+│   │   │   ├── constants.ts, types.ts, schema.ts, crypto.ts
+│   │   │   ├── exportBackup.ts, restore.ts, snapshot.ts
 │   │   ├── backupEngine.ts          # Backup/restore orchestration (re-exports from backup/)
 │   │   ├── distanceEngine.ts        # GPS coordinate filtering & incremental distance
 │   │   ├── insightsEngine.ts        # Smart insights derivation from vehicle history
@@ -117,7 +173,8 @@ DriveLedger/
 │   ├── utils/
 │   │   ├── attachmentStorage.ts, csvExport.ts, date.ts, dateInput.ts
 │   │   ├── format.ts, releaseParser.ts, shareSummary.ts
-│   │   ├── insightsHelpers.ts, uuid.ts, version.ts
+│   │   ├── insightsHelpers.ts       # Shared filter/aggregate helpers (filterRecordsByTimeRange, estimateFuelLevel, etc.)
+│   │   ├── uuid.ts, version.ts
 │   │
 │   └── widgets/
 │       ├── cockpit/                 # GPS Cockpit widget sub-components (helpers, palette, svgs, types)
@@ -133,6 +190,21 @@ DriveLedger/
 ├── css/style.css, js/script.js      # Landing page assets
 └── assets/                          # App icon, splash, fonts, images
 ```
+
+---
+
+## Tab Navigation Structure
+
+Five bottom tabs are visible; `history` is a hidden redirect:
+
+| Tab file | Display Name | Purpose |
+|----------|-------------|---------|
+| `index.tsx` | Home | Automotive Cockpit — GPS, Vehicle Overview, Quick Access |
+| `records.tsx` | Records | Chronological fuel/service/expense/trip log with search/filter |
+| `documents.tsx` | Documents | Document vault (PUC, insurance, registration, FASTag) |
+| `insights.tsx` | Insights | Spending / Efficiency / Statistics / Fleet comparison hub |
+| `manage.tsx` | Manage | Vehicles / Preferences / GPS / Data & Backup / App Info |
+| `history.tsx` | (hidden) | Backward-compatibility redirect → Records |
 
 ---
 
@@ -188,6 +260,38 @@ The screens **never** write to the database directly. All mutations go through s
 ### storeRegistry
 - Tiny singleton that lets `fuelStore` trigger `vehicleStore.loadVehicles()` after a delete without creating a circular import
 - Not a general-purpose event bus — only the vehicle refresh pattern is registered here
+
+---
+
+## Component Layer Design
+
+### Domain Sub-directories
+
+Each major tab section owns its components in a matching subdirectory:
+
+| Screen | Sub-directory | Responsibility |
+|--------|---------------|----------------|
+| Home | `src/components/home/` | GPS Cockpit, Vehicle Overview, Needs Attention, Essentials, Quick Access sections |
+| Insights | `src/components/insights/` | Overview, 4 analytical screens (Spending/Efficiency/Statistics/Fleet) |
+| Manage | `src/components/manage/` | Overview card + 5 management section screens |
+| Records | `src/components/records/` | Filter bar, search, row renderers, category chips |
+| Documents | `src/components/documents/` | Card, status overview, header, navigation |
+
+**Key pattern**: Large tab screens are thin orchestrators (~500–700 lines) that:
+1. Load data from stores via `useFocusEffect`
+2. Compute derived values via `useMemo`
+3. Delegate rendering to domain sub-components
+4. Manage modal visibility state
+
+### HomeVehicleSelector reuse
+`HomeVehicleSelector` from `src/components/home/` is intentionally reused across Records, Documents, and Insights tabs to maintain a consistent vehicle-switching UX without duplicating the component.
+
+### insightsHelpers module split
+Two related helpers files exist by design:
+- `src/utils/insightsHelpers.ts` — generic filter/aggregate helpers shared across Home, Insights, and Records
+- `src/components/insights/insightsHelpers.ts` — Insights-specific calculation helpers (six-month stats, fuel grouping, performance tiers) that import from the utils version
+
+This keeps the utils module dependency-light and the domain-specific logic co-located with the screens that use it.
 
 ---
 
@@ -265,13 +369,14 @@ On restore:
 
 ## Performance & Optimization Architecture
 
-- **Render Memoization**: Home screen (`app/(tabs)/index.tsx`) memoizes all 12+ expensive derived values via `useMemo` (fuel level estimates, vehicle-type flags, monthly spend, service status). Pure helper functions (`docExpiryText`, `formatTripTime`) live outside the component body — never re-allocated.
+- **Render Memoization**: Home screen sub-components (`HomeGpsCockpit`, `HomeVehicleOverview`, etc.) use `React.memo`. GPS metrics subscriptions are **isolated to `HomeGpsCockpit`** so frequent live-GPS ticks do not re-render the full home screen. All modal handlers are `useCallback`-wrapped to maintain referential stability for memoized children.
 - **Data Invalidation**: `dataRevisionTracker` maintains monotonic per-dataset revision counters, preventing unnecessary re-queries on tab focus or store transitions.
 - **Evidence-Based Indexing**: Partial composite SQLite indexes (`idx_fuel_entries_active_date`, `idx_service_records_active_date`, etc.) cover `(vehicle_id, date DESC, id DESC) WHERE deleted_at IS NULL`, eliminating temporary B-tree sorting in query plans.
 - **History Virtualization**: `FlatList` cursor-based pagination with search and date pushdowns bounds memory and query duration.
 - **Report Snapshot Caching**: `ReportExportModal` caches a single-session snapshot of vehicle data across multiple export/share formats, eliminating redundant synchronous table scans.
 - **GPS Batching**: `backgroundLocationTask` batches location updates; incremental distance computed in memory before one atomic SQLite commit per 10-sample buffer.
 - **Observability**: `perfObserver` provides zero-cost in-memory diagnostic telemetry for queries, GPS batches, widget evaluations, and notification reconciliation.
+- **Lazy Section Rendering**: Manage and Insights tab sections are mounted on demand (`activeSection === 'x'` conditional rendering), reducing initial render cost for large screens.
 
 ---
 
@@ -301,7 +406,7 @@ Store tests mock the repository layer.
 ## Android Home-Screen Widgets
 
 | Widget | Size | Purpose |
-|--------|------|---------|
+|--------|------|---------| 
 | `VehicleGlanceWidget` | 4×2 | Odometer, mileage, monthly spend, tyre pressure, service/document alerts, logging shortcuts |
 | `GpsCockpitWidget` | 4×2 | Live GPS speed HUD, trip controls (Pause/Resume/End), active vehicle |
 | GPS Strip | 4×1 | Compact row: live speed, distance, timer |
@@ -310,6 +415,21 @@ Store tests mock the repository layer.
 - `widgetDataService` reads SQLite only — never starts or modifies a trip
 - `widgetTaskHandler` dispatches taps to `tripCoordinatorService`
 - Widget refresh does not depend on mounted React components or Zustand subscriptions
+
+---
+
+## Android Launcher Shortcuts
+
+Four launcher shortcuts (long-press app icon, no GPS shortcut):
+
+| Shortcut ID | Title | Destination |
+|-------------|-------|-------------|
+| `add_fuel` | Log Fuel | `/add-fuel` |
+| `add_expense` | Log Expense | `/add-expense` |
+| `add_service` | Log Service | `/add-service` |
+| `trip_checklist` | Trip Checklist | `/checklist` |
+
+Registered via `expo-quick-actions` in `app/(tabs)/_layout.tsx`.
 
 ---
 

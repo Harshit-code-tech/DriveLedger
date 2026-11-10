@@ -9,7 +9,7 @@
  * - Contextual Back button when navigated into a sub-section
  */
 
-import React from 'react';
+import React, { memo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -71,7 +71,7 @@ const SECTION_TITLES: Record<ManageSection, { title: string; subtitle: string }>
   },
 };
 
-export const ManageHeaderBar: React.FC<ManageHeaderBarProps> = ({
+export const ManageHeaderBar: React.FC<ManageHeaderBarProps> = memo(({
   activeSection,
   onBack,
   colors,
@@ -131,7 +131,7 @@ export const ManageHeaderBar: React.FC<ManageHeaderBarProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
