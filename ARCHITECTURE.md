@@ -95,6 +95,7 @@ DriveLedger/
 │   │   │   └── recordTypes.ts       # Records screen type definitions
 │   │   ├── ActiveTripModal.tsx      # Live GPS trip HUD & controls
 │   │   ├── AnimatedSplash.tsx       # Splash screen animation
+│   │   ├── AppSvgIcons.tsx          # Shared vector glyphs (ExportReportIcon, RemindersAlertIcon, ShareIcon)
 │   │   ├── BackupPasswordModal.tsx  # Backup encryption password entry
 │   │   ├── CategoryIcon.tsx         # Expense category icon helper
 │   │   ├── CngTankIcon.tsx          # CNG tank SVG icon

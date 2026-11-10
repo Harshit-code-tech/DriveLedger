@@ -19,6 +19,7 @@ import {
   View,
 } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
+import { ExportReportIcon, RemindersAlertIcon } from "@/components/AppSvgIcons";
 import type { ManageSection } from "./ManageHeaderBar";
 import type { ManagePalette } from "./manageTheme";
 import { CarSvg } from "./VehicleSvgIcon";
@@ -257,29 +258,11 @@ export const ManageOverview: React.FC<ManageOverviewProps> = memo(({
                   { backgroundColor: "rgba(57, 131, 199, 0.12)" },
                 ]}
               >
-                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                  <Path
-                    d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z"
-                    stroke={colors.accent}
-                    strokeWidth={1.8}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <Path
-                    d="M14 2V8H20"
-                    stroke={colors.accent}
-                    strokeWidth={1.8}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <Path
-                    d="M8 13H16M8 17H13"
-                    stroke={colors.accent}
-                    strokeWidth={1.8}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </Svg>
+                <ExportReportIcon
+                  size={20}
+                  color={colors.accent}
+                  strokeWidth={1.8}
+                />
               </View>
               <View
                 style={[
@@ -618,23 +601,11 @@ export const ManageOverview: React.FC<ManageOverviewProps> = memo(({
               { backgroundColor: colors.surfaceSecondary },
             ]}
           >
-            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-              <Path
-                d="M18 8A6 6 0 0 0 6 8C6 15 3 17 3 17H21S18 15 18 8Z"
-                stroke={colors.accent}
-                strokeWidth={1.8}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <Path
-                d="M13.73 21A2 2 0 0 1 10.27 21"
-                stroke={colors.accent}
-                strokeWidth={1.8}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <Circle cx="18" cy="4" r="2" fill={colors.accent} />
-            </Svg>
+            <RemindersAlertIcon
+              size={22}
+              color={colors.accent}
+              strokeWidth={1.8}
+            />
           </View>
 
           <View style={styles.sectionInfo}>

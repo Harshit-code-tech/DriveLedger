@@ -17,6 +17,7 @@ import {
   View,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { ExportReportIcon } from '@/components/AppSvgIcons';
 import type { ManagePalette } from '../manageTheme';
 
 interface ManageDataBackupScreenProps {
@@ -138,15 +139,7 @@ export const ManageDataBackupScreen: React.FC<ManageDataBackupScreenProps> = ({
           </View>
 
           <View style={[styles.arrowBox, { backgroundColor: colors.surfaceSecondary }]}>
-            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-              <Path
-                d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z"
-                stroke={colors.statusNormal}
-                strokeWidth={1.8}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </Svg>
+            <ExportReportIcon size={16} color={colors.statusNormal} strokeWidth={1.8} />
           </View>
         </TouchableOpacity>
 

@@ -23,6 +23,7 @@ import {
   View,
 } from 'react-native';
 import { Spacing, Sizing, Typography } from '@/constants/theme';
+import { ExportReportIcon, ShareIcon } from '@/components/AppSvgIcons';
 import type { InsightsPalette } from './insightsTheme';
 import type { InsightsSection } from './insightsHelpers';
 
@@ -198,7 +199,7 @@ export const InsightsJumpToModal: React.FC<InsightsJumpToModalProps> = ({
                 style={[styles.actionItem, { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight }]}
               >
                 <View style={[styles.iconWrapper, { backgroundColor: colors.surface }]}>
-                  <Text style={{ fontSize: 18 }}>📄</Text>
+                  <ExportReportIcon size={18} color={colors.accent} strokeWidth={1.8} />
                 </View>
                 <View style={styles.itemTextCol}>
                   <Text style={[styles.itemTitle, { color: colors.text }]}>Export Reports</Text>
@@ -218,7 +219,7 @@ export const InsightsJumpToModal: React.FC<InsightsJumpToModalProps> = ({
                 style={[styles.actionItem, { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderLight }]}
               >
                 <View style={[styles.iconWrapper, { backgroundColor: colors.surface }]}>
-                  <Text style={{ fontSize: 18 }}>📤</Text>
+                  <ShareIcon size={18} color={colors.accent} strokeWidth={1.8} />
                 </View>
                 <View style={styles.itemTextCol}>
                   <Text style={[styles.itemTitle, { color: colors.text }]}>Share Summary</Text>

@@ -8,6 +8,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Spacing } from '@/constants/theme';
+import { ExportReportIcon } from '@/components/AppSvgIcons';
 import type { DocumentPalette } from './documentTheme';
 
 interface DocumentHeaderBarProps {
@@ -38,7 +39,7 @@ export const DocumentHeaderBar = React.memo(function DocumentHeaderBar({
         accessibilityRole="button"
         accessibilityLabel="Export vehicle documents report"
       >
-        <Text style={[styles.exportIcon, { color: colors.accent }]}>↓</Text>
+        <ExportReportIcon size={14} color={colors.accent} strokeWidth={2} />
         <Text style={[styles.exportText, { color: colors.accent }]}>Export Report</Text>
       </TouchableOpacity>
     </View>

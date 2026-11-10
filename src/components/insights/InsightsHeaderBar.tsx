@@ -11,6 +11,7 @@
 import React, { memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Spacing, Sizing } from '@/constants/theme';
+import { ExportReportIcon, ShareIcon } from '@/components/AppSvgIcons';
 import type { InsightsPalette } from './insightsTheme';
 import type { InsightsSection } from './insightsHelpers';
 
@@ -76,7 +77,7 @@ export const InsightsHeaderBar: React.FC<InsightsHeaderBarProps> = memo(({
             accessibilityLabel="Export vehicle reports"
             style={[styles.headerActionBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
           >
-            <Text style={styles.actionIcon}>📄</Text>
+            <ExportReportIcon size={18} color={colors.accent} strokeWidth={1.8} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -86,7 +87,7 @@ export const InsightsHeaderBar: React.FC<InsightsHeaderBarProps> = memo(({
             accessibilityLabel="Share vehicle summary"
             style={[styles.headerActionBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
           >
-            <Text style={styles.actionIcon}>📤</Text>
+            <ShareIcon size={17} color={colors.accent} strokeWidth={1.8} />
           </TouchableOpacity>
 
           {/* Hamburger Menu Button */}

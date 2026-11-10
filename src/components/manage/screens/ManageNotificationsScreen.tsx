@@ -20,6 +20,7 @@ import {
   View,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { RemindersAlertIcon } from '@/components/AppSvgIcons';
 import type { ManagePalette } from '../manageTheme';
 
 interface ManageNotificationsScreenProps {
@@ -74,7 +75,7 @@ export const ManageNotificationsScreen: React.FC<ManageNotificationsScreenProps>
           ]}
         >
           <View style={[styles.iconBox, { backgroundColor: colors.surfaceSecondary }]}>
-            <Text style={{ fontSize: 16 }}>🔔</Text>
+            <RemindersAlertIcon size={18} color={colors.accent} strokeWidth={1.8} />
           </View>
 
           <View style={styles.rowTextCol}>
@@ -234,7 +235,7 @@ export const ManageNotificationsScreen: React.FC<ManageNotificationsScreenProps>
         ]}
       >
         <View style={styles.noticeHeader}>
-          <Text style={{ fontSize: 16 }}>🔔</Text>
+          <RemindersAlertIcon size={18} color={colors.accent} strokeWidth={1.8} />
           <Text style={[styles.noticeTitle, { color: colors.text }]}>
             100% On-Device Alarm Scheduling
           </Text>
